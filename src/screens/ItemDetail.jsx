@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, DESTINOS, fmtBRL } from "../lib/model";
+import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, DESTINOS, VOLTAGENS, CONDICOES_ANUNCIO, validarEAN, fmtBRL } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode
 } from "lucide-react";
+
+// Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
+const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
 
 const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white";
@@ -41,8 +44,11 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
   const [it, setIt] = useState({ ...item });
   const [fotos, setFotos] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const dirty = useRef(false);
   const fileRef = useRef();
+
+  const gtinValido = !it.gtin || validarEAN(it.gtin);
 
   const set = (patch) => { dirty.current = true; setIt((p) => ({ ...p, ...patch })); };
 
@@ -115,6 +121,13 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
       destino: it.destino, local_fisico: it.local_fisico, caixa_num: it.caixa_num,
       foto_feita: it.foto_feita || fotos.length > 0, anuncio_feito: it.anuncio_feito,
       valor_vendido: it.valor_vendido || null, obs: it.obs,
+      // Campos para integrações (Amazon / ML / TikTok / Hiper)
+      gtin: it.gtin?.trim() || null, marca: it.marca?.trim() || null, modelo: it.modelo?.trim() || null,
+      voltagem: it.voltagem || null, cor: it.cor?.trim() || null, num_serie: it.num_serie?.trim() || null,
+      comprimento_cm: it.comprimento_cm || null, largura_cm: it.largura_cm || null,
+      altura_cm: it.altura_cm || null, peso_real_kg: it.peso_real_kg || null,
+      ncm: it.ncm?.trim() || null, condicao_anuncio: it.condicao_anuncio || null,
+      titulo_anuncio: it.titulo_anuncio?.trim() || null, descricao_anuncio: it.descricao_anuncio?.trim() || null,
       upd_by: user.email,
       ...(novoStatus ? { status: novoStatus } : {}),
     };
@@ -151,7 +164,8 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
         {/* Fotos */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Fotos</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Fotos</h3>
+          <p className="text-xs text-gray-400 mb-2">Sugestão: frente, etiqueta (marca/modelo), defeitos e acessórios. (Foto fundo branco p/ Amazon é tratada depois.)</p>
           <div className="flex gap-2 flex-wrap">
             {fotos.map((f) => (
               <div key={f.id} className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
@@ -190,6 +204,68 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
           <TriToggle label="Tem avaria?" value={it.avaria} onChange={(v) => set({ avaria: v })} />
           <TriToggle label="Acessórios completos?" value={it.acessorios_ok} onChange={(v) => set({ acessorios_ok: v })} />
           <TriToggle label="Caixa original?" value={it.caixa_original} onChange={(v) => set({ caixa_original: v })} />
+        </div>
+
+        {/* Dados para venda (integrações) — Tier 1 */}
+        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1 flex items-center gap-1.5">
+            <Barcode className="w-3.5 h-3.5" /> Dados para venda
+          </h3>
+          <Field label="Código de barras (GTIN/EAN)">
+            <div className="flex gap-2">
+              <input className={`${inputCls} font-mono ${it.gtin && !gtinValido ? "border-red-400 ring-1 ring-red-300" : ""}`}
+                inputMode="numeric" value={it.gtin ?? ""} onChange={(e) => set({ gtin: e.target.value })} placeholder="escaneie ou digite" />
+              <button onClick={() => setScanning(true)}
+                className="px-3 rounded-lg bg-gray-900 text-white flex items-center gap-1 text-sm font-semibold flex-shrink-0">
+                <ScanLine className="w-4 h-4" /> Escanear
+              </button>
+            </div>
+            {it.gtin
+              ? <p className={`text-xs mt-1 ${gtinValido ? "text-emerald-600" : "text-red-600"}`}>{gtinValido ? "✓ código válido" : "✗ dígito verificador inválido — confira"}</p>
+              : <p className="text-xs text-gray-400 mt-1">Opcional — nem todo item de leilão tem código.</p>}
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Marca"><input className={inputCls} value={it.marca ?? ""} onChange={(e) => set({ marca: e.target.value })} placeholder="ex.: Britânia" /></Field>
+            <Field label="Modelo"><input className={inputCls} value={it.modelo ?? ""} onChange={(e) => set({ modelo: e.target.value })} placeholder="ex.: BFR-2000" /></Field>
+          </div>
+          <Field label="Voltagem">
+            <div className="flex flex-wrap gap-1.5">
+              {VOLTAGENS.map((v) => (
+                <button key={v} onClick={() => set({ voltagem: it.voltagem === v ? null : v })}
+                  className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border ${it.voltagem === v ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300"}`}>{v}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Cor"><input className={inputCls} value={it.cor ?? ""} onChange={(e) => set({ cor: e.target.value })} placeholder="ex.: Preto" /></Field>
+        </div>
+
+        {/* Dimensões & peso — pré-carregados, confirmar */}
+        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Dimensões & peso — confirme</h3>
+          <p className="text-xs text-gray-400 mb-1">Pré-preenchido por categoria. Ajuste se o real for diferente (afeta o frete).</p>
+          <div className="grid grid-cols-4 gap-2">
+            <Field label="Comp cm"><input type="number" inputMode="decimal" className={inputCls} value={it.comprimento_cm ?? ""} onChange={(e) => set({ comprimento_cm: e.target.value })} /></Field>
+            <Field label="Larg cm"><input type="number" inputMode="decimal" className={inputCls} value={it.largura_cm ?? ""} onChange={(e) => set({ largura_cm: e.target.value })} /></Field>
+            <Field label="Alt cm"><input type="number" inputMode="decimal" className={inputCls} value={it.altura_cm ?? ""} onChange={(e) => set({ altura_cm: e.target.value })} /></Field>
+            <Field label="Peso kg"><input type="number" inputMode="decimal" className={inputCls} value={it.peso_real_kg ?? ""} onChange={(e) => set({ peso_real_kg: e.target.value })} /></Field>
+          </div>
+        </div>
+
+        {/* Anúncio & alto valor — Tier 2 */}
+        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Anúncio & alto valor (opcional)</h3>
+          <Field label="Condição do anúncio">
+            <div className="flex flex-wrap gap-1.5">
+              {CONDICOES_ANUNCIO.map((c) => (
+                <button key={c} onClick={() => set({ condicao_anuncio: it.condicao_anuncio === c ? null : c })}
+                  className={`px-3 py-1.5 rounded-lg text-sm border ${it.condicao_anuncio === c ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-300"}`}>{c}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Nº de série / IMEI"><input className={`${inputCls} font-mono`} value={it.num_serie ?? ""} onChange={(e) => set({ num_serie: e.target.value })} placeholder="eletrônicos de alto valor" /></Field>
+          <Field label="Título do anúncio"><input className={inputCls} value={it.titulo_anuncio ?? ""} onChange={(e) => set({ titulo_anuncio: e.target.value })} placeholder="otimizado (≈60 ML / 200 Amazon)" /></Field>
+          <Field label="Descrição do anúncio"><textarea className={inputCls} rows={2} value={it.descricao_anuncio ?? ""} onChange={(e) => set({ descricao_anuncio: e.target.value })} /></Field>
+          <Field label="NCM (fiscal — pode deixar p/ depois)"><input className={`${inputCls} font-mono`} inputMode="numeric" value={it.ncm ?? ""} onChange={(e) => set({ ncm: e.target.value })} placeholder="8 dígitos" /></Field>
         </div>
 
         {/* Preço e destino */}
@@ -246,6 +322,15 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
           )}
         </div>
       </div>
+
+      {scanning && (
+        <Suspense fallback={<div className="fixed inset-0 z-[60] bg-black flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <BarcodeScanner
+            onClose={() => setScanning(false)}
+            onDetected={(code) => { set({ gtin: code }); setScanning(false); }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

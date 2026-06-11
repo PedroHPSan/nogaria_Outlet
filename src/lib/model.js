@@ -27,6 +27,20 @@ export const CLASSE_STYLE = {
 export const ESTADOS = ["Novo", "Usado funcionando", "Usado sem teste", "Avariado", "Incompleto", "Sucata"];
 export const DESTINOS = ["Belém", "SP storage", "Venda local SP", "A definir"];
 
+// Campos para integrações (Amazon / Mercado Livre / TikTok Shop / Hiper ERP)
+export const VOLTAGENS = ["110V", "220V", "Bivolt", "N/A"];
+export const CONDICOES_ANUNCIO = ["Novo", "Usado", "Recondicionado"];
+
+// Valida dígito verificador de EAN-13 / EAN-8 / UPC-A(12) / GTIN-14.
+export const validarEAN = (code) => {
+  const s = String(code ?? "").trim();
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
+  const d = s.split("").map(Number);
+  const check = d.pop();
+  const sum = d.reverse().reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+};
+
 export const fmtBRL = (v) =>
   v == null || v === "" || isNaN(v)
     ? "—"
