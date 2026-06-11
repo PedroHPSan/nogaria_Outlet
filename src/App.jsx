@@ -4,14 +4,16 @@ import Login from "./screens/Login";
 import Dashboard from "./screens/Dashboard";
 import ItemsScreen from "./screens/ItemsScreen";
 import ItemDetail from "./screens/ItemDetail";
+import NewItem from "./screens/NewItem";
 import { statusMeta } from "./lib/model";
-import { Package, BarChart3, ClipboardList, History, LogOut, Loader2 } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, LogOut, Loader2, Plus } from "lucide-react";
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = carregando
   const [lotes, setLotes] = useState([]);
   const [tab, setTab] = useState("painel");
   const [openItem, setOpenItem] = useState(null);
+  const [showNew, setShowNew] = useState(false);
   const [preFilter, setPreFilter] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [eventos, setEventos] = useState([]);
@@ -23,10 +25,15 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // lotes não são realtime; recarrega sob demanda (ex.: ao criar um lote novo)
+  const loadLotes = useCallback(() => {
+    supabase.from("lotes").select("*").order("lote").then(({ data }) => setLotes(data || []));
+  }, []);
+
   // dados base + realtime
   useEffect(() => {
     if (!session) return;
-    supabase.from("lotes").select("*").order("lote").then(({ data }) => setLotes(data || []));
+    loadLotes();
     supabase.from("eventos").select("*").order("ts", { ascending: false }).limit(80).then(({ data }) => setEventos(data || []));
 
     const ch = supabase
@@ -37,9 +44,10 @@ export default function App() {
       )
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [session]);
+  }, [session, loadLotes]);
 
   const onSaved = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const onCreated = useCallback(() => { loadLotes(); setRefreshKey((k) => k + 1); setShowNew(false); }, [loadLotes]);
   const goFiltered = (f) => { setPreFilter(f); setTab("itens"); };
   const sair = () => supabase.auth.signOut();
 
@@ -101,7 +109,20 @@ export default function App() {
         </div>
       </div>
 
+      {/* Botão flutuante: criar novo item (some quando há um modal aberto) */}
+      {!openItem && !showNew && (
+        <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none">
+          <div className="max-w-lg mx-auto px-4 flex justify-end">
+            <button onClick={() => setShowNew(true)} aria-label="Novo item"
+              className="pointer-events-auto w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center active:bg-orange-600">
+              <Plus className="w-7 h-7" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {openItem && <ItemDetail item={openItem} user={user} onClose={() => setOpenItem(null)} onSaved={onSaved} />}
+      {showNew && <NewItem lotes={lotes} user={user} onClose={() => setShowNew(false)} onCreated={onCreated} />}
     </div>
   );
 }
