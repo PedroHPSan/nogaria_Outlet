@@ -8,10 +8,20 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
 
   useEffect(() => {
     (async () => {
-      // Busca todos os itens só com colunas leves para agregar no cliente.
-      // 3.121 linhas com 5 colunas é pequeno e cabe numa request.
-      const { data } = await supabase.from("itens").select("lote,classe,status,preco_sugerido,valor_vendido");
-      if (!data) return;
+      // Busca todos os itens (colunas leves) para agregar no cliente.
+      // O PostgREST limita cada resposta a 1.000 linhas, então paginamos
+      // com .range() até trazer tudo (senão o total trava em 1.000).
+      const PAGE = 1000;
+      let data = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data: chunk, error } = await supabase
+          .from("itens").select("lote,classe,status,preco_sugerido,valor_vendido")
+          .order("sku").range(from, from + PAGE - 1);
+        if (error || !chunk) break;
+        data = data.concat(chunk);
+        if (chunk.length < PAGE) break;
+      }
+      if (!data.length) return;
       const byStatus = {}, byClasse = {}, byLote = {};
       let valSug = 0, valVendido = 0;
       for (const it of data) {
