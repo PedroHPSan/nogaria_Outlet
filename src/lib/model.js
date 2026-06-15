@@ -27,6 +27,15 @@ export const CLASSE_STYLE = {
 export const ESTADOS = ["Novo", "Usado funcionando", "Usado sem teste", "Avariado", "Incompleto", "Sucata"];
 export const DESTINOS = ["Belém", "SP storage", "Venda local SP", "A definir"];
 
+// SKU = NOG-<lote3|SL>-<seq3>. Itens criados sem lote usam o prefixo SL (lote=null);
+// ao definir o lote depois, o SKU é regenerado para NOG-<lote3>-<seq3>.
+export const PREFIXO_SL = "SL";
+export const pad3 = (n) => String(n).padStart(3, "0");
+export const buildSku = (lote, seq) =>
+  `NOG-${lote == null || lote === "" ? PREFIXO_SL : pad3(lote)}-${pad3(seq)}`;
+// Valor sentinela usado nos selects/filtros para representar "itens sem lote".
+export const LOTE_SEM = "__sem__";
+
 // Campos para integrações (Amazon / Mercado Livre / TikTok Shop / Hiper ERP)
 export const VOLTAGENS = ["110V", "220V", "Bivolt", "N/A"];
 export const CONDICOES_ANUNCIO = ["Novo", "Usado", "Recondicionado"];

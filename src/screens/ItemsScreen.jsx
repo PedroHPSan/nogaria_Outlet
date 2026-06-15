@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL } from "../lib/model";
+import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM } from "../lib/model";
 import { Search, Filter, ChevronRight, Box, Loader2 } from "lucide-react";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
@@ -22,7 +22,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }
     setLoading(true);
     const from = reset ? 0 : page * PAGE;
     let query = supabase.from("itens").select("*", { count: "exact" });
-    if (fLote) query = query.eq("lote", Number(fLote));
+    if (fLote === LOTE_SEM) query = query.is("lote", null);
+    else if (fLote) query = query.eq("lote", Number(fLote));
     if (fClasse) query = query.eq("classe", fClasse);
     if (fStatus) query = query.eq("status", fStatus);
     if (q.trim()) query = query.or(`sku.ilike.%${q.trim()}%,produto.ilike.%${q.trim()}%`);
@@ -64,6 +65,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }
           <div className="mt-2 space-y-2">
             <select value={fLote} onChange={(e) => setFLote(e.target.value)} className={inputCls}>
               <option value="">Todos os lotes</option>
+              <option value={LOTE_SEM}>Sem lote</option>
               {lotes.map((l) => <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>)}
             </select>
             <div className="flex gap-2">
@@ -94,7 +96,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
                 </div>
                 <p className="text-sm text-gray-600 truncate">{it.produto}</p>
-                <p className="text-xs text-gray-400">Lote {it.lote} · {fmtBRL(it.preco_ideal || it.preco_sugerido)} · {it.destino}</p>
+                <p className="text-xs text-gray-400">{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)} · {it.destino}</p>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
             </button>
