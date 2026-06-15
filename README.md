@@ -11,6 +11,20 @@ Frontend Vite + React + Tailwind, banco e autenticação no Supabase.
 - Painel com progresso por status, classe (A+…E) e lote.
 - Registro de auditoria em tempo real (quem mudou o quê).
 - Login restrito (Pedro e Bárbara) e sincronização em tempo real entre os dois.
+- **Impressão de etiquetas térmicas (Brother QL-800)** — etiquetas de Produto,
+  Quarentena/Avaria, Caixa e Mala, com QR (SKU/caixa) para conferência. Imprime pelo
+  diálogo do navegador (driver Brother corta entre as etiquetas) ou baixa em PDF.
+
+## Etiquetas (Brother QL-800)
+- **Um item:** abra o item → botão **Etiqueta** (topo) → escolha o rolo → *Imprimir* ou *Baixar PDF*.
+- **Em massa:** na aba **Itens**, toque em **Etiquetas** para entrar no modo de seleção,
+  marque os itens (ou *Todos*) e toque em **Imprimir N etiqueta(s)**.
+- **Caixa/Mala:** na aba **Itens**, botão **Caixa/Mala** → escolha o `caixa_num`
+  (ex.: `CX-SP-001`, `MALA-BAR-01`); a etiqueta externa lista os SKUs e o valor estimado.
+- **Rolo:** o tamanho da etiqueta é configurável (default **DK-11201 29×90 mm**, o que está
+  em mãos). Para o layout completo do modelo, prefira rolos de **62 mm** (DK-22205/DK-11202).
+  Conteúdo em preto (a QL-800 é monocromática); o estado (VERDE/AZUL/AMARELO/VERMELHO/QRT)
+  aparece como texto.
 
 ## Configuração local
 1. `npm install`
@@ -33,6 +47,9 @@ No painel Supabase → Authentication → Users → Add user (e-mail + senha) pa
 ## Estrutura
 - `src/lib/supabase.js` — cliente Supabase
 - `src/lib/model.js` — status, classes e helpers
+- `src/lib/labels.js` — modelo de dados das etiquetas, rolos DK e geração de QR
+- `src/lib/labelPdf.js` — geração de PDF (jsPDF)
+- `src/components/labels/` — `LabelCard` (render HTML) e `LabelPrint` (modal de impressão)
 - `src/screens/` — Login, Dashboard, ItemsScreen, ItemDetail
 - `src/App.jsx` — auth, navegação e realtime
 

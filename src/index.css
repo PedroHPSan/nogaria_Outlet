@@ -6,3 +6,40 @@ html, body, #root { height: 100%; }
 body { margin: 0; background: #f9fafb; -webkit-tap-highlight-color: transparent; }
 * { -webkit-user-select: none; user-select: none; }
 input, textarea { -webkit-user-select: text; user-select: text; }
+
+/* ---- Etiquetas térmicas (Brother QL-800) ---- */
+/* Borda tracejada só na pré-visualização em tela; some na impressão. */
+.label-preview { border: 1px dashed #9ca3af; }
+
+@media print {
+  /* Imprime apenas as etiquetas (.print-root); esconde o resto do app. */
+  body * { visibility: hidden !important; }
+  .print-root, .print-root * { visibility: visible !important; }
+  .print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: block !important;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    gap: 0 !important;
+    background: #fff;
+  }
+  .label-card {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  /* Uma etiqueta por página → a QL-800 corta entre elas. */
+  .label-page {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+  .label-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}
