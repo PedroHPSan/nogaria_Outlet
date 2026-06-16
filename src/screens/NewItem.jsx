@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
-import { CLASSE_STYLE, DESTINOS } from "../lib/model";
+import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
 import { ChevronLeft, Loader2, PackagePlus, AlertTriangle, RefreshCw } from "lucide-react";
 
 const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white";
 const CLASSES = ["A+", "A", "B", "C", "D", "E"];
-const pad3 = (n) => String(n).padStart(3, "0");
 
 function Field({ label, children }) {
   return (
@@ -19,7 +18,8 @@ function Field({ label, children }) {
 
 export default function NewItem({ lotes, user, onClose, onCreated }) {
   const semLotes = !lotes.length;
-  const [novoLote, setNovoLote] = useState(semLotes);
+  // Modo do lote: "existente" | "novo" | "sem" (criar sem lote, definir depois)
+  const [loteMode, setLoteMode] = useState(semLotes ? "novo" : "existente");
   const [loteSel, setLoteSel] = useState(lotes[0] ? String(lotes[0].lote) : "");
   const [loteNum, setLoteNum] = useState("");
   const [loteRef, setLoteRef] = useState("");
@@ -34,36 +34,47 @@ export default function NewItem({ lotes, user, onClose, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
 
-  const loteAtual = novoLote ? loteNum : loteSel;
+  const loteAtual = loteMode === "novo" ? loteNum : loteMode === "existente" ? loteSel : "";
 
-  // Sugere o próximo SKU do lote escolhido: NOG-<lote>-<maxSeq+1>
-  const sugerirSku = useCallback(async (loteVal) => {
+  // Sugere o próximo SKU: NOG-<lote>-<maxSeq+1>, ou NOG-SL-<maxSeq+1> sem lote.
+  const sugerirSku = useCallback(async (loteVal, modo) => {
+    if (modo === "sem") {
+      const { data } = await supabase
+        .from("itens").select("sku").like("sku", "NOG-SL-%").order("sku", { ascending: false }).limit(1);
+      let seq = 1;
+      if (data && data.length) seq = (parseInt(data[0].sku.split("-").pop(), 10) || 0) + 1;
+      setSku(buildSku(null, seq));
+      return;
+    }
     const n = Number(loteVal);
     if (!n) { setSku(""); return; }
     const { data } = await supabase
       .from("itens").select("sku").eq("lote", n).order("sku", { ascending: false }).limit(1);
     let seq = 1;
     if (data && data.length) seq = (parseInt(data[0].sku.split("-").pop(), 10) || 0) + 1;
-    setSku(`NOG-${pad3(n)}-${pad3(seq)}`);
+    setSku(buildSku(n, seq));
   }, []);
 
   useEffect(() => {
-    if (skuAuto && loteAtual) sugerirSku(loteAtual);
-    if (skuAuto && !loteAtual) setSku("");
-  }, [loteAtual, skuAuto, sugerirSku]);
+    if (!skuAuto) return;
+    if (loteMode === "sem") sugerirSku(null, "sem");
+    else if (loteAtual) sugerirSku(loteAtual, loteMode);
+    else setSku("");
+  }, [loteAtual, loteMode, skuAuto, sugerirSku]);
 
   const salvar = async () => {
     setErro("");
     if (!produto.trim()) return setErro("Informe o nome do produto.");
-    if (novoLote && !Number(loteNum)) return setErro("Informe o número do novo lote.");
-    if (!novoLote && !loteSel) return setErro("Selecione um lote.");
+    if (loteMode === "novo" && !Number(loteNum)) return setErro("Informe o número do novo lote.");
+    if (loteMode === "existente" && !loteSel) return setErro("Selecione um lote.");
     if (!sku.trim()) return setErro("SKU inválido.");
     setBusy(true);
     try {
-      const loteN = Number(loteAtual);
+      const semLote = loteMode === "sem";
+      const loteN = semLote ? null : Number(loteAtual);
 
       // 1) Cria o lote primeiro (FK itens_lote_fkey) se for novo e ainda não existir
-      if (!lotes.some((l) => l.lote === loteN)) {
+      if (!semLote && !lotes.some((l) => l.lote === loteN)) {
         const { error } = await supabase.from("lotes").insert({ lote: loteN, referencia: loteRef.trim() || null });
         if (error && error.code !== "23505") throw error;
       }
@@ -90,7 +101,7 @@ export default function NewItem({ lotes, user, onClose, onCreated }) {
         // Colisão de SKU (23505): se for automático, tenta o próximo seq; se for manual, erro.
         if (error.code === "23505" && skuAuto) {
           const seq = (parseInt(finalSku.split("-").pop(), 10) || 0) + 1;
-          finalSku = `NOG-${pad3(loteN)}-${pad3(seq)}`;
+          finalSku = buildSku(loteN, seq);
         } else break;
       }
       if (!inserted) {
@@ -123,34 +134,43 @@ export default function NewItem({ lotes, user, onClose, onCreated }) {
         {/* Lote */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Lote</h3>
-          {!novoLote ? (
-            <>
-              <Field label="Selecione o lote">
-                <select value={loteSel} onChange={(e) => setLoteSel(e.target.value)} className={inputCls}>
-                  {lotes.map((l) => (
-                    <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>
-                  ))}
-                </select>
+          <div className="flex gap-1.5 pb-2">
+            {[
+              ...(!semLotes ? [{ id: "existente", t: "Existente" }] : []),
+              { id: "novo", t: "Novo lote" },
+              { id: "sem", t: "Sem lote" },
+            ].map((m) => (
+              <button key={m.id} onClick={() => { setLoteMode(m.id); setSkuAuto(true); }}
+                className={`flex-1 px-2 py-1.5 rounded-lg text-sm font-semibold border ${loteMode === m.id ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-300"}`}>
+                {m.t}
+              </button>
+            ))}
+          </div>
+          {loteMode === "existente" && (
+            <Field label="Selecione o lote">
+              <select value={loteSel} onChange={(e) => setLoteSel(e.target.value)} className={inputCls}>
+                {lotes.map((l) => (
+                  <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {loteMode === "novo" && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nº do lote (leilão)">
+                <input type="number" inputMode="numeric" className={inputCls} value={loteNum}
+                  onChange={(e) => setLoteNum(e.target.value)} placeholder="ex.: 126" />
               </Field>
-              <button onClick={() => { setNovoLote(true); setSkuAuto(true); }}
-                className="text-sm font-semibold text-orange-600 py-1.5">+ Criar novo lote</button>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Nº do lote (leilão)">
-                  <input type="number" inputMode="numeric" className={inputCls} value={loteNum}
-                    onChange={(e) => setLoteNum(e.target.value)} placeholder="ex.: 126" />
-                </Field>
-                <Field label="Referência">
-                  <input className={inputCls} value={loteRef} onChange={(e) => setLoteRef(e.target.value)} placeholder="ex.: MAI 16/26" />
-                </Field>
-              </div>
-              {!semLotes && (
-                <button onClick={() => { setNovoLote(false); setSkuAuto(true); }}
-                  className="text-sm font-semibold text-gray-500 py-1.5">↩ Usar lote existente</button>
-              )}
-            </>
+              <Field label="Referência">
+                <input className={inputCls} value={loteRef} onChange={(e) => setLoteRef(e.target.value)} placeholder="ex.: MAI 16/26" />
+              </Field>
+            </div>
+          )}
+          {loteMode === "sem" && (
+            <p className="text-sm text-gray-500 py-2 flex items-start gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              O item será criado <b className="mx-1">sem lote</b> e poderá ser catalogado normalmente. Defina o lote depois na aba <b className="ml-1">Conferir</b>.
+            </p>
           )}
         </div>
 

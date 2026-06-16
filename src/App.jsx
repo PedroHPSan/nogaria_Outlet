@@ -5,8 +5,19 @@ import Dashboard from "./screens/Dashboard";
 import ItemsScreen from "./screens/ItemsScreen";
 import ItemDetail from "./screens/ItemDetail";
 import NewItem from "./screens/NewItem";
+import ExportScreen from "./screens/ExportScreen";
+import ConferenciaScreen from "./screens/ConferenciaScreen";
 import { statusMeta } from "./lib/model";
-import { Package, BarChart3, ClipboardList, History, LogOut, Loader2, Plus } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck } from "lucide-react";
+
+// Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
+const eventoLabel = (e) => {
+  const a = e.acao || "";
+  if (a.startsWith("status:")) return "→ " + statusMeta(a.replace("status:", "")).label;
+  if (a === "lote:atribuido") return "lote atribuído" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "conferido") return "conferido ✓";
+  return a;
+};
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = carregando
@@ -76,6 +87,13 @@ export default function App() {
           lotes={lotes} initialFilter={preFilter} onOpen={setOpenItem} refreshKey={refreshKey}
         />
       )}
+      {tab === "conferencia" && (
+        <ConferenciaScreen
+          lotes={lotes} user={user} onOpen={setOpenItem} refreshKey={refreshKey}
+          onChanged={() => { loadLotes(); onSaved(); }}
+        />
+      )}
+      {tab === "exportar" && <ExportScreen lotes={lotes} refreshKey={refreshKey} />}
       {tab === "registro" && (
         <div className="px-4 pt-4 pb-24">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Últimas atividades</h3>
@@ -85,7 +103,7 @@ export default function App() {
               <div key={e.id} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">{(e.usuario || "?")[0].toUpperCase()}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800"><span className="font-mono font-bold">{e.sku}</span> → {statusMeta(e.acao?.replace("status:", "")).label}</p>
+                  <p className="text-sm text-gray-800"><span className="font-mono font-bold">{e.sku}</span> {eventoLabel(e)}</p>
                   <p className="text-xs text-gray-400">{e.usuario} · {new Date(e.ts).toLocaleString("pt-BR")}</p>
                 </div>
               </div>
@@ -95,10 +113,12 @@ export default function App() {
       )}
 
       <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-200">
-        <div className="max-w-lg mx-auto grid grid-cols-3">
+        <div className="max-w-lg mx-auto grid grid-cols-5">
           {[
             { id: "painel", icon: BarChart3, t: "Painel" },
             { id: "itens", icon: ClipboardList, t: "Itens" },
+            { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
+            { id: "exportar", icon: Upload, t: "Exportar" },
             { id: "registro", icon: History, t: "Registro" },
           ].map((n) => (
             <button key={n.id} onClick={() => { if (n.id !== "itens") setPreFilter(null); setTab(n.id); }}

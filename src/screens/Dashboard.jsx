@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx } from "../lib/model";
+import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx, LOTE_SEM } from "../lib/model";
 import { Loader2 } from "lucide-react";
 
 export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
@@ -46,6 +46,9 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
   const loteList = lotes
     .map((l) => ({ ...l, ...(stats.byLote[l.lote] || { n: 0, done: 0, val: 0 }) }))
     .sort((a, b) => b.val - a.val);
+  // Itens sem lote (lote=null): vira a chave "null" no agregador.
+  const semLote = stats.byLote["null"];
+  if (semLote) loteList.unshift({ lote: LOTE_SEM, referencia: "Sem lote", ...semLote });
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
@@ -110,7 +113,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
             return (
               <button key={l.lote} onClick={() => onGoFiltered({ lote: String(l.lote) })} className="w-full text-left">
                 <div className="flex justify-between text-sm">
-                  <span className="font-semibold text-gray-800">Lote {l.lote}</span>
+                  <span className="font-semibold text-gray-800">{l.lote === LOTE_SEM ? "Sem lote" : `Lote ${l.lote}`}</span>
                   <span className="text-gray-500">{fmtBRL(l.val)} · {l.done}/{l.n}</span>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden"><div className="h-full bg-gray-800 rounded-full" style={{ width: `${p}%` }} /></div>
