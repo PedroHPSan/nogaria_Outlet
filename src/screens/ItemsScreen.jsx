@@ -10,7 +10,7 @@ const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
 
-export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }) {
+export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params }) {
   const [q, setQ] = useState("");
   const [fLote, setFLote] = useState(initialFilter?.lote || "");
   const [fClasse, setFClasse] = useState(initialFilter?.classe || "");
@@ -20,6 +20,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [viab, setViab] = useState({}); // sku -> viavel (de vw_precificacao); opcional, não bloqueia
   const debounce = useRef();
 
   // Seleção em massa + impressão de etiquetas
@@ -81,6 +82,26 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
+
+  // viabilidade por item (vw_precificacao) — só um ponto indicativo. Silencioso se a view não existir.
+  useEffect(() => {
+    const skus = itens.map((i) => i.sku);
+    if (!skus.length) return;
+    let cancel = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("vw_precificacao")
+        .select("sku, viavel")
+        .in("sku", skus);
+      if (cancel || error || !data) return;
+      setViab((prev) => {
+        const n = { ...prev };
+        data.forEach((r) => (n[r.sku] = r.viavel));
+        return n;
+      });
+    })();
+    return () => { cancel = true; };
+  }, [itens]);
 
   const nActive = [fLote, fClasse, fStatus].filter(Boolean).length;
 
@@ -163,6 +184,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey }
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${CLASSE_STYLE[it.classe] || "bg-gray-300 text-white"}`}>{it.classe}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
+                  {it.sku in viab && (
+                    <span
+                      title={viab[it.sku] ? "Preço viável" : "Rever preço/custo"}
+                      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${viab[it.sku] ? "bg-emerald-500" : "bg-red-500"}`}
+                    />
+                  )}
                   <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
                 </div>
