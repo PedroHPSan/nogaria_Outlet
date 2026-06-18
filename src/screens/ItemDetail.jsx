@@ -5,6 +5,8 @@ import {
   ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
+import PricingCard from "../components/PricingCard";
+import { DEFAULT_PARAMS } from "../lib/pricing";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
 const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -43,12 +45,13 @@ function Field({ label, children }) {
   );
 }
 
-export default function ItemDetail({ item, user, onClose, onSaved }) {
+export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClose, onSaved }) {
   const [it, setIt] = useState({ ...item });
   const [fotos, setFotos] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [custoItem, setCustoItem] = useState(null); // custo_proporcional do rateio do lote (vw_precificacao)
   const dirty = useRef(false);
   const fileRef = useRef();
 
@@ -69,6 +72,19 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
         );
         setFotos(withUrls);
       }
+    })();
+  }, [it.sku]);
+
+  // custo proporcional do item (rateio do lote) — usado pelo PricingCard p/ o piso de custo.
+  // A view pode não existir ainda (migration não aplicada); nesse caso o card mostra aviso.
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("vw_precificacao")
+        .select("custo_proporcional")
+        .eq("sku", it.sku)
+        .maybeSingle();
+      if (!error && data) setCustoItem(data.custo_proporcional);
     })();
   }, [it.sku]);
 
@@ -122,6 +138,7 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
       estado: it.estado, testado: it.testado, funciona: it.funciona, avaria: it.avaria,
       acessorios_ok: it.acessorios_ok, caixa_original: it.caixa_original,
       preco_min: it.preco_min || null, preco_ideal: it.preco_ideal || null,
+      preco_sugerido: it.preco_sugerido || null, canal_principal: it.canal_principal || null,
       destino: it.destino, local_fisico: it.local_fisico, caixa_num: it.caixa_num,
       foto_feita: it.foto_feita || fotos.length > 0, anuncio_feito: it.anuncio_feito,
       valor_vendido: it.valor_vendido || null, obs: it.obs,
@@ -276,6 +293,16 @@ export default function ItemDetail({ item, user, onClose, onSaved }) {
           <Field label="Título do anúncio"><input className={inputCls} value={it.titulo_anuncio ?? ""} onChange={(e) => set({ titulo_anuncio: e.target.value })} placeholder="otimizado (≈60 ML / 200 Amazon)" /></Field>
           <Field label="Descrição do anúncio"><textarea className={inputCls} rows={2} value={it.descricao_anuncio ?? ""} onChange={(e) => set({ descricao_anuncio: e.target.value })} /></Field>
           <Field label="NCM (fiscal — pode deixar p/ depois)"><input className={`${inputCls} font-mono`} inputMode="numeric" value={it.ncm ?? ""} onChange={(e) => set({ ncm: e.target.value })} placeholder="8 dígitos" /></Field>
+        </div>
+
+        {/* Motor de precificação — calcula P_anúncio/P_piso ao vivo e aplica ao item */}
+        <div className="mb-4">
+          <PricingCard
+            item={it}
+            params={params}
+            custoItem={custoItem}
+            onApply={(patch) => set(patch)}
+          />
         </div>
 
         {/* Preço e destino */}

@@ -8,6 +8,8 @@ import NewItem from "./screens/NewItem";
 import ExportScreen from "./screens/ExportScreen";
 import ConferenciaScreen from "./screens/ConferenciaScreen";
 import { statusMeta } from "./lib/model";
+import { carregarParametros } from "./lib/pricingParams";
+import { DEFAULT_PARAMS } from "./lib/pricing";
 import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck } from "lucide-react";
 
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
@@ -28,6 +30,7 @@ export default function App() {
   const [preFilter, setPreFilter] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [eventos, setEventos] = useState([]);
+  const [params, setParams] = useState(DEFAULT_PARAMS); // parâmetros do motor de precificação
 
   // sessão de autenticação
   useEffect(() => {
@@ -40,6 +43,12 @@ export default function App() {
   const loadLotes = useCallback(() => {
     supabase.from("lotes").select("*").order("lote").then(({ data }) => setLotes(data || []));
   }, []);
+
+  // parâmetros de precificação (tabelas pricing_*); cai em DEFAULT_PARAMS se falhar
+  useEffect(() => {
+    if (!session) return;
+    carregarParametros().then(setParams).catch(() => {});
+  }, [session]);
 
   // dados base + realtime
   useEffect(() => {
@@ -84,7 +93,7 @@ export default function App() {
       {tab === "itens" && (
         <ItemsScreen
           key={preFilter ? JSON.stringify(preFilter) : "all"}
-          lotes={lotes} initialFilter={preFilter} onOpen={setOpenItem} refreshKey={refreshKey}
+          lotes={lotes} initialFilter={preFilter} onOpen={setOpenItem} refreshKey={refreshKey} params={params}
         />
       )}
       {tab === "conferencia" && (
@@ -141,7 +150,7 @@ export default function App() {
         </div>
       )}
 
-      {openItem && <ItemDetail item={openItem} user={user} onClose={() => setOpenItem(null)} onSaved={onSaved} />}
+      {openItem && <ItemDetail item={openItem} user={user} params={params} onClose={() => setOpenItem(null)} onSaved={onSaved} />}
       {showNew && <NewItem lotes={lotes} user={user} onClose={() => setShowNew(false)} onCreated={onCreated} />}
     </div>
   );
