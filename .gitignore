@@ -3,3 +3,5 @@ dist
 .env
 .env.local
 .DS_Store
+TASK_deploy_precos.md
+supabase/.temp/

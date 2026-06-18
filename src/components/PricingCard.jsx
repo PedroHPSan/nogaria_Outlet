@@ -25,6 +25,8 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
   const refNovo = item.preco_ref_novo ?? grupo.ancoraNovo ?? item.preco_novo_est ?? 0;
   const refUsado = item.preco_ref_usado ?? grupo.ancoraUsado ?? null;
   const risco = grupo.nivelRisco || "MEDIO";
+  // Mercado Livre ainda não libera dados de preço para o app: referência cai na âncora do grupo.
+  const mlPendente = item.preco_ref_confianca === "INDISPONIVEL" || item.preco_ref_fonte === "ML:indisponivel";
 
   const r = useMemo(() => precificar({
     condicaoCod: cond, canalCod: canal, riscoNivel: risco,
@@ -92,6 +94,12 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
       {custoItem == null && (
         <p className="text-[11px] text-amber-600 flex items-center gap-1">
           <AlertTriangle className="w-3 h-3" /> Custo do lote não carregado — piso aproximado. Leia custo_proporcional de vw_precificacao.
+        </p>
+      )}
+
+      {mlPendente && (
+        <p className="text-[11px] text-amber-600 flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3" /> Referência do Mercado Livre pendente de liberação — usando âncora do grupo.
         </p>
       )}
 
