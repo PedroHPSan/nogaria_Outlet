@@ -2,7 +2,6 @@
 // Sem UI: monta o "modelo de dados de etiqueta" usado tanto pela renderização HTML
 // (LabelCard / impressão via navegador) quanto pela geração de PDF (labelPdf.js).
 import QRCode from "qrcode";
-import { fmtBRL } from "./model";
 
 // Rolos DK compatíveis com a Brother QL-800. Dimensões em milímetros.
 // width = largura visual da etiqueta; height = comprimento (sentido de avanço do papel).
@@ -91,12 +90,10 @@ export async function genQrDataUrl(text) {
 }
 
 // Etiqueta de PRODUTO (ou Quarentena/Avaria, conforme o estado).
+// Sem preços: a etiqueta só apoia triagem e anúncio; a precificação é outra fase.
 export function buildProductLabel(item) {
   const estado = estadoEtiqueta(item);
   const atencao = TIPO_ATENCAO.has(estado.codigo);
-  const precoMin = item?.preco_min != null ? fmtBRL(item.preco_min) : null;
-  const precoIdeal =
-    item?.preco_ideal != null ? fmtBRL(item.preco_ideal) : null;
   return {
     tipo: atencao ? "QRT" : "PRODUTO",
     titulo: atencao
@@ -113,8 +110,6 @@ export function buildProductLabel(item) {
     estadoTexto: estado.texto,
     estadoCodigo: estado.codigo,
     destino: item?.destino || "—",
-    precoMin,
-    precoIdeal,
     aviso: atencao ? "NÃO ANUNCIAR ANTES DE TESTAR" : null,
     checkboxes: CHECKBOXES,
     qrText: item?.sku || "",
@@ -130,13 +125,10 @@ export function buildBoxLabel(caixaNum, itens) {
   const isMala = norm(caixaNum).startsWith("MALA");
   // destino mais frequente entre os itens
   const cont = {};
-  let valor = 0;
   const lotes = new Set();
   for (const it of lista) {
     if (it?.destino) cont[it.destino] = (cont[it.destino] || 0) + 1;
-    if (it?.preco_ideal != null) valor += Number(it.preco_ideal) || 0;
     if (it?.lote != null) lotes.add(it.lote);
-    else if (it?.preco_sugerido != null) valor += Number(it.preco_sugerido) || 0;
   }
   const destino =
     Object.entries(cont).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
@@ -152,7 +144,6 @@ export function buildBoxLabel(caixaNum, itens) {
     skus: lista.map((i) => i.sku),
     local_fisico: localFisico,
     destino,
-    valorEstimado: valor > 0 ? fmtBRL(valor) : "—",
     checkboxes: CHECKBOXES,
     qrText: caixaNum,
     qrData: null,
