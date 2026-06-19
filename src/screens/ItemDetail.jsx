@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, DESTINOS, VOLTAGENS, CONDICOES_ANUNCIO, validarEAN, fmtBRL } from "../lib/model";
+import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN } from "../lib/model";
 import {
   ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
+import CategoriaPicker from "../components/CategoriaPicker";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
@@ -56,6 +57,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
   const dirty = useRef(false);
   const fileRef = useRef();
+
+  const catList = useMemo(
+    () => Object.keys(params.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [params]
+  );
 
   // Vias de etiqueta já impressas deste item (aviso de "já impresso").
   const carregarVias = useCallback(async () => {
@@ -151,6 +157,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       destino: it.destino, local_fisico: it.local_fisico, caixa_num: it.caixa_num,
       foto_feita: it.foto_feita || fotos.length > 0, anuncio_feito: it.anuncio_feito,
       valor_vendido: it.valor_vendido || null, obs: it.obs,
+      // Categoria (casa com pricing_grupo p/ a âncora de preço)
+      grupo: (it.grupo || "").trim() || null,
       // Campos para integrações (Amazon / ML / TikTok / Hiper)
       gtin: it.gtin?.trim() || null, marca: it.marca?.trim() || null, modelo: it.modelo?.trim() || null,
       voltagem: it.voltagem || null, cor: it.cor?.trim() || null, num_serie: it.num_serie?.trim() || null,
@@ -276,6 +284,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <Field label="Marca"><input className={inputCls} value={it.marca ?? ""} onChange={(e) => set({ marca: e.target.value })} placeholder="ex.: Britânia" /></Field>
             <Field label="Modelo"><input className={inputCls} value={it.modelo ?? ""} onChange={(e) => set({ modelo: e.target.value })} placeholder="ex.: BFR-2000" /></Field>
           </div>
+          <Field label="Categoria">
+            <CategoriaPicker value={it.grupo || ""} onChange={(g) => set({ grupo: g })} grupos={catList} />
+          </Field>
           <Field label="Voltagem">
             <div className="flex flex-wrap gap-1.5">
               {VOLTAGENS.map((v) => (
@@ -299,67 +310,18 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           </div>
         </div>
 
-        {/* Anúncio & alto valor — Tier 2 */}
-        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Anúncio & alto valor (opcional)</h3>
-          <Field label="Condição do anúncio">
-            <div className="flex flex-wrap gap-1.5">
-              {CONDICOES_ANUNCIO.map((c) => (
-                <button key={c} onClick={() => set({ condicao_anuncio: it.condicao_anuncio === c ? null : c })}
-                  className={`px-3 py-1.5 rounded-lg text-sm border ${it.condicao_anuncio === c ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-300"}`}>{c}</button>
-              ))}
-            </div>
-          </Field>
-          <Field label="Nº de série / IMEI"><input className={`${inputCls} font-mono`} value={it.num_serie ?? ""} onChange={(e) => set({ num_serie: e.target.value })} placeholder="eletrônicos de alto valor" /></Field>
-          <Field label="Título do anúncio"><input className={inputCls} value={it.titulo_anuncio ?? ""} onChange={(e) => set({ titulo_anuncio: e.target.value })} placeholder="otimizado (≈60 ML / 200 Amazon)" /></Field>
-          <Field label="Descrição do anúncio"><textarea className={inputCls} rows={2} value={it.descricao_anuncio ?? ""} onChange={(e) => set({ descricao_anuncio: e.target.value })} /></Field>
-          <Field label="NCM (fiscal — pode deixar p/ depois)"><input className={`${inputCls} font-mono`} inputMode="numeric" value={it.ncm ?? ""} onChange={(e) => set({ ncm: e.target.value })} placeholder="8 dígitos" /></Field>
-        </div>
-
-        {/* Motor de precificação — calcula P_anúncio/P_piso ao vivo e aplica ao item */}
+        {/* Precificação & venda — card único (motor + preço final + anúncio + destino + venda) */}
         <div className="mb-4">
           <PricingCard
             item={it}
             params={params}
             custoItem={custoItem}
-            onApply={(patch) => set(patch)}
+            onChange={(patch) => set(patch)}
           />
         </div>
 
-        {/* Preço e destino */}
+        {/* Observações */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Preço & destino</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Preço mínimo (R$)">
-              <input type="number" inputMode="decimal" className={inputCls} value={it.preco_min ?? ""} onChange={(e) => set({ preco_min: e.target.value })} placeholder={it.preco_sugerido ? `sug. ${Math.round(it.preco_sugerido * 0.7)}` : ""} />
-            </Field>
-            <Field label="Preço ideal (R$)">
-              <input type="number" inputMode="decimal" className={inputCls} value={it.preco_ideal ?? ""} onChange={(e) => set({ preco_ideal: e.target.value })} placeholder={it.preco_sugerido ? `sug. ${Math.round(it.preco_sugerido)}` : ""} />
-            </Field>
-          </div>
-          <p className="text-xs text-gray-400 -mt-1 mb-1">Referência: novo {fmtBRL(it.preco_novo_est)} · venda sugerida {fmtBRL(it.preco_sugerido)}</p>
-          <Field label="Destino logístico">
-            <div className="flex flex-wrap gap-1.5">
-              {DESTINOS.map((d) => (
-                <button key={d} onClick={() => set({ destino: d })}
-                  className={`px-3 py-1.5 rounded-lg text-sm border ${it.destino === d ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-300"}`}>
-                  {d}
-                </button>
-              ))}
-            </div>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Local físico"><input className={inputCls} value={it.local_fisico ?? ""} onChange={(e) => set({ local_fisico: e.target.value })} placeholder="ex.: estante 2" /></Field>
-            <Field label="Caixa nº"><input className={inputCls} value={it.caixa_num ?? ""} onChange={(e) => set({ caixa_num: e.target.value })} placeholder="ex.: CX-014" /></Field>
-          </div>
-        </div>
-
-        {/* Anúncio / venda */}
-        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Anúncio & venda</h3>
-          <p className="text-xs text-gray-400 mb-1">Canal sugerido: {it.canal_principal}</p>
-          <TriToggle label="Anúncio publicado?" value={it.anuncio_feito ? true : null} onChange={(v) => set({ anuncio_feito: v === true })} />
-          <Field label="Valor vendido (R$)"><input type="number" inputMode="decimal" className={inputCls} value={it.valor_vendido ?? ""} onChange={(e) => set({ valor_vendido: e.target.value })} /></Field>
           <Field label="Observações"><textarea className={inputCls} rows={2} value={it.obs ?? ""} onChange={(e) => set({ obs: e.target.value })} placeholder="Detalhes, defeitos, nº de série…" /></Field>
         </div>
 

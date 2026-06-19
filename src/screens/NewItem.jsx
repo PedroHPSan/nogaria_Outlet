@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
+import { DEFAULT_PARAMS } from "../lib/pricing";
+import CategoriaPicker from "../components/CategoriaPicker";
 import { ChevronLeft, Loader2, PackagePlus, AlertTriangle, RefreshCw } from "lucide-react";
 
 const inputCls =
@@ -16,8 +18,12 @@ function Field({ label, children }) {
   );
 }
 
-export default function NewItem({ lotes, user, onClose, onCreated }) {
+export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose, onCreated }) {
   const semLotes = !lotes.length;
+  const catList = useMemo(
+    () => Object.keys(params.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [params]
+  );
   // Modo do lote: "existente" | "novo" | "sem" (criar sem lote, definir depois)
   const [loteMode, setLoteMode] = useState(semLotes ? "novo" : "existente");
   const [loteSel, setLoteSel] = useState(lotes[0] ? String(lotes[0].lote) : "");
@@ -195,7 +201,7 @@ export default function NewItem({ lotes, user, onClose, onCreated }) {
               placeholder="Descrição do produto" />
           </Field>
           <Field label="Grupo / categoria">
-            <input className={inputCls} value={grupo} onChange={(e) => setGrupo(e.target.value)} placeholder="ex.: Ferramentas" />
+            <CategoriaPicker value={grupo} onChange={setGrupo} grupos={catList} />
           </Field>
           <Field label="Classe">
             <div className="flex flex-wrap gap-1.5">
