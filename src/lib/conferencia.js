@@ -60,3 +60,12 @@ export async function limparConferencia(sku) {
     .from("itens").update({ conferido_em: null, conferido_por: null }).eq("sku", sku);
   if (error) throw error;
 }
+
+// Define a categoria (grupo) de um item; opcionalmente preenche a classe quando
+// passada (usado na categorização em massa para preencher classe ainda vazia).
+export async function definirCategoria(sku, grupo, user, classe) {
+  const patch = { grupo: grupo || null, upd_by: user.email };
+  if (classe) patch.classe = classe;
+  const { error } = await supabase.from("itens").update(patch).eq("sku", sku);
+  if (error) throw error;
+}

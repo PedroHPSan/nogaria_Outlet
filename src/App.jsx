@@ -98,7 +98,7 @@ export default function App() {
       )}
       {tab === "conferencia" && (
         <ConferenciaScreen
-          lotes={lotes} user={user} onOpen={setOpenItem} refreshKey={refreshKey}
+          lotes={lotes} user={user} params={params} onOpen={setOpenItem} refreshKey={refreshKey}
           onChanged={() => { loadLotes(); onSaved(); }}
         />
       )}

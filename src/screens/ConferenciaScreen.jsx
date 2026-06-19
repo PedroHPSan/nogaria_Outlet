@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { LOTE_SEM } from "../lib/model";
 import { checarCompletude } from "../lib/export";
-import { atribuirLote, garantirLote, marcarConferido, limparConferencia } from "../lib/conferencia";
+import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria } from "../lib/conferencia";
 import { primeirasFotos } from "../lib/fotos";
+import { sugerirCategoria } from "../lib/categorizar";
+import CategoriaPicker from "../components/CategoriaPicker";
+import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
-  PackageCheck, RotateCcw, Camera, ChevronRight,
+  PackageCheck, RotateCcw, Camera, ChevronRight, Tags, Sparkles,
 } from "lucide-react";
 
 const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -27,25 +30,27 @@ async function fetchItens(applyFilter) {
   return data;
 }
 
-export default function ConferenciaScreen({ lotes, user, onOpen, refreshKey, onChanged }) {
+export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS, onOpen, refreshKey, onChanged }) {
   const [secao, setSecao] = useState("definir");
   return (
     <div className="pb-24">
       <div className="sticky top-14 z-10 bg-gray-50 px-4 pt-3 pb-2 border-b border-gray-200">
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1.5">
           {[
             { id: "definir", t: "Definir lote", icon: Inbox },
+            { id: "categorizar", t: "Categorizar", icon: Tags },
             { id: "inventario", t: "Inventário", icon: ScanLine },
             { id: "pendencias", t: "Pendências", icon: ClipboardList },
           ].map((s) => (
             <button key={s.id} onClick={() => setSecao(s.id)}
-              className={`py-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 border ${secao === s.id ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-300"}`}>
+              className={`py-2 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 border ${secao === s.id ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-300"}`}>
               <s.icon className="w-4 h-4" /> {s.t}
             </button>
           ))}
         </div>
       </div>
       {secao === "definir" && <DefinirLote lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
+      {secao === "categorizar" && <CategorizarMassa lotes={lotes} user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "inventario" && <Inventario lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "pendencias" && <Pendencias lotes={lotes} onOpen={onOpen} refreshKey={refreshKey} />}
     </div>
@@ -161,6 +166,156 @@ function DefinirLote({ lotes, user, refreshKey, onChanged }) {
             Atribuir lote ({sel.size})
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────── Categorização em massa ─────────────────────────
+function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
+  const [fLote, setFLote] = useState("");
+  const [soSemCat, setSoSemCat] = useState(true);
+  const [itens, setItens] = useState(null);
+  const [sugs, setSugs] = useState({});      // sku -> categoria sugerida
+  const [escolhas, setEscolhas] = useState({}); // sku -> categoria escolhida
+  const [sel, setSel] = useState(() => new Set());
+  const [visiveis, setVisiveis] = useState(60);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const catList = useMemo(
+    () => Object.keys(params?.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [params]
+  );
+
+  const semCategoria = (it) => !it.grupo || it.grupo.startsWith("Diversos");
+
+  const load = useCallback(async () => {
+    setItens(null); setSel(new Set()); setMsg(null); setVisiveis(60);
+    const data = await fetchItens((q) =>
+      fLote === LOTE_SEM ? q.is("lote", null) : (fLote ? q.eq("lote", Number(fLote)) : q));
+    const lista = (soSemCat ? data.filter(semCategoria) : data)
+      .filter((it) => it.produto && !it.produto.startsWith("A CATALOGAR"));
+    const sg = {}, esc = {}, s = new Set();
+    for (const it of lista) {
+      const sug = sugerirCategoria(it.produto, catList);
+      sg[it.sku] = sug || null;
+      if (sug) { esc[it.sku] = sug; s.add(it.sku); }
+    }
+    setSugs(sg); setEscolhas(esc); setSel(s); setItens(lista);
+  }, [fLote, soSemCat, catList]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  const setCat = (sku, g) => {
+    setEscolhas((e) => ({ ...e, [sku]: g }));
+    setSel((s) => { const n = new Set(s); g ? n.add(sku) : n.delete(sku); return n; });
+  };
+  const toggle = (sku) => setSel((s) => { const n = new Set(s); n.has(sku) ? n.delete(sku) : n.add(sku); return n; });
+
+  const aplicarSugestoes = () => {
+    setEscolhas((e) => {
+      const n = { ...e };
+      for (const it of itens) if (sugs[it.sku]) n[it.sku] = sugs[it.sku];
+      return n;
+    });
+    setSel(new Set(itens.filter((it) => sugs[it.sku]).map((it) => it.sku)));
+  };
+
+  const comSugestao = itens ? itens.filter((it) => sugs[it.sku]).length : 0;
+
+  const salvar = async () => {
+    if (!sel.size) return;
+    setBusy(true); setMsg(null);
+    try {
+      let n = 0;
+      for (const it of itens) {
+        if (!sel.has(it.sku)) continue;
+        const g = escolhas[it.sku];
+        if (!g) continue;
+        const classe = (!it.classe && params?.grupos?.[g]?.classe) ? params.grupos[g].classe : undefined;
+        await definirCategoria(it.sku, g, user, classe);
+        n++;
+      }
+      onChanged?.();
+      setMsg({ tipo: "ok", texto: `${n} item(ns) categorizado(s).` });
+      await load();
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBusy(false); }
+  };
+
+  if (itens === null) return <Carregando />;
+
+  return (
+    <div className="px-4 pt-4 space-y-3">
+      <p className="text-sm text-gray-500">
+        Sugere a categoria pelo nome do produto. Revise e <b>salve as marcadas</b>. Aceitar uma categoria nova preenche a classe quando estiver vazia.
+      </p>
+      <select value={fLote} onChange={(e) => setFLote(e.target.value)} className={inputCls}>
+        <option value="">Todos os lotes</option>
+        <option value={LOTE_SEM}>Sem lote</option>
+        {lotes.map((l) => <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>)}
+      </select>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={soSemCat} onChange={(e) => setSoSemCat(e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        Mostrar só itens sem categoria
+      </label>
+
+      {!itens.length ? (
+        <Vazio icon={Tags} texto="Nada para categorizar com esse filtro." />
+      ) : (
+        <>
+          <div className="bg-white rounded-2xl border border-gray-200 p-3 flex items-center justify-between gap-2">
+            <div className="text-sm min-w-0">
+              <p className="font-semibold text-gray-800">{itens.length} item(ns)</p>
+              <p className="text-xs text-gray-500">{comSugestao} com sugestão · {sel.size} selecionado(s)</p>
+            </div>
+            <button onClick={aplicarSugestoes}
+              className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
+              <Sparkles className="w-3.5 h-3.5" /> Sugerir todos
+            </button>
+          </div>
+
+          {msg && (
+            <p className={`text-sm flex items-center gap-1.5 ${msg.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+              {msg.tipo === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />} {msg.texto}
+            </p>
+          )}
+
+          <div className="space-y-1.5">
+            {itens.slice(0, visiveis).map((it) => (
+              <div key={it.sku} className={`bg-white rounded-xl border px-3 py-2.5 flex gap-3 ${sel.has(it.sku) ? "border-orange-300" : "border-gray-200"}`}>
+                <button onClick={() => toggle(it.sku)} className="pt-0.5 flex-shrink-0">
+                  {sel.has(it.sku) ? <CheckCircle2 className="w-5 h-5 text-orange-500" /> : <Circle className="w-5 h-5 text-gray-300" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-700 truncate">{it.produto}</p>
+                  <p className="text-xs text-gray-400 mb-1.5">
+                    <span className="font-mono">{it.sku}</span>{it.grupo ? ` · atual: ${it.grupo}` : ""}
+                  </p>
+                  <CategoriaPicker value={escolhas[it.sku] || ""} onChange={(g) => setCat(it.sku, g)}
+                    grupos={catList} sugestao={sugs[it.sku]} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {itens.length > visiveis && (
+            <button onClick={() => setVisiveis((v) => v + 60)} className="w-full py-3 text-sm font-semibold text-orange-600">
+              Carregar mais ({itens.length - visiveis} restantes)
+            </button>
+          )}
+
+          {!!sel.size && (
+            <div className="sticky bottom-20 pt-1">
+              <button disabled={busy} onClick={salvar}
+                className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-40">
+                {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Tags className="w-5 h-5" />}
+                Salvar categorias ({sel.size})
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
