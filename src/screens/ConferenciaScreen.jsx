@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { LOTE_SEM } from "../lib/model";
 import { checarCompletude } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia } from "../lib/conferencia";
+import { primeirasFotos } from "../lib/fotos";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
   PackageCheck, RotateCcw, Camera, ChevronRight,
@@ -183,6 +184,7 @@ function Inventario({ lotes, user, refreshKey, onChanged }) {
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const conferidos = itens ? itens.filter((i) => i.conferido_em).length : 0;
+  const fotos = useThumbs(itens);
 
   const conferir = async (sku, jaConferido) => {
     setBusy(true);
@@ -279,9 +281,11 @@ function Inventario({ lotes, user, refreshKey, onChanged }) {
                 <button key={it.sku} onClick={() => conferir(it.sku, ok)} disabled={busy}
                   className={`w-full text-left rounded-xl border px-3 py-2.5 flex items-center gap-3 ${ok ? "bg-emerald-50 border-emerald-200" : "bg-white border-gray-200"}`}>
                   {ok ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" /> : <Circle className="w-5 h-5 text-gray-300 flex-shrink-0" />}
+                  <Miniatura url={fotos[it.sku]} />
                   <div className="flex-1 min-w-0">
                     <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
                     <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                    <IdentLinha it={it} />
                     {ok && <p className="text-xs text-emerald-700">por {it.conferido_por} · {new Date(it.conferido_em).toLocaleString("pt-BR")}</p>}
                   </div>
                 </button>
@@ -319,6 +323,7 @@ function Pendencias({ lotes, onOpen, refreshKey }) {
   const incompletos = itens
     ? itens.map((it) => ({ it, ...checarCompletude(it) })).filter((x) => !x.ok)
     : [];
+  const fotos = useThumbs(itens);
 
   return (
     <div className="px-4 pt-4 space-y-4">
@@ -339,12 +344,14 @@ function Pendencias({ lotes, onOpen, refreshKey }) {
             {incompletos.map(({ it, faltando }) => (
               <button key={it.sku} onClick={() => onOpen(it)}
                 className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                <Miniatura url={fotos[it.sku]} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
                     <span className="text-xs text-gray-400">{it.lote ? `Lote ${it.lote}` : "Sem lote"}</span>
                   </div>
                   <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                  <IdentLinha it={it} />
                   <div className="flex flex-wrap gap-1 mt-1">
                     {faltando.map((f) => (
                       <span key={f} className="text-xs bg-amber-100 text-amber-800 rounded px-1.5 py-0.5 font-medium">{f}</span>
@@ -362,6 +369,35 @@ function Pendencias({ lotes, onOpen, refreshKey }) {
 }
 
 // ───────────────────────── auxiliares ─────────────────────────
+// Miniaturas (1ª foto) dos itens da lista. Evita carregar muitas URLs de uma vez.
+function useThumbs(itens, cap = 600) {
+  const [fotos, setFotos] = useState({});
+  useEffect(() => {
+    if (!itens || !itens.length || itens.length > cap) { setFotos({}); return; }
+    let cancel = false;
+    (async () => {
+      const map = await primeirasFotos(itens.map((i) => i.sku));
+      if (!cancel) setFotos(map);
+    })();
+    return () => { cancel = true; };
+  }, [itens, cap]);
+  return fotos;
+}
+
+const Miniatura = ({ url }) => (
+  <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 flex items-center justify-center">
+    {url ? <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" /> : <Camera className="w-4 h-4 text-gray-300" />}
+  </div>
+);
+
+const IdentLinha = ({ it }) =>
+  (it.grupo || it.marca || it.modelo) ? (
+    <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-400 mt-0.5">
+      {it.grupo && <span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{it.grupo}</span>}
+      {(it.marca || it.modelo) && <span className="truncate">{[it.marca, it.modelo].filter(Boolean).join(" ")}</span>}
+    </div>
+  ) : null;
+
 const Carregando = () => <div className="py-16 text-center"><Loader2 className="w-7 h-7 animate-spin text-orange-500 mx-auto" /></div>;
 const Vazio = ({ icon: Icon, texto }) => (
   <div className="text-center py-16 text-gray-400">

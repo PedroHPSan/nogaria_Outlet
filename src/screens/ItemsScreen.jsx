@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
+import { primeirasFotos } from "../lib/fotos";
 import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
@@ -15,13 +16,20 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fLote, setFLote] = useState(initialFilter?.lote || "");
   const [fClasse, setFClasse] = useState(initialFilter?.classe || "");
   const [fStatus, setFStatus] = useState(initialFilter?.status || "");
+  const [fGrupo, setFGrupo] = useState(initialFilter?.grupo || "");
   const [showFilters, setShowFilters] = useState(!!initialFilter);
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [viab, setViab] = useState({}); // sku -> viavel (de vw_precificacao); opcional, não bloqueia
+  const [fotos, setFotos] = useState({}); // sku -> url da 1ª foto (miniatura)
   const debounce = useRef();
+
+  const catList = useMemo(
+    () => Object.keys(params?.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [params]
+  );
 
   // Seleção em massa + impressão de etiquetas
   const [selectMode, setSelectMode] = useState(false);
@@ -64,13 +72,17 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     else if (fLote) query = query.eq("lote", Number(fLote));
     if (fClasse) query = query.eq("classe", fClasse);
     if (fStatus) query = query.eq("status", fStatus);
-    if (q.trim()) query = query.or(`sku.ilike.%${q.trim()}%,produto.ilike.%${q.trim()}%`);
+    if (fGrupo) query = query.eq("grupo", fGrupo);
+    if (q.trim()) {
+      const t = q.trim();
+      query = query.or(`sku.ilike.%${t}%,produto.ilike.%${t}%,marca.ilike.%${t}%,modelo.ilike.%${t}%`);
+    }
     query = query.order("sku").range(from, from + PAGE - 1);
     const { data, count: c } = await query;
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -78,7 +90,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -103,7 +115,20 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     return () => { cancel = true; };
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus].filter(Boolean).length;
+  // miniaturas (1ª foto) dos itens carregados; só busca os SKUs ainda sem URL.
+  useEffect(() => {
+    const faltando = itens.map((i) => i.sku).filter((s) => !(s in fotos));
+    if (!faltando.length) return;
+    let cancel = false;
+    (async () => {
+      const map = await primeirasFotos(faltando);
+      if (!cancel && Object.keys(map).length) setFotos((prev) => ({ ...prev, ...map }));
+    })();
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itens]);
+
+  const nActive = [fLote, fClasse, fStatus, fGrupo].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -136,6 +161,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                 {ALL_STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
             </div>
+            {catList.length > 0 && (
+              <select value={fGrupo} onChange={(e) => setFGrupo(e.target.value)} className={inputCls}>
+                <option value="">Todas as categorias</option>
+                {catList.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            )}
           </div>
         )}
         <div className="flex items-center justify-between mt-2">
@@ -181,7 +212,16 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                   ? <CheckSquare className="w-5 h-5 text-orange-500 flex-shrink-0" />
                   : <Square className="w-5 h-5 text-gray-300 flex-shrink-0" />
               )}
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${CLASSE_STYLE[it.classe] || "bg-gray-300 text-white"}`}>{it.classe}</div>
+              <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative bg-gray-100">
+                {fotos[it.sku] ? (
+                  <img src={fotos[it.sku]} alt="" loading="lazy" className="w-full h-full object-cover" />
+                ) : (
+                  <div className={`w-full h-full flex items-center justify-center text-xs font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-300 text-white"}`}>{it.classe}</div>
+                )}
+                {fotos[it.sku] && it.classe && (
+                  <span className={`absolute bottom-0 left-0 px-1 text-[9px] font-bold leading-tight ${CLASSE_STYLE[it.classe] || "bg-gray-500 text-white"}`}>{it.classe}</span>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   {it.sku in viab && (
@@ -194,7 +234,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
                 </div>
                 <p className="text-sm text-gray-600 truncate">{it.produto}</p>
-                <p className="text-xs text-gray-400">{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)} · {it.destino}</p>
+                <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-400">
+                  {it.grupo && <span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{it.grupo}</span>}
+                  {(it.marca || it.modelo) && <span className="truncate">{[it.marca, it.modelo].filter(Boolean).join(" ")}</span>}
+                  <span>{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)}</span>
+                </div>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
             </button>

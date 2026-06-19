@@ -151,7 +151,7 @@ export default function App() {
       )}
 
       {openItem && <ItemDetail item={openItem} user={user} params={params} onClose={() => setOpenItem(null)} onSaved={onSaved} />}
-      {showNew && <NewItem lotes={lotes} user={user} onClose={() => setShowNew(false)} onCreated={onCreated} />}
+      {showNew && <NewItem lotes={lotes} user={user} params={params} onClose={() => setShowNew(false)} onCreated={onCreated} />}
     </div>
   );
 }
