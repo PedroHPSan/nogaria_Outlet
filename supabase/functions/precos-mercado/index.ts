@@ -1,4 +1,8 @@
 // Edge Function: precos-mercado
+// ATENÇÃO: temporariamente DESLIGADA da UI — o Mercado Livre desativou a pesquisa
+// de preços, então o app não chama mais esta função (ver src/components/PricingCard.jsx).
+// O código é mantido aqui para ser religado quando o ML reabrir a pesquisa de preços.
+//
 // Busca o preço de referência de um produto no Mercado Livre (Brasil/MLB).
 // Entradas: { sku?, gtin?, produto, grupo?, aplicar? }
 // Saída:   { confianca, preco_ref_novo, preco_ref_usado, fonte, amostra, candidatos[] }

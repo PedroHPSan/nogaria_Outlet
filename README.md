@@ -15,6 +15,13 @@ Frontend Vite + React + Tailwind, banco e autenticação no Supabase.
   Quarentena/Avaria, Caixa e Mala, com QR (SKU/caixa) para conferência. Imprime pelo
   diálogo do navegador (driver Brother corta entre as etiquetas) ou baixa em PDF.
 
+> **Busca de preço no Mercado Livre — desativada temporariamente.** O Mercado Livre
+> desativou a pesquisa de preços, então o botão "Buscar preço ML" foi retirado da
+> precificação. A referência de preço passa a usar a âncora do grupo (ou o valor já
+> salvo no item). A Edge Function `precos-mercado`, a função `ml-notifications` e a
+> migration `ml_oauth` foram **preservadas** no repositório para serem religadas quando
+> a pesquisa de preços do ML voltar. O Mercado Livre continua disponível como canal de venda.
+
 ## Etiquetas (Brother QL-800)
 - **Um item:** abra o item → botão **Etiqueta** (topo) → escolha o rolo → *Imprimir* ou *Baixar PDF*.
 - **Em massa:** na aba **Itens**, toque em **Etiquetas** para entrar no modo de seleção,
