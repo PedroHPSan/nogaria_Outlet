@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Tag, TrendingUp, AlertTriangle, Check, Copy, Search, Loader2, ExternalLink } from "lucide-react";
+import { Tag, TrendingUp, AlertTriangle, Check, Copy } from "lucide-react";
 import { fmtBRL } from "../lib/model";
 import { precificar, gerarTitulo, estadoToCondicao, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
-import { supabase } from "../lib/supabase";
 
 const CONDICOES = [
   ["NOVO_LACRADO", "Novo lacrado"], ["NOVO_CAIXA_AVARIADA", "Novo caixa avariada"],
@@ -17,54 +16,20 @@ const sel = "rounded-lg border border-gray-300 px-2 py-2 text-sm bg-white focus:
 
 // custoItem deve vir de vw_precificacao.custo_proporcional (rateio do lote). Sem ele,
 // o card calcula tudo menos o piso de custo (mostra aviso).
-export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem = null, onApply, onRefUpdate }) {
+export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem = null, onApply }) {
   const grupo = params.grupos?.[item.grupo] || {};
   const [cond, setCond] = useState(estadoToCondicao(item.estado, params.config?.condicaoPadrao));
   const [canal, setCanal] = useState(normalizarCanal(item.canal_principal));
   const [copiado, setCopiado] = useState(false);
-  const [mlLoading, setMlLoading] = useState(false);
-  const [ml, setMl] = useState(null);       // resposta da Edge Function precos-mercado
-  const [mlMsg, setMlMsg] = useState(null);  // feedback da última busca
 
-  // A referência usa o preço recém-buscado no ML (ml), senão o persistido no item, senão a âncora do grupo.
-  const refNovo = ml?.preco_ref_novo ?? item.preco_ref_novo ?? grupo.ancoraNovo ?? item.preco_novo_est ?? 0;
-  const refUsado = ml?.preco_ref_usado ?? item.preco_ref_usado ?? grupo.ancoraUsado ?? null;
-  const fonteRef = ml?.fonte ?? item.preco_ref_fonte ?? null;
+  // Busca de preço no Mercado Livre desativada: o ML desativou a pesquisa de preços.
+  // A referência cai no valor já persistido no item, senão na âncora do grupo.
+  // TODO: reativar a busca de preço ML (Edge Function precos-mercado, preservada em
+  // supabase/functions/precos-mercado) quando o ML reabrir a pesquisa de preços.
+  const refNovo = item.preco_ref_novo ?? grupo.ancoraNovo ?? item.preco_novo_est ?? 0;
+  const refUsado = item.preco_ref_usado ?? grupo.ancoraUsado ?? null;
+  const fonteRef = item.preco_ref_fonte ?? null;
   const risco = grupo.nivelRisco || "MEDIO";
-  // ML ainda não libera dados de preço para o app: referência cai na âncora do grupo.
-  const mlPendente = (ml?.confianca ?? item.preco_ref_confianca) === "INDISPONIVEL"
-    || (ml?.fonte ?? item.preco_ref_fonte) === "ML:indisponivel";
-  const avisoRef = mlMsg
-    || (mlPendente ? "Referência do Mercado Livre pendente de liberação — usando âncora do grupo." : null);
-
-  const buscarPrecoML = async () => {
-    setMlLoading(true); setMlMsg(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("precos-mercado", {
-        body: {
-          sku: item.sku,
-          gtin: item.gtin || undefined,
-          produto: item.produto,
-          grupo: item.grupo,
-          aplicar: true, // a função persiste preco_ref_* no item
-        },
-      });
-      if (error) throw error;
-      setMl(data);
-      // reflete no item local (a função já gravou no banco com aplicar:true)
-      onRefUpdate?.({
-        preco_ref_novo: data?.preco_ref_novo ?? null,
-        preco_ref_usado: data?.preco_ref_usado ?? null,
-        preco_ref_fonte: data?.fonte ?? null,
-        preco_ref_confianca: data?.confianca ?? null,
-      });
-      if (!data?.preco_ref_novo) setMlMsg(data?.mensagem_ui || "Sem preço de referência no Mercado Livre.");
-    } catch (e) {
-      setMlMsg("Falha ao consultar o Mercado Livre: " + (e?.message || String(e)));
-    } finally {
-      setMlLoading(false);
-    }
-  };
 
   const r = useMemo(() => precificar({
     condicaoCod: cond, canalCod: canal, riscoNivel: risco,
@@ -113,39 +78,12 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
       </div>
 
       <div className="rounded-xl border border-gray-200 p-2 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase text-gray-500">Referência de preço (Mercado Livre)</span>
-          <button onClick={buscarPrecoML} disabled={mlLoading}
-            className="text-xs font-semibold text-orange-600 inline-flex items-center gap-1 disabled:text-gray-400">
-            {mlLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-            {mlLoading ? "Buscando…" : "Buscar preço ML"}
-          </button>
-        </div>
+        <span className="text-[11px] font-semibold uppercase text-gray-500">Referência de preço</span>
         <div className="flex items-center gap-3 text-xs text-gray-600">
           <span>Novo ref.: <b className="text-gray-800">{fmtBRL(refNovo)}</b></span>
           {refUsado != null && <span>Usado ref.: <b className="text-gray-800">{fmtBRL(refUsado)}</b></span>}
           {fonteRef && <span className="text-gray-400 truncate">({fonteRef})</span>}
         </div>
-        {avisoRef && (
-          <p className="text-[11px] text-amber-600 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {avisoRef}
-          </p>
-        )}
-        {ml?.candidatos?.length > 0 && (
-          <ul className="space-y-1 pt-0.5">
-            {ml.candidatos.map((c, i) => (
-              <li key={i} className="flex items-center gap-2 text-[11px] text-gray-600">
-                <span className="font-semibold text-gray-800 w-16 flex-shrink-0">{fmtBRL(c.preco)}</span>
-                <span className="truncate flex-1">{c.titulo}</span>
-                {c.permalink && (
-                  <a href={c.permalink} target="_blank" rel="noreferrer" className="text-orange-500 flex-shrink-0">
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-center">

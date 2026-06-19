@@ -302,7 +302,6 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             params={params}
             custoItem={custoItem}
             onApply={(patch) => set(patch)}
-            onRefUpdate={(patch) => set(patch)}
           />
         </div>
 
