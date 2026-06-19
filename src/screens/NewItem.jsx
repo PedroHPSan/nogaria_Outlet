@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import { sugerirCategoria } from "../lib/categorizar";
+import { desmembrarItem } from "../lib/conferencia";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { ChevronLeft, Loader2, PackagePlus, AlertTriangle, RefreshCw } from "lucide-react";
 
@@ -38,6 +39,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
   const [precoNovo, setPrecoNovo] = useState("");
   const [precoSug, setPrecoSug] = useState("");
   const [destino, setDestino] = useState("");
+  const [qtdUnidades, setQtdUnidades] = useState("1");
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -129,6 +131,13 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
 
       // 3) Auditoria — renderiza como "→ A catalogar" na aba Registro
       await supabase.from("eventos").insert({ sku: finalSku, acao: "status:A_CATALOGAR", usuario: user.email });
+
+      // 4) Várias unidades: desmembra em N itens individuais (1 SKU cada)
+      const unidades = Math.floor(Number(qtdUnidades) || 1);
+      if (unidades > 1) {
+        try { await desmembrarItem(inserted, unidades, user); }
+        catch (e) { alert("Item criado, mas falha ao criar as unidades extras: " + (e.message || e)); }
+      }
 
       onCreated(inserted);
     } catch (e) {
@@ -224,6 +233,13 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
                 </button>
               ))}
             </div>
+          </Field>
+          <Field label="Quantidade de unidades">
+            <input type="number" inputMode="numeric" min="1" className={inputCls} value={qtdUnidades}
+              onChange={(e) => setQtdUnidades(e.target.value)} />
+            {Number(qtdUnidades) > 1 && (
+              <p className="text-xs text-gray-400 mt-1">Serão criados {Math.floor(Number(qtdUnidades))} itens individuais (1 SKU cada), um por unidade.</p>
+            )}
           </Field>
         </div>
 

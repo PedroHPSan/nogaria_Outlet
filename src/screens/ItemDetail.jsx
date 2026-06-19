@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
-import { moverEtapa } from "../lib/conferencia";
+import { moverEtapa, desmembrarItem } from "../lib/conferencia";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -211,6 +211,23 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   };
 
   const fechar = async () => { if (dirty.current) await salvar(null); onClose(); };
+
+  // Desmembra o item em N unidades individuais (1 SKU cada). Salva antes para que
+  // as cópias herdem os dados atuais.
+  const desmembrar = async () => {
+    const resp = window.prompt("Quantas unidades este item tem no total? (cria 1 SKU por unidade)", "2");
+    if (resp == null) return;
+    const total = Math.floor(Number(resp));
+    if (!total || total < 2) { alert("Informe um número maior que 1."); return; }
+    try {
+      if (dirty.current) await salvar(null);
+      const novos = await desmembrarItem({ ...it }, total, user);
+      onSaved();
+      alert(`${novos.length} unidade(s) criada(s) neste lote.`);
+    } catch (e) {
+      alert("Falha ao desmembrar: " + (e?.message || e));
+    }
+  };
   const sm = statusMeta(it.status);
 
   return (
@@ -372,6 +389,10 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
           <Field label="Observações"><textarea className={inputCls} rows={2} value={it.obs ?? ""} onChange={(e) => set({ obs: e.target.value })} placeholder="Detalhes, defeitos, nº de série…" /></Field>
         </div>
+
+        <button onClick={desmembrar} className="w-full flex items-center justify-center gap-2 text-gray-700 border border-gray-300 bg-white rounded-xl py-3 text-sm font-semibold mb-2">
+          <Layers className="w-4 h-4" /> Desmembrar em várias unidades
+        </button>
 
         <button onClick={() => salvar("DESCARTE")} className="w-full flex items-center justify-center gap-2 text-red-600 border border-red-200 bg-red-50 rounded-xl py-3 text-sm font-semibold">
           <Trash2 className="w-4 h-4" /> Marcar como descarte / sucata

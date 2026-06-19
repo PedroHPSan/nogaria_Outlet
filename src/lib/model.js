@@ -24,7 +24,7 @@ export const CLASSE_STYLE = {
   E: "bg-red-600 text-white",
 };
 
-export const ESTADOS = ["Novo", "Usado funcionando", "Usado sem teste", "Avariado", "Incompleto", "Sucata"];
+export const ESTADOS = ["Novo", "Embalagem aberta/avariada", "Usado", "Avariado", "Usado sem teste"];
 export const DESTINOS = ["Belém", "SP storage", "Venda local SP", "A definir"];
 
 // SKU = NOG-<lote3|SL>-<seq3>. Itens criados sem lote usam o prefixo SL (lote=null);

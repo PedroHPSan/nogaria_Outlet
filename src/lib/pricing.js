@@ -2,11 +2,15 @@
 // JS puro, sem dependências. Calcula P_anúncio (teto) e P_piso (mínimo) ao vivo na UI.
 
 // Mapa do campo itens.estado (ESTADOS em model.js) -> código de condição do motor.
+// As chaves antigas seguem mapeadas por segurança (dados legados / enum órfão).
 export const ESTADO_TO_COND = {
   "Novo": "NOVO_LACRADO",
-  "Usado funcionando": "USADO_OK",
-  "Usado sem teste": "SEM_TESTE",
+  "Embalagem aberta/avariada": "NOVO_CAIXA_AVARIADA",
+  "Usado": "USADO_OK",
   "Avariado": "AVARIA_ESTETICA",
+  "Usado sem teste": "SEM_TESTE",
+  // legado:
+  "Usado funcionando": "USADO_OK",
   "Incompleto": "SEM_TESTE",
   "Sucata": "DEFEITO_PECAS",
 };
