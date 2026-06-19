@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
 import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
+import { buscarViasImpressao } from "../lib/printLog";
 import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
@@ -11,7 +12,7 @@ const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
 
-export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params }) {
+export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params, user }) {
   const [q, setQ] = useState("");
   const [fLote, setFLote] = useState(initialFilter?.lote || "");
   const [fClasse, setFClasse] = useState(initialFilter?.classe || "");
@@ -23,6 +24,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [viab, setViab] = useState({}); // sku -> viavel (de vw_precificacao); opcional, não bloqueia
+  const [viasMap, setViasMap] = useState({}); // sku -> { vias, ultima } (controle de impressão)
   const [fotos, setFotos] = useState({}); // sku -> url da 1ª foto (miniatura)
   const debounce = useRef();
   const fileRef = useRef();
@@ -142,6 +144,22 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     })();
     return () => { cancel = true; };
   }, [itens]);
+
+  // vias de etiqueta já impressas por item (selo "já impresso"). Silencioso em erro.
+  useEffect(() => {
+    const skus = itens.map((i) => i.sku);
+    if (!skus.length) return;
+    let cancel = false;
+    buscarViasImpressao(skus).then((m) => {
+      if (!cancel) setViasMap((prev) => ({ ...prev, ...m }));
+    });
+    return () => { cancel = true; };
+  }, [itens]);
+
+  const atualizarVias = (skus) => {
+    if (!skus?.length) return;
+    buscarViasImpressao(skus).then((m) => setViasMap((prev) => ({ ...prev, ...m })));
+  };
 
   // miniaturas (1ª foto) dos itens carregados; só busca os SKUs ainda sem URL.
   useEffect(() => {
@@ -264,6 +282,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                     )}
                     <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
+                    {viasMap[it.sku]?.vias > 0 && (
+                      <span title={`Etiqueta já impressa · ${viasMap[it.sku].vias} via(s)`}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 flex-shrink-0">
+                        <Printer className="w-3 h-3" />{viasMap[it.sku].vias}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600 truncate">{it.produto}</p>
                   <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-400">
@@ -319,7 +343,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
       {printLabels && (
         <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <LabelPrint labels={printLabels} onClose={() => setPrintLabels(null)} />
+          <LabelPrint
+            labels={printLabels}
+            user={user}
+            onPrinted={atualizarVias}
+            onClose={() => setPrintLabels(null)}
+          />
         </Suspense>
       )}
     </div>

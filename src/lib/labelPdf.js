@@ -77,15 +77,9 @@ function drawLabel(doc, label, preset) {
     line(label.produto, { size: compact ? 7.5 : 9, bold: true });
     line(`Caixa/Mala: ${label.caixa_num}  ·  Local: ${label.local_fisico}`);
     line(`Destino: ${label.destino}`, { bold: true });
-    if (label.precoMin || label.precoIdeal)
-      line(`Mín ${label.precoMin || "—"}  |  Ideal ${label.precoIdeal || "—"}`, {
-        size: compact ? 7 : 9,
-        bold: true,
-      });
     if (label.aviso) line(label.aviso, { bold: true });
   } else {
     line(`Local: ${label.local_fisico}  ·  Destino: ${label.destino}`);
-    line(`Valor estimado: ${label.valorEstimado}`, { bold: true });
     if (label.lotes?.length) line(`Lotes: ${label.lotes.join(", ")}`);
     line("Conteúdo (SKUs):", { bold: true });
     line(label.skus.join(", "), { size: compact ? 6 : 7 });

@@ -117,11 +117,6 @@ function CompactProduct({ label }) {
         <div>Local: <b>{label.local_fisico}</b></div>
         <div>Destino: <b>{label.destino}</b></div>
       </div>
-      {(label.precoMin || label.precoIdeal) && (
-        <div style={{ fontSize: "7pt", fontWeight: 700, marginTop: mm(1) }}>
-          Mín {label.precoMin || "—"} · Ideal {label.precoIdeal || "—"}
-        </div>
-      )}
       {label.aviso && (
         <div
           style={{
@@ -165,7 +160,6 @@ function CompactBox({ label }) {
       <div style={{ fontSize: "6.5pt" }}>
         <div>Local: <b>{label.local_fisico}</b></div>
         <div>Destino: <b>{label.destino}</b></div>
-        <div>Valor est.: <b>{label.valorEstimado}</b></div>
         {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
       <div style={{ fontSize: "6pt", marginTop: mm(1), lineHeight: 1.2 }}>
@@ -199,11 +193,6 @@ function FullProduct({ label }) {
       <div style={{ fontSize: "8pt", marginTop: mm(1) }}>
         Destino: <b>{label.destino}</b>
       </div>
-      {(label.precoMin || label.precoIdeal) && (
-        <div style={{ fontSize: "9pt", fontWeight: 800, marginTop: mm(0.6) }}>
-          Mín {label.precoMin || "R$ ____"} | Ideal {label.precoIdeal || "R$ ____"}
-        </div>
-      )}
       {label.aviso && (
         <div
           style={{
@@ -239,7 +228,6 @@ function FullBox({ label }) {
       </div>
       <div style={{ fontSize: "8pt", marginTop: mm(1) }}>
         <div>Local: <b>{label.local_fisico}</b> · Destino: <b>{label.destino}</b></div>
-        <div>Valor estimado: <b>{label.valorEstimado}</b></div>
         {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
       <div style={{ fontSize: "7pt", marginTop: mm(1), lineHeight: 1.25 }}>
