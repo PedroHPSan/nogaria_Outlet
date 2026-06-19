@@ -18,6 +18,7 @@ const eventoLabel = (e) => {
   if (a.startsWith("status:")) return "→ " + statusMeta(a.replace("status:", "")).label + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "lote:atribuido") return "lote atribuído" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "conferido") return "conferido ✓";
+  if (a === "desmembrado") return "desmembrado" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "etiqueta:impressa") return "etiqueta impressa" + (e.detalhe ? ` (${e.detalhe})` : "");
   return a;
 };

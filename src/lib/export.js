@@ -17,9 +17,11 @@ export const precoVenda = (it) =>
 export const condicaoAnuncio = (it) => {
   if (it.condicao_anuncio) return it.condicao_anuncio;
   switch (it.estado) {
-    case "Novo": return "Novo";
+    case "Novo":
+    case "Embalagem aberta/avariada": return "Novo";
+    case "Usado":
     case "Usado funcionando":
-    case "Usado sem teste": return "Usado";
+    case "Usado sem teste":
     case "Avariado":
     case "Incompleto": return "Usado";
     default: return null;

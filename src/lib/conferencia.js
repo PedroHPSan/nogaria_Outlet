@@ -83,3 +83,61 @@ export async function moverEtapa(sku, novoStatus, user, deStatusLabel) {
     usuario: user.email,
   });
 }
+
+// Próximo sequencial considerando lote real ou itens sem lote (prefixo SL).
+async function proximoSeq(lote) {
+  if (lote == null || lote === "") {
+    const { data } = await supabase
+      .from("itens").select("sku").like("sku", "NOG-SL-%").order("sku", { ascending: false }).limit(1);
+    if (data && data.length) return (parseInt(data[0].sku.split("-").pop(), 10) || 0) + 1;
+    return 1;
+  }
+  return proximoSeqLote(Number(lote));
+}
+
+// Campos do produto copiados para cada nova unidade (sem identidade única/venda).
+const CAMPOS_COPIA = [
+  "lote", "produto", "grupo", "classe", "marca", "modelo", "gtin", "ncm", "voltagem", "cor",
+  "comprimento_cm", "largura_cm", "altura_cm", "peso_real_kg", "peso_kg",
+  "preco_novo_est", "preco_sugerido", "preco_min", "preco_ideal",
+  "preco_ref_novo", "preco_ref_usado", "preco_ref_fonte", "preco_ref_confianca",
+  "destino", "canal_principal", "condicao_anuncio", "titulo_anuncio", "descricao_anuncio",
+  "local_fisico", "caixa_num", "status",
+  "estado", "testado", "funciona", "avaria", "acessorios_ok", "caixa_original",
+];
+
+// Desmembra um item em `total` unidades individuais (1 SKU cada). O item original é a
+// unidade 1; cria total-1 novos itens no mesmo lote copiando os dados do produto (sem
+// nº de série, fotos ou dados de venda). Registra auditoria. Retorna os novos itens.
+export async function desmembrarItem(item, total, user) {
+  const extras = Math.max(0, Math.floor(Number(total) || 0) - 1);
+  if (!extras) return [];
+  const lote = item.lote ?? null;
+
+  const base = {};
+  for (const k of CAMPOS_COPIA) if (item[k] !== undefined) base[k] = item[k];
+  base.quantidade = 1;
+  base.anuncio_feito = false;
+  base.upd_by = user.email;
+
+  const novos = [];
+  for (let i = 0; i < extras; i++) {
+    let seq = await proximoSeq(lote);
+    let inserido = null, lastErr = null;
+    for (let tent = 0; tent < 6; tent++) {
+      const { data, error } = await supabase
+        .from("itens").insert({ ...base, sku: buildSku(lote, seq) }).select().single();
+      if (!error) { inserido = data; break; }
+      lastErr = error;
+      if (error.code === "23505") { seq++; continue; } // colisão de SKU
+      break;
+    }
+    if (!inserido) throw lastErr || new Error("Falha ao criar unidade.");
+    novos.push(inserido);
+  }
+
+  await supabase.from("eventos").insert({
+    sku: item.sku, acao: "desmembrado", detalhe: `+${extras} unidade(s)`, usuario: user.email,
+  });
+  return novos;
+}
