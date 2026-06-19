@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { X, Printer, FileDown, Loader2 } from "lucide-react";
 import { MEDIA_PRESETS, DEFAULT_MEDIA_ID, getPreset, attachQrCodes } from "../../lib/labels";
 import { generateLabelsPdf } from "../../lib/labelPdf";
+import { printLabels } from "../../lib/labelPrint";
 import LabelCard from "./LabelCard";
 
 const STORAGE_KEY = "nogaria_label_preset";
@@ -25,27 +26,16 @@ export default function LabelPrint({ labels, onClose }) {
     };
   }, [labels]);
 
-  // Define o tamanho físico da página de impressão conforme o rolo.
+  // Lembra o último rolo escolhido.
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, presetId);
-    const id = "label-print-page-style";
-    let el = document.getElementById(id);
-    if (!el) {
-      el = document.createElement("style");
-      el.id = id;
-      document.head.appendChild(el);
-    }
-    el.textContent = `@media print { @page { size: ${preset.width}mm ${preset.height}mm; margin: 0; } }`;
-    return () => {
-      const node = document.getElementById(id);
-      if (node) node.remove();
-    };
-  }, [presetId, preset.width, preset.height]);
+  }, [presetId]);
 
   const ready = withQr != null;
   const count = labels?.length || 0;
 
-  const imprimir = () => window.print();
+  // Imprime via iframe isolado (robusto no macOS/Safari e no Windows).
+  const imprimir = () => withQr && printLabels(withQr, preset);
   const baixarPdf = () => withQr && generateLabelsPdf(withQr, preset);
 
   return (
