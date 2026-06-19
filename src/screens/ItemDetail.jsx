@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
+import { moverEtapa } from "../lib/conferencia";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -108,6 +109,20 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
 
   const idx = statusIdx(it.status);
   const next = idx >= 0 && idx < STATUS_FLOW.length - 1 ? STATUS_FLOW[idx + 1] : null;
+  const prev = idx > 0 ? STATUS_FLOW[idx - 1] : null;
+
+  // Volta o item para a etapa anterior, com registro no histórico (rastreabilidade).
+  const voltarEtapa = async () => {
+    if (!prev) return;
+    if (!window.confirm(`Voltar este item para "${prev.label}"?`)) return;
+    try {
+      await moverEtapa(it.sku, prev.id, user, statusMeta(it.status).label);
+      setIt((p) => ({ ...p, status: prev.id }));
+      onSaved();
+    } catch (e) {
+      alert("Falha ao voltar etapa: " + (e.message || e));
+    }
+  };
 
   const gate = (() => {
     if (!next) return null;
@@ -346,6 +361,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 shadow-lg">
         {gate && <p className="text-xs text-amber-700 flex items-center gap-1.5 mb-2"><AlertTriangle className="w-3.5 h-3.5" /> {gate}</p>}
         <div className="flex gap-2">
+          {prev && (
+            <button onClick={voltarEtapa} title={`Voltar para ${prev.label}`} aria-label={`Voltar para ${prev.label}`}
+              className="rounded-xl py-3.5 px-3 font-semibold border border-gray-300 text-gray-600 bg-white flex items-center justify-center">
+              <Undo2 className="w-4 h-4" />
+            </button>
+          )}
           <button onClick={fechar} className="flex-1 rounded-xl py-3.5 font-semibold border border-gray-300 text-gray-700 bg-white">Salvar</button>
           {next && (
             <button disabled={!!gate} onClick={() => salvar(next.id)}

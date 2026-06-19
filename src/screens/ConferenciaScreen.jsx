@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { LOTE_SEM } from "../lib/model";
+import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta } from "../lib/model";
 import { checarCompletude } from "../lib/export";
-import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria } from "../lib/conferencia";
+import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa } from "../lib/conferencia";
 import { primeirasFotos } from "../lib/fotos";
 import { sugerirCategoria } from "../lib/categorizar";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
-  PackageCheck, RotateCcw, Camera, ChevronRight, Tags, Sparkles,
+  PackageCheck, RotateCcw, Camera, ChevronRight, Tags, Sparkles, ArrowLeftRight,
 } from "lucide-react";
 
 const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -35,10 +35,11 @@ export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS
   return (
     <div className="pb-24">
       <div className="sticky top-14 z-10 bg-gray-50 px-4 pt-3 pb-2 border-b border-gray-200">
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {[
             { id: "definir", t: "Definir lote", icon: Inbox },
             { id: "categorizar", t: "Categorizar", icon: Tags },
+            { id: "mover", t: "Mover etapa", icon: ArrowLeftRight },
             { id: "inventario", t: "Inventário", icon: ScanLine },
             { id: "pendencias", t: "Pendências", icon: ClipboardList },
           ].map((s) => (
@@ -50,6 +51,7 @@ export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS
         </div>
       </div>
       {secao === "definir" && <DefinirLote lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
+      {secao === "mover" && <MoverEtapa lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "categorizar" && <CategorizarMassa lotes={lotes} user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "inventario" && <Inventario lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "pendencias" && <Pendencias lotes={lotes} onOpen={onOpen} refreshKey={refreshKey} />}
@@ -312,6 +314,135 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
                 className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-40">
                 {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Tags className="w-5 h-5" />}
                 Salvar categorias ({sel.size})
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────── Mover etapa (status) em massa ─────────────────────────
+function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
+  const [origem, setOrigem] = useState("PRONTO");
+  const [destino, setDestino] = useState("TRIADO");
+  const [fLote, setFLote] = useState("");
+  const [itens, setItens] = useState(null);
+  const [sel, setSel] = useState(() => new Set());
+  const [visiveis, setVisiveis] = useState(60);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const load = useCallback(async () => {
+    setItens(null); setSel(new Set()); setMsg(null); setVisiveis(60);
+    if (!origem) { setItens([]); return; }
+    const data = await fetchItens((q) => {
+      let qq = q.eq("status", origem);
+      if (fLote === LOTE_SEM) qq = qq.is("lote", null);
+      else if (fLote) qq = qq.eq("lote", Number(fLote));
+      return qq;
+    });
+    setItens(data);
+    setSel(new Set(data.map((i) => i.sku))); // tudo marcado por padrão
+  }, [origem, fLote]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  const fotos = useThumbs(itens);
+  const toggle = (sku) => setSel((s) => { const n = new Set(s); n.has(sku) ? n.delete(sku) : n.add(sku); return n; });
+  const todos = () => setSel((s) => (itens && s.size === itens.length ? new Set() : new Set(itens.map((i) => i.sku))));
+
+  const origemLabel = statusMeta(origem).label;
+  const destinoLabel = statusMeta(destino).label;
+
+  const aplicar = async () => {
+    if (!sel.size) return;
+    if (destino === origem) { setMsg({ tipo: "erro", texto: "Escolha uma etapa de destino diferente da origem." }); return; }
+    if (!window.confirm(`Mover ${sel.size} item(ns) de "${origemLabel}" para "${destinoLabel}"?`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      let n = 0;
+      for (const it of itens) {
+        if (!sel.has(it.sku)) continue;
+        await moverEtapa(it.sku, destino, user, origemLabel);
+        n++;
+      }
+      onChanged?.();
+      setMsg({ tipo: "ok", texto: `${n} item(ns) movido(s) para "${destinoLabel}".` });
+      await load();
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="px-4 pt-4 space-y-3">
+      <p className="text-sm text-gray-500">
+        Move itens de uma etapa para outra com registro no histórico. Ex.: devolver itens marcados como <b>Pronto p/ anúncio</b> por engano para <b>Triado</b>.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase text-gray-500">De (status atual)</span>
+          <select value={origem} onChange={(e) => setOrigem(e.target.value)} className={inputCls + " mt-1"}>
+            {ALL_STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase text-gray-500">Para (nova etapa)</span>
+          <select value={destino} onChange={(e) => setDestino(e.target.value)} className={inputCls + " mt-1"}>
+            {ALL_STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <select value={fLote} onChange={(e) => setFLote(e.target.value)} className={inputCls}>
+        <option value="">Todos os lotes</option>
+        <option value={LOTE_SEM}>Sem lote</option>
+        {lotes.map((l) => <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>)}
+      </select>
+
+      {itens === null ? <Carregando /> : !itens.length ? (
+        <Vazio icon={ArrowLeftRight} texto={`Nenhum item em "${origemLabel}" com esse filtro.`} />
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <button onClick={todos} className="text-sm font-semibold text-orange-600">
+              {sel.size === itens.length ? "Limpar seleção" : "Selecionar todos"}
+            </button>
+            <span className="text-xs text-gray-400">{sel.size} de {itens.length} selecionado(s)</span>
+          </div>
+
+          {msg && (
+            <p className={`text-sm flex items-center gap-1.5 ${msg.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+              {msg.tipo === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />} {msg.texto}
+            </p>
+          )}
+
+          <div className="space-y-1.5">
+            {itens.slice(0, visiveis).map((it) => (
+              <button key={it.sku} onClick={() => toggle(it.sku)}
+                className={`w-full text-left rounded-xl border px-3 py-2.5 flex items-center gap-3 ${sel.has(it.sku) ? "border-orange-300 bg-orange-50/40" : "border-gray-200 bg-white"}`}>
+                {sel.has(it.sku) ? <CheckCircle2 className="w-5 h-5 text-orange-500 flex-shrink-0" /> : <Circle className="w-5 h-5 text-gray-300 flex-shrink-0" />}
+                <Miniatura url={fotos[it.sku]} />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                  <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                  <IdentLinha it={it} />
+                </div>
+              </button>
+            ))}
+          </div>
+          {itens.length > visiveis && (
+            <button onClick={() => setVisiveis((v) => v + 60)} className="w-full py-3 text-sm font-semibold text-orange-600">
+              Carregar mais ({itens.length - visiveis} restantes)
+            </button>
+          )}
+
+          {!!sel.size && (
+            <div className="sticky bottom-20 pt-1">
+              <button disabled={busy || destino === origem} onClick={aplicar}
+                className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-40">
+                {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowLeftRight className="w-5 h-5" />}
+                Mover {sel.size} para “{destinoLabel}”
               </button>
             </div>
           )}
