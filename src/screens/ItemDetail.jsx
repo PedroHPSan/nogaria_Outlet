@@ -5,6 +5,7 @@ import {
   ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
+import { enviarFoto } from "../lib/fotos";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { sugerirCategoria } from "../lib/categorizar";
@@ -115,21 +116,19 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     }
   })();
 
-  const subirFoto = async (file) => {
-    if (!file) return;
+  const subirFotos = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${it.sku}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("fotos-produtos").upload(path, file, { upsert: false });
-      if (error) throw error;
-      const ordem = fotos.length;
-      const { data: nova } = await supabase.from("fotos").insert({ sku: it.sku, storage_path: path, ordem }).select().single();
-      const { data: signed } = await supabase.storage.from("fotos-produtos").createSignedUrl(path, 3600);
-      setFotos((f) => [...f, { ...nova, url: signed?.signedUrl }]);
+      let ordem = fotos.length;
+      for (const file of files) {
+        const nova = await enviarFoto(it.sku, file, ordem++);
+        setFotos((f) => [...f, nova]);
+      }
       if (!it.foto_feita) set({ foto_feita: true });
     } catch (e) {
-      alert("Falha ao enviar a foto. Tente novamente.");
+      alert("Falha ao enviar a(s) foto(s). Tente novamente.");
     } finally {
       setUploading(false);
     }
@@ -201,8 +200,20 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
         {/* Fotos */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Fotos</h3>
-          <p className="text-xs text-gray-400 mb-2">Sugestão: frente, etiqueta (marca/modelo), defeitos e acessórios. (Foto fundo branco p/ Amazon é tratada depois.)</p>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Fotos</h3>
+            <button onClick={() => fileRef.current.click()} disabled={uploading}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-orange-500 rounded-lg px-2.5 py-1.5 active:bg-orange-600 disabled:opacity-50">
+              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+              {uploading ? "Enviando…" : "Adicionar fotos"}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">Sugestão: frente, etiqueta (marca/modelo), defeitos e acessórios. Dá para enviar várias de uma vez.</p>
+          {fotos[0]?.url && (
+            <button onClick={() => fileRef.current.click()} className="block w-full mb-2">
+              <img src={fotos[0].url} alt="" className="w-full h-48 object-cover rounded-xl bg-gray-100" />
+            </button>
+          )}
           <div className="flex gap-2 flex-wrap">
             {fotos.map((f) => (
               <div key={f.id} className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
@@ -218,8 +229,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             >
               {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
             </button>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
-              onChange={(e) => e.target.files[0] && subirFoto(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+              onChange={(e) => { subirFotos(e.target.files); e.target.value = ""; }} />
           </div>
         </div>
 

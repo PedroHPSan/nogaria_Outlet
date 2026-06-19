@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
-import { primeirasFotos } from "../lib/fotos";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X } from "lucide-react";
+import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -25,6 +25,9 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [viab, setViab] = useState({}); // sku -> viavel (de vw_precificacao); opcional, não bloqueia
   const [fotos, setFotos] = useState({}); // sku -> url da 1ª foto (miniatura)
   const debounce = useRef();
+  const fileRef = useRef();
+  const captureSku = useRef(null);
+  const [savingFoto, setSavingFoto] = useState(null);
 
   const catList = useMemo(
     () => Object.keys(params?.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
@@ -62,6 +65,31 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const abrirItem = (it) => {
     if (selectMode) toggleSel(it.sku);
     else onOpen(it);
+  };
+
+  // Foto rápida direto da lista (sem abrir o item).
+  const iniciarFoto = (sku) => { captureSku.current = sku; fileRef.current?.click(); };
+  const aoSelecionarFoto = async (e) => {
+    const files = Array.from(e.target.files || []);
+    const sku = captureSku.current;
+    e.target.value = "";
+    if (!files.length || !sku) return;
+    setSavingFoto(sku);
+    try {
+      let primeira = null;
+      const base = Date.now();
+      for (let i = 0; i < files.length; i++) {
+        const nova = await enviarFoto(sku, files[i], base + i);
+        if (!primeira) primeira = nova.url;
+      }
+      await marcarFotoFeita(sku);
+      setFotos((prev) => (prev[sku] ? prev : { ...prev, [sku]: primeira }));
+      setItens((arr) => arr.map((it) => (it.sku === sku ? { ...it, foto_feita: true } : it)));
+    } catch (err) {
+      alert("Falha ao enviar a foto. Tente novamente.");
+    } finally {
+      setSavingFoto(null);
+    }
   };
 
   const buscar = useCallback(async (reset) => {
@@ -200,48 +228,60 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </div>
       </div>
 
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+        onChange={aoSelecionarFoto} />
+
       <div className="px-3 pt-2 space-y-1.5">
         {itens.map((it) => {
           const sm = statusMeta(it.status);
           const sel = selected.has(it.sku);
           return (
-            <button key={it.sku} onClick={() => abrirItem(it)}
-              className={`w-full text-left bg-white rounded-xl border px-3 py-2.5 flex items-center gap-3 active:bg-gray-100 ${sel ? "border-orange-500 ring-1 ring-orange-300" : "border-gray-200"}`}>
-              {selectMode && (
-                sel
-                  ? <CheckSquare className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                  : <Square className="w-5 h-5 text-gray-300 flex-shrink-0" />
-              )}
-              <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative bg-gray-100">
-                {fotos[it.sku] ? (
-                  <img src={fotos[it.sku]} alt="" loading="lazy" className="w-full h-full object-cover" />
-                ) : (
-                  <div className={`w-full h-full flex items-center justify-center text-xs font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-300 text-white"}`}>{it.classe}</div>
+            <div key={it.sku}
+              className={`bg-white rounded-xl border px-3 py-2.5 flex items-center gap-3 ${sel ? "border-orange-500 ring-1 ring-orange-300" : "border-gray-200"}`}>
+              <button onClick={() => abrirItem(it)} className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-70">
+                {selectMode && (
+                  sel
+                    ? <CheckSquare className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    : <Square className="w-5 h-5 text-gray-300 flex-shrink-0" />
                 )}
-                {fotos[it.sku] && it.classe && (
-                  <span className={`absolute bottom-0 left-0 px-1 text-[9px] font-bold leading-tight ${CLASSE_STYLE[it.classe] || "bg-gray-500 text-white"}`}>{it.classe}</span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  {it.sku in viab && (
-                    <span
-                      title={viab[it.sku] ? "Preço viável" : "Rever preço/custo"}
-                      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${viab[it.sku] ? "bg-emerald-500" : "bg-red-500"}`}
-                    />
+                <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative bg-gray-100">
+                  {fotos[it.sku] ? (
+                    <img src={fotos[it.sku]} alt="" loading="lazy" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full flex items-center justify-center text-xs font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-300 text-white"}`}>{it.classe}</div>
                   )}
-                  <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
+                  {fotos[it.sku] && it.classe && (
+                    <span className={`absolute bottom-0 left-0 px-1 text-[9px] font-bold leading-tight ${CLASSE_STYLE[it.classe] || "bg-gray-500 text-white"}`}>{it.classe}</span>
+                  )}
                 </div>
-                <p className="text-sm text-gray-600 truncate">{it.produto}</p>
-                <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-400">
-                  {it.grupo && <span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{it.grupo}</span>}
-                  {(it.marca || it.modelo) && <span className="truncate">{[it.marca, it.modelo].filter(Boolean).join(" ")}</span>}
-                  <span>{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {it.sku in viab && (
+                      <span
+                        title={viab[it.sku] ? "Preço viável" : "Rever preço/custo"}
+                        className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${viab[it.sku] ? "bg-emerald-500" : "bg-red-500"}`}
+                      />
+                    )}
+                    <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-400">
+                    {it.grupo && <span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{it.grupo}</span>}
+                    {(it.marca || it.modelo) && <span className="truncate">{[it.marca, it.modelo].filter(Boolean).join(" ")}</span>}
+                    <span>{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)}</span>
+                  </div>
                 </div>
-              </div>
+              </button>
+              {!selectMode && (
+                <button onClick={() => iniciarFoto(it.sku)} disabled={savingFoto === it.sku}
+                  className="flex-shrink-0 w-9 h-9 rounded-lg border border-gray-200 text-gray-500 flex items-center justify-center active:bg-gray-100 disabled:opacity-50"
+                  title="Tirar/enviar foto" aria-label="Foto">
+                  {savingFoto === it.sku ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                </button>
+              )}
               <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-            </button>
+            </div>
           );
         })}
         {loading && <div className="py-6 text-center"><Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" /></div>}
