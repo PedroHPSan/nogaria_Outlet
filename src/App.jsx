@@ -15,7 +15,7 @@ import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Pl
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
 const eventoLabel = (e) => {
   const a = e.acao || "";
-  if (a.startsWith("status:")) return "→ " + statusMeta(a.replace("status:", "")).label;
+  if (a.startsWith("status:")) return "→ " + statusMeta(a.replace("status:", "")).label + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "lote:atribuido") return "lote atribuído" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "conferido") return "conferido ✓";
   if (a === "etiqueta:impressa") return "etiqueta impressa" + (e.detalhe ? ` (${e.detalhe})` : "");

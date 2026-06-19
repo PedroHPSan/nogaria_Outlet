@@ -69,3 +69,17 @@ export async function definirCategoria(sku, grupo, user, classe) {
   const { error } = await supabase.from("itens").update(patch).eq("sku", sku);
   if (error) throw error;
 }
+
+// Move um item para outra etapa (status) com rastreabilidade. Registra um evento
+// "status:<novo>" com detalhe "de <etapa anterior>" para aparecer no Registro.
+// Usado tanto no avanço/retorno individual quanto no mover-etapa em massa.
+export async function moverEtapa(sku, novoStatus, user, deStatusLabel) {
+  const { error } = await supabase
+    .from("itens").update({ status: novoStatus, upd_by: user.email }).eq("sku", sku);
+  if (error) throw error;
+  await supabase.from("eventos").insert({
+    sku, acao: "status:" + novoStatus,
+    detalhe: deStatusLabel ? `de ${deStatusLabel}` : null,
+    usuario: user.email,
+  });
+}
