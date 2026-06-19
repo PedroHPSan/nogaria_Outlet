@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, DESTINOS, VOLTAGENS, CONDICOES_ANUNCIO, validarEAN, fmtBRL } from "../lib/model";
 import {
   ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
+import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 
@@ -52,8 +53,16 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [scanning, setScanning] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [custoItem, setCustoItem] = useState(null); // custo_proporcional do rateio do lote (vw_precificacao)
+  const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
   const dirty = useRef(false);
   const fileRef = useRef();
+
+  // Vias de etiqueta já impressas deste item (aviso de "já impresso").
+  const carregarVias = useCallback(async () => {
+    const m = await buscarViasImpressao([it.sku]);
+    setViaInfo(m[it.sku] || { vias: 0, ultima: null });
+  }, [it.sku]);
+  useEffect(() => { carregarVias(); }, [carregarVias]);
 
   const gtinValido = !it.gtin || validarEAN(it.gtin);
 
@@ -187,6 +196,18 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
         <p className="text-sm text-gray-200 mt-1 leading-snug">{it.produto}</p>
       </div>
+
+      {viaInfo?.vias > 0 && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2">
+          <Printer className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <p className="text-xs text-amber-800 leading-snug">
+            <b>Etiqueta já impressa</b> · {viaInfo.vias} {viaInfo.vias === 1 ? "via" : "vias"}
+            {viaInfo.ultima
+              ? ` · última ${new Date(viaInfo.ultima).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`
+              : ""}
+          </p>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
         {/* Fotos */}
@@ -371,7 +392,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
 
       {printing && (
         <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <LabelPrint labels={[buildProductLabel(it)]} onClose={() => setPrinting(false)} />
+          <LabelPrint
+            labels={[buildProductLabel(it)]}
+            user={user}
+            onPrinted={carregarVias}
+            onClose={() => setPrinting(false)}
+          />
         </Suspense>
       )}
     </div>

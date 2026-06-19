@@ -18,6 +18,7 @@ const eventoLabel = (e) => {
   if (a.startsWith("status:")) return "→ " + statusMeta(a.replace("status:", "")).label;
   if (a === "lote:atribuido") return "lote atribuído" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "conferido") return "conferido ✓";
+  if (a === "etiqueta:impressa") return "etiqueta impressa" + (e.detalhe ? ` (${e.detalhe})` : "");
   return a;
 };
 
@@ -93,7 +94,7 @@ export default function App() {
       {tab === "itens" && (
         <ItemsScreen
           key={preFilter ? JSON.stringify(preFilter) : "all"}
-          lotes={lotes} initialFilter={preFilter} onOpen={setOpenItem} refreshKey={refreshKey} params={params}
+          lotes={lotes} initialFilter={preFilter} onOpen={setOpenItem} refreshKey={refreshKey} params={params} user={user}
         />
       )}
       {tab === "conferencia" && (
