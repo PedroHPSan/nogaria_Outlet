@@ -144,7 +144,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     switch (next.id) {
       case "TRIADO": return it.estado ? null : "Defina o Estado do item para triar.";
       case "TESTADO":
-        if (it.estado === "Novo") return null;
+        if (it.estado === "Novo" || it.estado === "Embalagem aberta/avariada") return null;
         return it.testado != null && it.funciona != null ? null : "Marque Testado? e Funciona?";
       case "FOTOGRAFADO": return fotos.length || it.foto_feita ? null : "Tire ao menos uma foto para avançar.";
       case "PRECIFICADO": return it.preco_min && it.preco_ideal ? null : "Preencha preço mínimo e ideal.";
