@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
 
 // Combobox de categoria: busca na lista fixa (pricing_grupo, via params.grupos) e,
 // se allowCustom, permite cadastrar uma categoria nova (com aviso de que não terá
@@ -7,7 +7,7 @@ import { Check, ChevronDown, Search } from "lucide-react";
 const triggerCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-between text-left";
 
-export default function CategoriaPicker({ value, onChange, grupos = [], allowCustom = true }) {
+export default function CategoriaPicker({ value, onChange, grupos = [], allowCustom = true, sugestao = null }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const boxRef = useRef(null);
@@ -38,6 +38,12 @@ export default function CategoriaPicker({ value, onChange, grupos = [], allowCus
       </button>
       {isCustom && (
         <p className="text-[11px] text-amber-600 mt-1">Categoria nova — sem âncora de preço até ser cadastrada.</p>
+      )}
+      {sugestao && sugestao !== value && (
+        <button type="button" onClick={() => onChange(sugestao)}
+          className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+          <Sparkles className="w-3.5 h-3.5" /> Sugerir: {sugestao}
+        </button>
       )}
 
       {open && (

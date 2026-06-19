@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
 import { DEFAULT_PARAMS } from "../lib/pricing";
+import { sugerirCategoria } from "../lib/categorizar";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { ChevronLeft, Loader2, PackagePlus, AlertTriangle, RefreshCw } from "lucide-react";
 
@@ -41,6 +42,17 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
   const [erro, setErro] = useState("");
 
   const loteAtual = loteMode === "novo" ? loteNum : loteMode === "existente" ? loteSel : "";
+
+  // Sugestão de categoria a partir do nome do produto (casa com pricing_grupo).
+  const sugCat = useMemo(() => sugerirCategoria(produto, catList), [produto, catList]);
+  // Ao escolher/sugerir categoria, preenche a classe da categoria se ainda vazia.
+  const aplicarCategoria = (g) => {
+    setGrupo(g);
+    if (g && !classe) {
+      const c = params.grupos?.[g]?.classe;
+      if (c) setClasse(c);
+    }
+  };
 
   // Sugere o próximo SKU: NOG-<lote>-<maxSeq+1>, ou NOG-SL-<maxSeq+1> sem lote.
   const sugerirSku = useCallback(async (loteVal, modo) => {
@@ -201,7 +213,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
               placeholder="Descrição do produto" />
           </Field>
           <Field label="Grupo / categoria">
-            <CategoriaPicker value={grupo} onChange={setGrupo} grupos={catList} />
+            <CategoriaPicker value={grupo} onChange={aplicarCategoria} grupos={catList} sugestao={sugCat} />
           </Field>
           <Field label="Classe">
             <div className="flex flex-wrap gap-1.5">

@@ -7,6 +7,7 @@ import {
 import { buildProductLabel } from "../lib/labels";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
+import { sugerirCategoria } from "../lib/categorizar";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
@@ -60,6 +61,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     () => Object.keys(params.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
     [params]
   );
+  const sugCat = useMemo(() => sugerirCategoria(it.produto, catList), [it.produto, catList]);
 
   const gtinValido = !it.gtin || validarEAN(it.gtin);
 
@@ -264,7 +266,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <Field label="Modelo"><input className={inputCls} value={it.modelo ?? ""} onChange={(e) => set({ modelo: e.target.value })} placeholder="ex.: BFR-2000" /></Field>
           </div>
           <Field label="Categoria">
-            <CategoriaPicker value={it.grupo || ""} onChange={(g) => set({ grupo: g })} grupos={catList} />
+            <CategoriaPicker value={it.grupo || ""} onChange={(g) => set({ grupo: g })} grupos={catList} sugestao={sugCat} />
           </Field>
           <Field label="Voltagem">
             <div className="flex flex-wrap gap-1.5">

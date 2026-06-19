@@ -25,7 +25,7 @@ export async function carregarParametros() {
     (cfg.data || []).forEach((r) => (g[r.key] = r.valor != null ? Number(r.valor) : r.valor_txt));
     const grupos = {};
     (grupo.data || []).forEach((r) => (grupos[r.grupo] = {
-      nivelRisco: r.nivel_risco, ancoraNovo: r.ancora_novo, ancoraUsado: r.ancora_usado,
+      nivelRisco: r.nivel_risco, ancoraNovo: r.ancora_novo, ancoraUsado: r.ancora_usado, classe: r.classe,
     }));
     _cache = {
       condicao: Object.keys(C).length ? C : DEFAULT_PARAMS.condicao,
