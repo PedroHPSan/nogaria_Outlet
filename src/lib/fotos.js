@@ -35,3 +35,20 @@ export async function primeirasFotos(skus) {
   }
   return out;
 }
+
+// Envia uma foto de um item para o storage e registra em `fotos`. Retorna a linha
+// criada já com `url` assinada. Sufixo aleatório evita colisão em envios rápidos.
+export async function enviarFoto(sku, file, ordem = 0) {
+  const ext = (file.name?.split(".").pop() || "jpg").toLowerCase();
+  const path = `${sku}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
+  if (error) throw error;
+  const { data: nova } = await supabase.from("fotos").insert({ sku, storage_path: path, ordem }).select().single();
+  const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+  return { ...nova, url: signed?.signedUrl };
+}
+
+// Marca o item como fotografado (foto_feita = true) sem mexer no status.
+export async function marcarFotoFeita(sku) {
+  await supabase.from("itens").update({ foto_feita: true }).eq("sku", sku);
+}
