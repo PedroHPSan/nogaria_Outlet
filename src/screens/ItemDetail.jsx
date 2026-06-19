@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
@@ -58,6 +58,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [printing, setPrinting] = useState(false);
   const [custoItem, setCustoItem] = useState(null); // custo_proporcional do rateio do lote (vw_precificacao)
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
+  const [refreshing, setRefreshing] = useState(false);
   const dirty = useRef(false);
   const fileRef = useRef();
 
@@ -79,33 +80,47 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const set = (patch) => { dirty.current = true; setIt((p) => ({ ...p, ...patch })); };
 
   // carregar fotos do item
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("fotos").select("*").eq("sku", it.sku).order("ordem");
-      if (data) {
-        const withUrls = await Promise.all(
-          data.map(async (f) => {
-            const { data: signed } = await supabase.storage.from("fotos-produtos").createSignedUrl(f.storage_path, 3600);
-            return { ...f, url: signed?.signedUrl };
-          })
-        );
-        setFotos(withUrls);
-      }
-    })();
+  const carregarFotos = useCallback(async () => {
+    const { data } = await supabase.from("fotos").select("*").eq("sku", it.sku).order("ordem");
+    if (data) {
+      const withUrls = await Promise.all(
+        data.map(async (f) => {
+          const { data: signed } = await supabase.storage.from("fotos-produtos").createSignedUrl(f.storage_path, 3600);
+          return { ...f, url: signed?.signedUrl };
+        })
+      );
+      setFotos(withUrls);
+    }
   }, [it.sku]);
+  useEffect(() => { carregarFotos(); }, [carregarFotos]);
 
   // custo proporcional do item (rateio do lote) — usado pelo PricingCard p/ o piso de custo.
   // A view pode não existir ainda (migration não aplicada); nesse caso o card mostra aviso.
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("vw_precificacao")
-        .select("custo_proporcional")
-        .eq("sku", it.sku)
-        .maybeSingle();
-      if (!error && data) setCustoItem(data.custo_proporcional);
-    })();
+  const carregarCusto = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("vw_precificacao")
+      .select("custo_proporcional")
+      .eq("sku", it.sku)
+      .maybeSingle();
+    if (!error && data) setCustoItem(data.custo_proporcional);
   }, [it.sku]);
+  useEffect(() => { carregarCusto(); }, [carregarCusto]);
+
+  // Recarrega os dados do item do servidor sem sair da página (substitui o F5,
+  // que reinicia a SPA). Útil no desktop quando o celular atualiza o item.
+  const recarregar = async () => {
+    if (dirty.current && !window.confirm("Há alterações não salvas. Atualizar vai recarregar do servidor e descartá-las. Continuar?")) return;
+    setRefreshing(true);
+    try {
+      const { data } = await supabase.from("itens").select("*").eq("sku", it.sku).single();
+      if (data) { setIt({ ...data }); dirty.current = false; }
+      await Promise.all([carregarFotos(), carregarCusto(), carregarVias()]);
+    } catch (e) {
+      alert("Falha ao atualizar: " + (e?.message || e));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const idx = statusIdx(it.status);
   const next = idx >= 0 && idx < STATUS_FLOW.length - 1 ? STATUS_FLOW[idx + 1] : null;
@@ -206,6 +221,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <ChevronLeft className="w-5 h-5" /> Voltar
           </button>
           <div className="flex items-center gap-2">
+            <button onClick={recarregar} disabled={refreshing}
+              className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100 disabled:opacity-60"
+              title="Atualizar dados do servidor">
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} /> Atualizar
+            </button>
             <button onClick={() => setPrinting(true)}
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100">
               <Printer className="w-3.5 h-3.5" /> Etiqueta
