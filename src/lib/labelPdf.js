@@ -1,6 +1,7 @@
 // Geração de PDF das etiquetas com jsPDF (texto vetorial em mm + QR como imagem).
 // Reaproveita o objeto de etiqueta montado em labels.js (mesmo conteúdo do LabelCard).
 import { jsPDF } from "jspdf";
+import { LOGO_ICON, LOGO_ICON_RATIO } from "./logo";
 
 const ptToMm = (pt) => (pt * 25.4) / 72;
 
@@ -11,11 +12,29 @@ function drawLabel(doc, label, preset) {
   const m = compact ? 1.6 : 2.4;
   let y = m;
 
-  // Cabeçalho
+  // Cabeçalho: logo (silhueta) + título do tipo de etiqueta, centralizados na altura.
+  const logoH = compact ? 4 : 5;
+  const logoW = logoH * LOGO_ICON_RATIO;
+  const gap = compact ? 1.2 : 1.6;
+  try {
+    doc.addImage(LOGO_ICON, "PNG", m, y, logoW, logoH);
+  } catch {
+    /* ignora logo inválida */
+  }
+  const hfpt = compact ? 5.5 : 7;
+  const titX = m + logoW + gap;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(compact ? 5.5 : 7);
-  doc.text(doc.splitTextToSize(label.titulo, W - 2 * m), m, y + ptToMm(compact ? 5.5 : 7));
-  y += ptToMm(compact ? 5.5 : 7) + 1;
+  doc.setFontSize(hfpt);
+  const titLines = doc.splitTextToSize(label.titulo, W - titX - m);
+  // alinha o texto ao centro da logo; se o título quebrar e ficar mais alto,
+  // o cabeçalho cresce para o texto (evita colidir com a linha divisória).
+  const titBlockH = titLines.length * ptToMm(hfpt) * 1.1;
+  let titY = y + Math.max(0, (logoH - titBlockH) / 2) + ptToMm(hfpt);
+  for (const ln of titLines) {
+    doc.text(ln, titX, titY);
+    titY += ptToMm(hfpt) * 1.1;
+  }
+  y += Math.max(logoH, titBlockH) + 1;
   doc.setLineWidth(0.3);
   doc.line(m, y, W - m, y);
   y += 1.5;
