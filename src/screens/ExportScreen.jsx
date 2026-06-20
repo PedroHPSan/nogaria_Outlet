@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, fmtBRL, LOTE_SEM } from "../lib/model";
-import { CANAIS, checarCompletude, precoVenda, toCSV, baixarArquivo } from "../lib/export";
+import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo } from "../lib/export";
 import { Download, Loader2, AlertTriangle, CheckCircle2, FileSpreadsheet } from "lucide-react";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
@@ -38,12 +38,20 @@ export default function ExportScreen({ lotes, refreshKey }) {
   }, [fLote, fStatus, fCanal, refreshKey]);
 
   // Separa em completos/incompletos e agrega os campos que mais faltam.
+  // Com canal selecionado, "completo" = PRONTO para aquele canal (diagnosticarPorCanal,
+  // que exige GTIN/NCM/dimensões/foto p/ ML e Amazon). Sem canal, usa a base genérica.
   const analise = useMemo(() => {
     if (!itens) return null;
+    const prontidao = fCanal
+      ? (it) => {
+          const d = diagnosticarPorCanal(it).find((c) => c.canal === fCanal);
+          return d ? { ok: d.pronto, faltando: d.faltando } : checarCompletude(it);
+        }
+      : (it) => checarCompletude(it);
     const completos = [], incompletos = [];
     const faltas = {};
     for (const it of itens) {
-      const { ok, faltando } = checarCompletude(it);
+      const { ok, faltando } = prontidao(it);
       if (ok) completos.push(it);
       else {
         incompletos.push(it);
@@ -53,7 +61,7 @@ export default function ExportScreen({ lotes, refreshKey }) {
     const valor = completos.reduce((s, it) => s + (Number(precoVenda(it)) || 0), 0);
     const topFaltas = Object.entries(faltas).sort((a, b) => b[1] - a[1]);
     return { completos, incompletos, valor, topFaltas };
-  }, [itens]);
+  }, [itens, fCanal]);
 
   const exportar = () => {
     const alvo = soCompletos ? analise.completos : itens;
@@ -92,8 +100,11 @@ export default function ExportScreen({ lotes, refreshKey }) {
         <label className="flex items-center gap-2 pt-1 text-sm font-medium text-gray-700">
           <input type="checkbox" checked={soCompletos} onChange={(e) => setSoCompletos(e.target.checked)}
             className="w-4 h-4 rounded accent-orange-500" />
-          Exportar só itens completos
+          {fCanal ? `Exportar só itens prontos para ${fCanal}` : "Exportar só itens completos"}
         </label>
+        {fCanal && (
+          <p className="text-xs text-gray-400">Prontidão para <b>{fCanal}</b> inclui GTIN, NCM, dimensões/peso e foto.</p>
+        )}
       </div>
 
       {!analise ? (
@@ -102,7 +113,7 @@ export default function ExportScreen({ lotes, refreshKey }) {
         <>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-              <div className="flex items-center gap-1.5 text-emerald-700"><CheckCircle2 className="w-4 h-4" /><span className="text-xs font-bold uppercase tracking-wide">Completos</span></div>
+              <div className="flex items-center gap-1.5 text-emerald-700"><CheckCircle2 className="w-4 h-4" /><span className="text-xs font-bold uppercase tracking-wide">{fCanal ? "Prontos" : "Completos"}</span></div>
               <p className="text-3xl font-bold text-emerald-800 mt-1">{analise.completos.length.toLocaleString("pt-BR")}</p>
               <p className="text-xs text-emerald-700 mt-0.5">{fmtBRL(analise.valor)} em venda</p>
             </div>
