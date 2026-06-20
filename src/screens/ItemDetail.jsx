@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone
 } from "lucide-react";
-import { buildProductLabel } from "../lib/labels";
+import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
 import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste } from "../lib/conferencia";
 import { diagnosticarPorCanal } from "../lib/export";
@@ -63,8 +63,16 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [iaLoading, setIaLoading] = useState(false); // "texto" | "foto" | false
   const [ia, setIa] = useState(null); // sugestões da IA (enriquecer-produto)
   const [iaErro, setIaErro] = useState(null);
+  const [qrCelular, setQrCelular] = useState(null); // { url, data } — QR p/ abrir no celular
   const dirty = useRef(false);
   const fileRef = useRef();
+
+  // Gera um QR que codifica o link direto desta ficha (?item=SKU). Lendo o QR na
+  // tela do notebook, o celular abre exatamente este cadastro para adicionar fotos.
+  const abrirQrCelular = async () => {
+    const url = `${window.location.origin}/?item=${encodeURIComponent(it.sku)}`;
+    setQrCelular({ url, data: await genQrDataUrl(url) });
+  };
 
   const catList = useMemo(
     () => Object.keys(params.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
@@ -330,6 +338,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100 disabled:opacity-60"
               title="Atualizar dados do servidor">
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} /> Atualizar
+            </button>
+            <button onClick={abrirQrCelular}
+              className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100"
+              title="Abrir esta ficha no celular (QR)">
+              <Smartphone className="w-3.5 h-3.5" /> Celular
             </button>
             <button onClick={() => setPrinting(true)}
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100">
@@ -607,6 +620,25 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             onClose={() => setPrinting(false)}
           />
         </Suspense>
+      )}
+
+      {qrCelular && (
+        <div className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-6" onClick={() => setQrCelular(null)}>
+          <div className="bg-white rounded-2xl p-5 max-w-xs w-full text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-orange-500" /> Abrir no celular</h3>
+              <button onClick={() => setQrCelular(null)} aria-label="Fechar"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {qrCelular.data
+              ? <img src={qrCelular.data} alt="QR para abrir no celular" className="w-56 h-56 mx-auto" />
+              : <div className="w-56 h-56 mx-auto flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}
+            <p className="text-sm text-gray-700 mt-3 leading-snug">
+              Aponte a câmera do celular para este QR. Ele abre <b>esta mesma ficha</b> ({it.sku}) no celular para você adicionar as fotos.
+            </p>
+            <p className="text-[11px] text-gray-400 mt-2 break-all">{qrCelular.url}</p>
+            <p className="text-[11px] text-gray-400 mt-2">O celular precisa estar logado no app.</p>
+          </div>
+        </div>
       )}
     </div>
   );
