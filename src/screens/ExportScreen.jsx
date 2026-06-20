@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, fmtBRL, LOTE_SEM } from "../lib/model";
-import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo } from "../lib/export";
-import { Download, Loader2, AlertTriangle, CheckCircle2, FileSpreadsheet } from "lucide-react";
+import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo, COLUNAS_MEDICAO } from "../lib/export";
+import { pendenteMedida } from "../lib/medidas";
+import { Download, Loader2, AlertTriangle, CheckCircle2, FileSpreadsheet, Ruler } from "lucide-react";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 1000;
@@ -74,6 +75,15 @@ export default function ExportScreen({ lotes, refreshKey }) {
 
   const alvoLen = analise ? (soCompletos ? analise.completos.length : itens.length) : 0;
 
+  // Lista de campo dos itens ainda não medidos/pesados (dentro dos filtros atuais).
+  const pendentes = useMemo(() => (itens || []).filter(pendenteMedida), [itens]);
+  const exportarPendentes = () => {
+    if (!pendentes.length) return;
+    const dt = new Date().toISOString().slice(0, 10);
+    const sufLote = fLote === LOTE_SEM ? "-semlote" : fLote ? `-lote${fLote}` : "";
+    baixarArquivo(`nogaria-medir${sufLote}-${dt}.csv`, toCSV(pendentes, COLUNAS_MEDICAO));
+  };
+
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
       <div>
@@ -142,6 +152,12 @@ export default function ExportScreen({ lotes, refreshKey }) {
             className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-sm active:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
             <Download className="w-5 h-5" />
             Baixar CSV ({alvoLen.toLocaleString("pt-BR")} {alvoLen === 1 ? "item" : "itens"})
+          </button>
+
+          <button onClick={exportarPendentes} disabled={!pendentes.length}
+            className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 rounded-2xl py-3 font-semibold active:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Ruler className="w-4.5 h-4.5" />
+            Pendentes de medição ({pendentes.length.toLocaleString("pt-BR")})
           </button>
 
           {!itens.length && (

@@ -1,0 +1,13 @@
+-- Rastreabilidade de medição (dimensões & peso) na triagem.
+-- Nem todo item é medido/pesado no momento da triagem: o sistema permite seguir
+-- com valores ESTIMADOS (média da categoria ou IA) e marca a origem para que o
+-- pendente possa ser re-medido depois. `medidas_fonte` diz COMO a medida atual
+-- chegou ali — não muda peso_kg/peso_real_kg nem o cálculo de frete
+-- (coalesce(peso_real_kg, peso_kg) continua valendo).
+--   'MEDIDO'   = pesado/medido fisicamente (confirmado)
+--   'ESTIMADO' = preenchido por média da categoria ou IA (aproximado)
+--   'A_MEDIR'  = marcado explicitamente para medir depois
+--   null       = pré-carregado da planilha-mãe, nunca confirmado (pendente)
+-- Texto livre (como preco_ref_fonte) para evitar a restrição de criar/usar um
+-- enum na mesma transação (ver 20260619c_estado_valores.sql).
+alter table itens add column if not exists medidas_fonte text;

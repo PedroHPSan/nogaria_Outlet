@@ -4,7 +4,8 @@ import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM } from "../lib/m
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
 import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera } from "lucide-react";
+import { pendenteMedida } from "../lib/medidas";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -18,6 +19,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fClasse, setFClasse] = useState(initialFilter?.classe || "");
   const [fStatus, setFStatus] = useState(initialFilter?.status || "");
   const [fGrupo, setFGrupo] = useState(initialFilter?.grupo || "");
+  const [fPendMedida, setFPendMedida] = useState(!!initialFilter?.pendMedida);
   const [showFilters, setShowFilters] = useState(!!initialFilter);
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
@@ -103,6 +105,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fClasse) query = query.eq("classe", fClasse);
     if (fStatus) query = query.eq("status", fStatus);
     if (fGrupo) query = query.eq("grupo", fGrupo);
+    // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
+    if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
     if (q.trim()) {
       const t = q.trim();
       query = query.or(`sku.ilike.%${t}%,produto.ilike.%${t}%,marca.ilike.%${t}%,modelo.ilike.%${t}%`);
@@ -112,7 +116,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -120,7 +124,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -174,7 +178,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fPendMedida].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -213,6 +217,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                 {catList.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             )}
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 pt-0.5">
+              <input type="checkbox" checked={fPendMedida} onChange={(e) => setFPendMedida(e.target.checked)}
+                className="w-4 h-4 rounded accent-orange-500" />
+              Só medidas pendentes (não pesados/medidos)
+            </label>
           </div>
         )}
         <div className="flex items-center justify-between mt-2">
@@ -286,6 +295,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                       <span title={`Etiqueta já impressa · ${viasMap[it.sku].vias} via(s)`}
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 flex-shrink-0">
                         <Printer className="w-3 h-3" />{viasMap[it.sku].vias}
+                      </span>
+                    )}
+                    {pendenteMedida(it) && (
+                      <span title="Medidas/peso pendentes de medição"
+                        className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 text-gray-600 flex-shrink-0">
+                        <Ruler className="w-3 h-3" />
                       </span>
                     )}
                   </div>

@@ -114,9 +114,26 @@ export const COLUNAS = [
   { header: "Comprimento (cm)", get: (it) => it.comprimento_cm },
   { header: "Largura (cm)", get: (it) => it.largura_cm },
   { header: "Altura (cm)", get: (it) => it.altura_cm },
+  { header: "Medição", get: (it) => it.medidas_fonte || "Não medido" },
   { header: "Nº de série", get: (it) => it.num_serie },
   { header: "Lote", get: (it) => it.lote },
   { header: "Canal sugerido", get: (it) => it.canal_principal },
+];
+
+// Relatório de campo para re-medição: o que conferir na bancada (SKU, onde está
+// e os valores atuais, que podem ser estimativas a confirmar).
+export const COLUNAS_MEDICAO = [
+  { header: "SKU", get: (it) => it.sku },
+  { header: "Produto", get: (it) => it.titulo_anuncio || it.produto },
+  { header: "Categoria", get: (it) => it.grupo },
+  { header: "Lote", get: (it) => it.lote },
+  { header: "Local", get: (it) => it.local_fisico },
+  { header: "Caixa", get: (it) => it.caixa_num },
+  { header: "Comprimento (cm)", get: (it) => it.comprimento_cm },
+  { header: "Largura (cm)", get: (it) => it.largura_cm },
+  { header: "Altura (cm)", get: (it) => it.altura_cm },
+  { header: "Peso (kg)", get: (it) => it.peso_real_kg ?? it.peso_kg },
+  { header: "Medição", get: (it) => it.medidas_fonte || "Não medido" },
 ];
 
 // Escapa um campo para CSV com delimitador ';' (padrão Excel pt-BR).
