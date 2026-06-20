@@ -126,33 +126,29 @@ export function buildProductLabel(item) {
 
 const norm = (s) => String(s || "").trim().toUpperCase();
 
-// Etiqueta de CAIXA ou MALA: agrega os itens de um mesmo caixa_num.
-export function buildBoxLabel(caixaNum, itens) {
+// Etiqueta de CAIXA ou MALA. Recebe a linha da caixa (tabela `caixas`: codigo,
+// tipo, destino, local_fisico) e os itens encaixotados. Destino/local vêm da
+// própria caixa (uma caixa = um destino); lotes/SKUs são agregados dos itens.
+export function buildBoxLabel(caixa, itens) {
   const lista = itens || [];
-  const isMala = norm(caixaNum).startsWith("MALA");
-  // destino mais frequente entre os itens
-  const cont = {};
+  const isMala = (caixa?.tipo
+    ? norm(caixa.tipo) === "MALA"
+    : norm(caixa?.codigo).startsWith("MALA"));
   const lotes = new Set();
-  for (const it of lista) {
-    if (it?.destino) cont[it.destino] = (cont[it.destino] || 0) + 1;
-    if (it?.lote != null) lotes.add(it.lote);
-  }
-  const destino =
-    Object.entries(cont).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
-  const localFisico = lista.find((i) => i?.local_fisico)?.local_fisico || "—";
+  for (const it of lista) if (it?.lote != null) lotes.add(it.lote);
   return {
     tipo: isMala ? "MALA" : "CAIXA",
     titulo: isMala
       ? "NOGÁRIA OUTLET · ETIQUETA DE MALA"
       : "NOGÁRIA OUTLET · ETIQUETA DE CAIXA",
-    sku: caixaNum,
+    sku: caixa?.codigo || "",
     qtd: lista.length,
     lotes: [...lotes].sort((a, b) => a - b),
     skus: lista.map((i) => i.sku),
-    local_fisico: localFisico,
-    destino,
+    local_fisico: caixa?.local_fisico || "—",
+    destino: caixa?.destino || "—",
     checkboxes: CHECKBOXES,
-    qrText: caixaNum,
+    qrText: caixa?.codigo || "",
     qrData: null,
   };
 }

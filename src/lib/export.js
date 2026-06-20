@@ -115,9 +115,22 @@ export const COLUNAS = [
   { header: "Largura (cm)", get: (it) => it.largura_cm },
   { header: "Altura (cm)", get: (it) => it.altura_cm },
   { header: "Medição", get: (it) => it.medidas_fonte || "Não medido" },
+  { header: "Caixa", get: (it) => it.caixa_id },
   { header: "Nº de série", get: (it) => it.num_serie },
   { header: "Lote", get: (it) => it.lote },
   { header: "Canal sugerido", get: (it) => it.canal_principal },
+];
+
+// Packing list de uma caixa: o conteúdo para conferência/envio.
+export const COLUNAS_CAIXA = [
+  { header: "SKU", get: (it) => it.sku },
+  { header: "Produto", get: (it) => it.titulo_anuncio || it.produto },
+  { header: "Categoria", get: (it) => it.grupo },
+  { header: "Lote", get: (it) => it.lote },
+  { header: "Comprimento (cm)", get: (it) => it.comprimento_cm },
+  { header: "Largura (cm)", get: (it) => it.largura_cm },
+  { header: "Altura (cm)", get: (it) => it.altura_cm },
+  { header: "Peso (kg)", get: (it) => it.peso_real_kg ?? it.peso_kg },
 ];
 
 // Relatório de campo para re-medição: o que conferir na bancada (SKU, onde está

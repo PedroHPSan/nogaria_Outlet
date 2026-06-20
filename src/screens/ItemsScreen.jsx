@@ -5,7 +5,8 @@ import { buildProductLabel, buildBoxLabel } from "../lib/labels";
 import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler } from "lucide-react";
+import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -20,6 +21,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fStatus, setFStatus] = useState(initialFilter?.status || "");
   const [fGrupo, setFGrupo] = useState(initialFilter?.grupo || "");
   const [fPendMedida, setFPendMedida] = useState(!!initialFilter?.pendMedida);
+  const [fSemCaixa, setFSemCaixa] = useState(!!initialFilter?.semCaixa);
   const [showFilters, setShowFilters] = useState(!!initialFilter);
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
@@ -107,6 +109,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fGrupo) query = query.eq("grupo", fGrupo);
     // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
     if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
+    if (fSemCaixa) query = query.is("caixa_id", null);
     if (q.trim()) {
       const t = q.trim();
       query = query.or(`sku.ilike.%${t}%,produto.ilike.%${t}%,marca.ilike.%${t}%,modelo.ilike.%${t}%`);
@@ -116,7 +119,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -124,7 +127,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -178,7 +181,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fPendMedida].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -221,6 +224,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <input type="checkbox" checked={fPendMedida} onChange={(e) => setFPendMedida(e.target.checked)}
                 className="w-4 h-4 rounded accent-orange-500" />
               Só medidas pendentes (não pesados/medidos)
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={fSemCaixa} onChange={(e) => setFSemCaixa(e.target.checked)}
+                className="w-4 h-4 rounded accent-orange-500" />
+              Só sem caixa (a encaixotar)
             </label>
           </div>
         )}
@@ -303,6 +311,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                         <Ruler className="w-3 h-3" />
                       </span>
                     )}
+                    {it.caixa_id && (
+                      <span title={`Na caixa ${it.caixa_id}`}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex-shrink-0">
+                        <Package className="w-3 h-3" />{it.caixa_id}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600 truncate">{it.produto}</p>
                   <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-400">
@@ -352,7 +366,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
       {boxPicker && (
         <BoxPicker
           onClose={() => setBoxPicker(false)}
-          onPick={(caixaNum, lista) => { setPrintLabels([buildBoxLabel(caixaNum, lista)]); setBoxPicker(false); }}
+          onPick={(label) => { setPrintLabels([label]); setBoxPicker(false); }}
         />
       )}
 
@@ -370,34 +384,34 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   );
 }
 
-// Seletor de caixa/mala: agrupa os itens por caixa_num e gera a etiqueta externa.
+// Seletor de caixa/mala (tabela `caixas`): escolhe uma caixa e gera a etiqueta
+// externa (buildBoxLabel) com o conteúdo atual. Devolve a etiqueta pronta via onPick.
 function BoxPicker({ onClose, onPick }) {
   const [loading, setLoading] = useState(true);
-  const [grupos, setGrupos] = useState([]); // [{ caixaNum, itens: [...] }]
+  const [caixas, setCaixas] = useState([]);
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(null); // codigo em geração
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("itens")
-        .select("sku, caixa_num, destino, local_fisico, preco_ideal, preco_sugerido, lote")
-        .not("caixa_num", "is", null)
-        .order("caixa_num");
-      const map = new Map();
-      for (const it of data || []) {
-        const k = (it.caixa_num || "").trim();
-        if (!k) continue;
-        if (!map.has(k)) map.set(k, []);
-        map.get(k).push(it);
-      }
-      setGrupos([...map.entries()].map(([caixaNum, itens]) => ({ caixaNum, itens })));
+      setCaixas(await listarCaixas());
       setLoading(false);
     })();
   }, []);
 
+  const escolher = async (c) => {
+    setBusy(c.codigo);
+    try {
+      const itens = await itensDaCaixa(c.codigo);
+      onPick(buildBoxLabel(c, itens));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const filtrados = q.trim()
-    ? grupos.filter((g) => g.caixaNum.toLowerCase().includes(q.trim().toLowerCase()))
-    : grupos;
+    ? caixas.filter((c) => c.codigo.toLowerCase().includes(q.trim().toLowerCase()))
+    : caixas;
 
   return (
     <div className="fixed inset-0 z-[65] bg-gray-100 flex flex-col">
@@ -411,23 +425,28 @@ function BoxPicker({ onClose, onPick }) {
         </button>
       </div>
       <div className="px-4 py-3">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar caixa/mala (ex.: CX-SP-001)…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar caixa/mala (ex.: CX-001)…"
           className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
       </div>
       <div className="flex-1 overflow-auto px-3 pb-6 space-y-1.5">
         {loading && <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" /></div>}
         {!loading && !filtrados.length && (
-          <p className="text-sm text-gray-400 text-center py-10">Nenhuma caixa/mala cadastrada (campo "Caixa nº" dos itens).</p>
+          <p className="text-sm text-gray-400 text-center py-10">Nenhuma caixa cadastrada. Crie em Conferir → Encaixotar.</p>
         )}
-        {filtrados.map((g) => (
-          <button key={g.caixaNum} onClick={() => onPick(g.caixaNum, g.itens)}
-            className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
-            <Boxes className="w-5 h-5 text-gray-400 flex-shrink-0" />
+        {filtrados.map((c) => (
+          <button key={c.codigo} onClick={() => escolher(c)} disabled={busy === c.codigo}
+            className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100 disabled:opacity-50">
+            <span className="w-5 flex-shrink-0 flex justify-center">
+              {c.tipo === CAIXA_TIPO.MALA ? <Boxes className="w-5 h-5 text-gray-400" /> : <Package className="w-5 h-5 text-gray-400" />}
+            </span>
             <div className="flex-1 min-w-0">
-              <span className="font-mono text-sm font-bold text-gray-900">{g.caixaNum}</span>
-              <p className="text-xs text-gray-500">{g.itens.length} item(ns) · {g.itens[0]?.local_fisico || "—"}</p>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
+                {c.status === CAIXA_STATUS.FECHADA && <span className="text-[10px] font-bold uppercase bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">Fechada</span>}
+              </div>
+              <p className="text-xs text-gray-500">{c.destino || "—"}{c.local_fisico ? ` · ${c.local_fisico}` : ""}</p>
             </div>
-            <Printer className="w-4 h-4 text-gray-300 flex-shrink-0" />
+            {busy === c.codigo ? <Loader2 className="w-4 h-4 animate-spin text-gray-400 flex-shrink-0" /> : <Printer className="w-4 h-4 text-gray-300 flex-shrink-0" />}
           </button>
         ))}
       </div>
