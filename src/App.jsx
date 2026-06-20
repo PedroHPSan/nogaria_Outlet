@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import Login from "./screens/Login";
 import Dashboard from "./screens/Dashboard";
@@ -53,6 +53,22 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     carregarParametros().then(setParams).catch(() => {});
+  }, [session]);
+
+  // Deep-link: abrir direto uma ficha pela URL (?item=SKU). Usado pelo QR exibido
+  // no notebook — o celular lê o QR e cai exatamente neste cadastro para fotografar.
+  const deepLinkRef = useRef(false);
+  useEffect(() => {
+    if (!session || deepLinkRef.current) return;
+    const sku = new URLSearchParams(window.location.search).get("item");
+    if (!sku) return;
+    deepLinkRef.current = true;
+    (async () => {
+      const { data } = await supabase.from("itens").select("*").eq("sku", sku).maybeSingle();
+      if (data) { setTab("itens"); setOpenItem(data); }
+      // limpa o parâmetro para não reabrir num refresh
+      window.history.replaceState({}, "", window.location.pathname);
+    })();
   }, [session]);
 
   // dados base + realtime
