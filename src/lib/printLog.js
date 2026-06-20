@@ -28,7 +28,11 @@ export async function registrarImpressao(labels, user, preset) {
     console.error("Falha ao registrar impressão de etiqueta:", error.message);
     return { ok: false, skus: [] };
   }
-  return { ok: true, skus: itens.map((l) => l.sku) };
+  const skus = itens.map((l) => l.sku);
+  // Atalho denormalizado p/ o filtro "triados sem etiqueta" (best-effort; a
+  // verdade das vias continua em `eventos`).
+  await supabase.from("itens").update({ etiqueta_impressa: true }).in("sku", skus);
+  return { ok: true, skus };
 }
 
 // Para uma lista de SKUs, retorna { [sku]: { vias, ultima } } a partir do

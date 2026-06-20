@@ -22,6 +22,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fGrupo, setFGrupo] = useState(initialFilter?.grupo || "");
   const [fPendMedida, setFPendMedida] = useState(!!initialFilter?.pendMedida);
   const [fSemCaixa, setFSemCaixa] = useState(!!initialFilter?.semCaixa);
+  const [fSemEtiq, setFSemEtiq] = useState(!!initialFilter?.semEtiqueta);
   const [showFilters, setShowFilters] = useState(!!initialFilter);
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
@@ -110,6 +111,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
     if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
     if (fSemCaixa) query = query.is("caixa_id", null);
+    // Triados (já passaram da catalogação) cuja etiqueta ainda não foi impressa.
+    if (fSemEtiq) query = query.neq("status", "A_CATALOGAR").eq("etiqueta_impressa", false);
     if (q.trim()) {
       const t = q.trim();
       query = query.or(`sku.ilike.%${t}%,produto.ilike.%${t}%,marca.ilike.%${t}%,modelo.ilike.%${t}%`);
@@ -119,7 +122,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, fSemEtiq, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -127,7 +130,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, fSemEtiq, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -181,7 +184,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, fSemEtiq].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -229,6 +232,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <input type="checkbox" checked={fSemCaixa} onChange={(e) => setFSemCaixa(e.target.checked)}
                 className="w-4 h-4 rounded accent-orange-500" />
               Só sem caixa (a encaixotar)
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={fSemEtiq} onChange={(e) => setFSemEtiq(e.target.checked)}
+                className="w-4 h-4 rounded accent-orange-500" />
+              Triados sem etiqueta (imprimir)
             </label>
           </div>
         )}
