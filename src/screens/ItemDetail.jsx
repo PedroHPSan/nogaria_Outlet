@@ -308,6 +308,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       preco_min: it.preco_min || null, preco_ideal: it.preco_ideal || null,
       preco_sugerido: it.preco_sugerido || null, canal_principal: it.canal_principal || null,
       destino: it.destino, local_fisico: it.local_fisico, caixa_num: it.caixa_num,
+      // Nome do produto — editável p/ catalogar itens importados como "A CATALOGAR".
+      // Nunca grava vazio (coluna obrigatória): mantém o nome atual se ficar em branco.
+      produto: (it.produto || "").trim() || item.produto,
       foto_feita: it.foto_feita || fotos.length > 0, anuncio_feito: it.anuncio_feito,
       valor_vendido: it.valor_vendido || null, obs: it.obs,
       // Categoria (casa com pricing_grupo p/ a âncora de preço)
@@ -524,6 +527,15 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1 flex items-center gap-1.5">
             <Barcode className="w-3.5 h-3.5" /> Dados para venda
           </h3>
+          <Field label="Nome do produto">
+            <input className={inputCls} value={it.produto ?? ""} onChange={(e) => set({ produto: e.target.value })}
+              placeholder="Descrição do produto" />
+            {(it.produto || "").trim().toUpperCase().startsWith("A CATALOGAR") && (
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> Item ainda não catalogado — dê um nome para avançar na triagem.
+              </p>
+            )}
+          </Field>
           <Field label="Código de barras (GTIN/EAN)">
             <div className="flex gap-2">
               <input className={`${inputCls} font-mono ${it.gtin && !gtinValido ? "border-red-400 ring-1 ring-red-300" : ""}`}
