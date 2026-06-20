@@ -37,6 +37,7 @@ export async function carregarParametros() {
         reserva: g.reserva ?? 0.05, embalagem: g.embalagem ?? 25,
         freteKg: g.frete_kg ?? 3.0, freteMin: g.frete_min ?? 15,
         convNovoUsado: g.conv_novo_usado ?? 0.60, condicaoPadrao: g.condicao_padrao ?? "USADO_OK",
+        testeValorMin: g.teste_valor_min ?? 150, // limite p/ exigir teste por valor (política de risco)
       },
     };
     return _cache;

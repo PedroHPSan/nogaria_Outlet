@@ -84,6 +84,25 @@ export async function moverEtapa(sku, novoStatus, user, deStatusLabel) {
   });
 }
 
+// Política de teste por risco/valor: testar 100% é inviável por logística. O teste
+// só é OBRIGATÓRIO para itens de risco ALTO (eletrônicos complexos/bateria) ou de
+// valor de referência acima do limite (params.config.testeValorMin). Os demais podem
+// seguir como "Usado sem teste" (fator de preço conservador em pricing.js).
+export function testeObrigatorio(it, params) {
+  const g = params?.grupos?.[it?.grupo];
+  if (g?.nivelRisco === "ALTO") return true;
+  const limite = params?.config?.testeValorMin ?? 150;
+  const valorRef = Number(it?.preco_ref_novo ?? it?.preco_novo_est ?? g?.ancoraNovo ?? 0);
+  return valorRef >= limite;
+}
+
+// Registra que o item seguiu sem teste por política (rastreabilidade no Registro).
+export async function registrarSemTeste(sku, user) {
+  await supabase.from("eventos").insert({
+    sku, acao: "teste:dispensado", detalhe: "por política de risco/valor", usuario: user.email,
+  });
+}
+
 // Próximo sequencial considerando lote real ou itens sem lote (prefixo SL).
 async function proximoSeq(lote) {
   if (lote == null || lote === "") {

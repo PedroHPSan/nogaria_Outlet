@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN } from "../lib/model";
+import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2
 } from "lucide-react";
 import { buildProductLabel } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
-import { moverEtapa, desmembrarItem } from "../lib/conferencia";
+import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste } from "../lib/conferencia";
+import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -59,6 +60,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [custoItem, setCustoItem] = useState(null); // custo_proporcional do rateio do lote (vw_precificacao)
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
   const [refreshing, setRefreshing] = useState(false);
+  const [iaLoading, setIaLoading] = useState(false); // "texto" | "foto" | false
+  const [ia, setIa] = useState(null); // sugestões da IA (enriquecer-produto)
+  const [iaErro, setIaErro] = useState(null);
   const dirty = useRef(false);
   const fileRef = useRef();
 
@@ -139,13 +143,94 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     }
   };
 
+  // Enriquecimento por IA (edge function enriquecer-produto). Texto-primeiro;
+  // comFoto=true reenvia as URLs assinadas das fotos (custo ~2x).
+  const enriquecer = async (comFoto) => {
+    setIaLoading(comFoto ? "foto" : "texto");
+    setIaErro(null);
+    try {
+      const body = {
+        produto: it.produto, marca: it.marca, modelo: it.modelo, grupo: it.grupo,
+        gtin: it.gtin, ncm: it.ncm, estado: it.estado, voltagem: it.voltagem,
+        dimensoes: {
+          comprimento_cm: it.comprimento_cm, largura_cm: it.largura_cm,
+          altura_cm: it.altura_cm, peso_kg: it.peso_real_kg ?? it.peso_kg,
+        },
+        categorias: catList,
+        ...(comFoto ? { fotos_urls: fotos.map((f) => f.url).filter(Boolean) } : {}),
+      };
+      const { data, error } = await supabase.functions.invoke("enriquecer-produto", { body });
+      if (error) {
+        let msg = error.message;
+        try { const j = await error.context.json(); if (j?.error) msg = j.error; } catch {}
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
+      setIa(data);
+    } catch (e) {
+      setIaErro(e?.message || String(e));
+    } finally {
+      setIaLoading(false);
+    }
+  };
+
+  // Lista de sugestões aplicáveis a partir do retorno da IA (campo a campo).
+  const sugestoesIA = (() => {
+    if (!ia) return [];
+    const d = ia.dimensoes_estimadas || {};
+    const temDim = [d.comprimento_cm, d.largura_cm, d.altura_cm, d.peso_kg].some((v) => v != null);
+    const lista = [
+      { k: "titulo_anuncio", label: "Título", val: ia.titulo_anuncio, apply: () => set({ titulo_anuncio: ia.titulo_anuncio }) },
+      { k: "descricao_anuncio", label: "Descrição", val: ia.descricao_anuncio, apply: () => set({ descricao_anuncio: ia.descricao_anuncio }) },
+      { k: "marca", label: "Marca", val: ia.marca, apply: () => set({ marca: ia.marca }) },
+      { k: "modelo", label: "Modelo", val: ia.modelo, apply: () => set({ modelo: ia.modelo }) },
+      { k: "grupo", label: "Categoria", val: ia.grupo, apply: () => set({ grupo: ia.grupo }) },
+      { k: "ncm", label: "NCM", val: ia.ncm, apply: () => set({ ncm: ia.ncm }) },
+      { k: "voltagem", label: "Voltagem", val: ia.voltagem, apply: () => set({ voltagem: ia.voltagem }) },
+      { k: "cor", label: "Cor", val: ia.cor, apply: () => set({ cor: ia.cor }) },
+      temDim && {
+        k: "dimensoes", label: "Dimensões (C×L×A, peso)",
+        val: `${d.comprimento_cm ?? "–"}×${d.largura_cm ?? "–"}×${d.altura_cm ?? "–"} cm · ${d.peso_kg ?? "–"} kg`,
+        apply: () => set({
+          comprimento_cm: d.comprimento_cm ?? it.comprimento_cm, largura_cm: d.largura_cm ?? it.largura_cm,
+          altura_cm: d.altura_cm ?? it.altura_cm, peso_real_kg: d.peso_kg ?? it.peso_real_kg,
+        }),
+      },
+      (ia.preco_ref_novo != null || ia.preco_ref_usado != null) && {
+        k: "preco", label: `Preço ref. (IA · ${ia.preco_ref_confianca || "—"})`,
+        val: `Novo ${fmtBRL(ia.preco_ref_novo)} · Usado ${fmtBRL(ia.preco_ref_usado)}`,
+        apply: () => set({
+          preco_ref_novo: ia.preco_ref_novo, preco_ref_usado: ia.preco_ref_usado,
+          preco_ref_confianca: ia.preco_ref_confianca, preco_ref_fonte: "IA:claude",
+        }),
+      },
+    ];
+    return lista.filter((s) => s && s.val != null && s.val !== "");
+  })();
+
+  const aplicarTodasIA = () => sugestoesIA.forEach((s) => s.apply());
+
+  // Item de baixo risco/valor sem teste obrigatório: oferecer marcar como
+  // "Usado sem teste" (preço conservador) em vez de exigir teste físico.
+  const podeDispensarTeste =
+    it.estado && !["Novo", "Embalagem aberta/avariada", "Usado sem teste"].includes(it.estado) &&
+    !testeObrigatorio(it, params);
+  const marcarSemTeste = async () => {
+    set({ estado: "Usado sem teste" });
+    try { await registrarSemTeste(it.sku, user); } catch { /* auditoria best-effort */ }
+  };
+
   const gate = (() => {
     if (!next) return null;
     switch (next.id) {
       case "TRIADO": return it.estado ? null : "Defina o Estado do item para triar.";
       case "TESTADO":
         if (it.estado === "Novo" || it.estado === "Embalagem aberta/avariada") return null;
-        return it.testado != null && it.funciona != null ? null : "Marque Testado? e Funciona?";
+        // Política de risco/valor: teste só é obrigatório para itens ALTO risco / valor alto.
+        if (!testeObrigatorio(it, params)) return null;
+        return it.testado != null && it.funciona != null
+          ? null
+          : "Item de risco/valor alto: marque Testado? e Funciona? (ou registre 'Usado sem teste').";
       case "FOTOGRAFADO": return fotos.length || it.foto_feita ? null : "Tire ao menos uma foto para avançar.";
       case "PRECIFICADO": return it.preco_min && it.preco_ideal ? null : "Preencha preço mínimo e ideal.";
       case "PRONTO": return null;
@@ -197,6 +282,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       altura_cm: it.altura_cm || null, peso_real_kg: it.peso_real_kg || null,
       ncm: it.ncm?.trim() || null, condicao_anuncio: it.condicao_anuncio || null,
       titulo_anuncio: it.titulo_anuncio?.trim() || null, descricao_anuncio: it.descricao_anuncio?.trim() || null,
+      // Referência de preço (da IA) — durável p/ o PricingCard após reload.
+      preco_ref_novo: it.preco_ref_novo ?? null, preco_ref_usado: it.preco_ref_usado ?? null,
+      preco_ref_fonte: it.preco_ref_fonte || null, preco_ref_confianca: it.preco_ref_confianca || null,
       upd_by: user.email,
       ...(novoStatus ? { status: novoStatus } : {}),
     };
@@ -271,6 +359,55 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
+        {/* Assistente de IA — completa dados, sugere preço e diagnostica */}
+        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pb-2 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-violet-500" /> Assistente de IA
+          </h3>
+          <div className="flex gap-2">
+            <button onClick={() => enriquecer(false)} disabled={!!iaLoading}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-violet-600 rounded-lg px-3 py-2.5 active:bg-violet-700 disabled:opacity-50">
+              {iaLoading === "texto" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Completar com IA
+            </button>
+            <button onClick={() => enriquecer(true)} disabled={!!iaLoading || fotos.length === 0}
+              title={fotos.length === 0 ? "Adicione uma foto primeiro" : "Usa as fotos (custo maior)"}
+              className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-violet-700 border border-violet-300 bg-violet-50 rounded-lg px-3 py-2.5 disabled:opacity-40">
+              {iaLoading === "foto" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+              Com foto
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1.5">Preços são estimativa de mercado da IA (não cotação real). Revise antes de aplicar.</p>
+
+          {iaErro && (
+            <p className="text-xs text-red-600 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {iaErro}</p>
+          )}
+
+          {ia && sugestoesIA.length > 0 && (
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-gray-600">Sugestões {ia.usou_foto ? "(com foto)" : ""}</span>
+                <button onClick={aplicarTodasIA} className="text-xs font-semibold text-violet-700">Aplicar tudo</button>
+              </div>
+              <div className="space-y-1.5">
+                {sugestoesIA.map((s) => (
+                  <div key={s.k} className="flex items-start gap-2 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] uppercase tracking-wide text-gray-400">{s.label}</span>
+                      <p className="text-gray-800 leading-snug break-words">{s.val}</p>
+                    </div>
+                    <button onClick={s.apply}
+                      className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg px-2 py-1 active:bg-violet-50">
+                      <Check className="w-3 h-3" /> Usar
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {ia.observacoes && <p className="text-xs text-gray-500 mt-2 leading-snug"><b>Diagnóstico:</b> {ia.observacoes}</p>}
+            </div>
+          )}
+        </div>
+
         {/* Fotos */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
           <div className="flex items-center justify-between mb-1">
@@ -325,6 +462,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           <TriToggle label="Tem avaria?" value={it.avaria} onChange={(v) => set({ avaria: v })} />
           <TriToggle label="Acessórios completos?" value={it.acessorios_ok} onChange={(v) => set({ acessorios_ok: v })} />
           <TriToggle label="Caixa original?" value={it.caixa_original} onChange={(v) => set({ caixa_original: v })} />
+          {podeDispensarTeste && (
+            <button onClick={marcarSemTeste}
+              className="mt-2 mb-1 w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 bg-gray-50 rounded-lg py-2">
+              Não vou testar → marcar como “Usado sem teste”
+            </button>
+          )}
         </div>
 
         {/* Dados para venda (integrações) — Tier 1 */}
@@ -383,6 +526,34 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             custoItem={custoItem}
             onChange={(patch) => set(patch)}
           />
+        </div>
+
+        {/* Diagnóstico de anúncio — prontidão por canal */}
+        <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Diagnóstico de anúncio
+            </h3>
+            {diagnosticarPorCanal(it).some((c) => c.faltando.length > 0) && (
+              <button onClick={() => enriquecer(false)} disabled={!!iaLoading}
+                className="text-xs font-semibold text-violet-700 disabled:opacity-50">Completar com IA</button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {diagnosticarPorCanal(it).map((c) => (
+              <div key={c.canal} className="flex items-start gap-2 text-sm">
+                {c.pronto
+                  ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  : <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />}
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-gray-800">{c.canal}</span>
+                  {c.pronto
+                    ? <span className="text-emerald-600 text-xs ml-1">pronto</span>
+                    : <span className="text-gray-500 text-xs"> — falta: {c.faltando.join(", ")}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Observações */}

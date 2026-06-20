@@ -50,6 +50,49 @@ export const checarCompletude = (it) => {
   return { ok: faltando.length === 0, faltando };
 };
 
+// Vazio? helper de campo (igual à regra de checarCompletude).
+const vazio = (v) => v === null || v === undefined || v === "";
+// Tem ao menos uma dimensão/peso (frete)? Aceita peso_real_kg/peso_kg + as 3 medidas.
+const temDimensoes = (it) =>
+  !vazio(it.peso_real_kg ?? it.peso_kg) &&
+  !vazio(it.comprimento_cm) && !vazio(it.largura_cm) && !vazio(it.altura_cm);
+const temFoto = (it) => it.foto_feita === true;
+
+// Requisitos ADICIONAIS por canal (além de camposObrigatorios). Mercado Livre e Amazon
+// pedem mais para um anúncio decente; TikTok valoriza mídia; Hiper (ERP) fica no mínimo.
+const requisitosCanal = {
+  "Mercado Livre": [
+    { label: "GTIN/EAN", ok: (it) => !vazio(it.gtin) },
+    { label: "NCM", ok: (it) => !vazio(it.ncm) },
+    { label: "Dimensões/peso", ok: temDimensoes },
+    { label: "Foto", ok: temFoto },
+  ],
+  "Amazon": [
+    { label: "GTIN/EAN", ok: (it) => !vazio(it.gtin) },
+    { label: "NCM", ok: (it) => !vazio(it.ncm) },
+    { label: "Dimensões/peso", ok: temDimensoes },
+    { label: "Foto", ok: temFoto },
+  ],
+  "TikTok Shop": [
+    { label: "Foto", ok: temFoto },
+    { label: "Dimensões/peso", ok: temDimensoes },
+  ],
+  "Hiper": [],
+};
+
+// Diagnóstico de prontidão por canal. Retorna [{ canal, pronto, faltando: [labels] }].
+// Base = camposObrigatorios (checarCompletude) + requisitos extras do canal.
+export const diagnosticarPorCanal = (it) => {
+  const base = checarCompletude(it).faltando;
+  return CANAIS.map((canal) => {
+    const extra = (requisitosCanal[canal] || [])
+      .filter((req) => !req.ok(it))
+      .map((req) => req.label);
+    const faltando = [...base, ...extra];
+    return { canal, pronto: faltando.length === 0, faltando };
+  });
+};
+
 // Colunas do CSV padrão de importação para hub (cabeçalhos em pt-BR, próximos
 // das convenções de Bling/Tiny — a maioria dos hubs aceita mapear no import).
 export const COLUNAS = [
