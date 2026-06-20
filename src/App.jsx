@@ -25,6 +25,11 @@ const eventoLabel = (e) => {
   if (a === "medidas:medido") return "medidas confirmadas ✓" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "medidas:estimado") return "medidas estimadas" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "medidas:a_medir") return "marcado p/ medir depois";
+  if (a === "caixa:criada") return "caixa criada" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "caixa:item_add") return "encaixotado" + (e.detalhe ? ` → ${e.detalhe}` : "");
+  if (a === "caixa:item_remove") return "removido da caixa";
+  if (a === "caixa:fechada") return "caixa fechada";
+  if (a === "caixa:reaberta") return "caixa reaberta";
   return a;
 };
 

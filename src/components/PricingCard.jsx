@@ -273,9 +273,12 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
             <input className={inputCls} value={item.local_fisico ?? ""}
               onChange={(e) => onChange?.({ local_fisico: e.target.value })} placeholder="ex.: estante 2" />
           </Campo>
-          <Campo label="Caixa nº">
-            <input className={inputCls} value={item.caixa_num ?? ""}
-              onChange={(e) => onChange?.({ caixa_num: e.target.value })} placeholder="ex.: CX-014" />
+          <Campo label="Caixa">
+            <div className={`${inputCls} bg-gray-50 flex items-center min-h-[44px]`}>
+              {item.caixa_id
+                ? <span className="font-mono font-semibold text-gray-800">{item.caixa_id}</span>
+                : <span className="text-sm text-gray-400">em Conferir → Encaixotar</span>}
+            </div>
           </Campo>
         </div>
         <div className="rounded-xl border border-gray-200 p-2 space-y-1">

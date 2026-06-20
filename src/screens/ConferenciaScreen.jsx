@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta } from "../lib/model";
-import { checarCompletude } from "../lib/export";
+import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS } from "../lib/model";
+import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa } from "../lib/conferencia";
+import {
+  CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
+  fecharCaixa, listarCaixas, itensDaCaixa,
+} from "../lib/caixas";
+import { buildBoxLabel } from "../lib/labels";
 import { primeirasFotos } from "../lib/fotos";
 import { sugerirCategoria } from "../lib/categorizar";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -10,9 +15,11 @@ import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
   PackageCheck, RotateCcw, Camera, ChevronRight, Tags, Sparkles, ArrowLeftRight,
+  Package, Printer, FileDown, Lock, Plus, Trash2,
 } from "lucide-react";
 
 const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
+const LazyLabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 
 // Carrega todos os itens que batem com o filtro (PostgREST corta em 1.000 linhas).
@@ -40,6 +47,7 @@ export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS
             { id: "definir", t: "Definir lote", icon: Inbox },
             { id: "categorizar", t: "Categorizar", icon: Tags },
             { id: "mover", t: "Mover etapa", icon: ArrowLeftRight },
+            { id: "encaixotar", t: "Encaixotar", icon: Package },
             { id: "inventario", t: "Inventário", icon: ScanLine },
             { id: "pendencias", t: "Pendências", icon: ClipboardList },
           ].map((s) => (
@@ -52,6 +60,7 @@ export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS
       </div>
       {secao === "definir" && <DefinirLote lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "mover" && <MoverEtapa lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
+      {secao === "encaixotar" && <Encaixotar user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "categorizar" && <CategorizarMassa lotes={lotes} user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "inventario" && <Inventario lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "pendencias" && <Pendencias lotes={lotes} onOpen={onOpen} refreshKey={refreshKey} />}
@@ -446,6 +455,233 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
               </button>
             </div>
           )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────── Encaixotar (2ª etapa) ─────────────────────────
+function Encaixotar({ user, refreshKey, onChanged }) {
+  const [abertas, setAbertas] = useState(null);   // caixas ABERTAS
+  const [caixa, setCaixa] = useState(null);        // caixa ativa
+  const [itens, setItens] = useState([]);          // itens da caixa ativa
+  const [nova, setNova] = useState(false);         // form "nova caixa"
+  const [tipo, setTipo] = useState(CAIXA_TIPO.CAIXA);
+  const [destino, setDestino] = useState(DESTINOS[0]);
+  const [local, setLocal] = useState("");
+  const [scanInput, setScanInput] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [printLabels, setPrintLabels] = useState(null);
+
+  const loadAbertas = useCallback(async () => {
+    setAbertas(await listarCaixas({ status: CAIXA_STATUS.ABERTA }));
+  }, []);
+  useEffect(() => { loadAbertas(); }, [loadAbertas, refreshKey]);
+
+  const abrirCaixa = useCallback(async (c) => {
+    setCaixa(c); setMsg(null); setItens(await itensDaCaixa(c.codigo));
+  }, []);
+
+  const fotos = useThumbs(itens);
+
+  const criar = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const c = await criarCaixa({ tipo, destino, local_fisico: local }, user);
+      setNova(false); setLocal("");
+      onChanged?.(); await loadAbertas(); await abrirCaixa(c);
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBusy(false); }
+  };
+
+  // Escaneia/digita SKU ou GTIN e encaixota o item na caixa ativa.
+  const processarCodigo = async (codigo) => {
+    const c = String(codigo || "").trim();
+    setScanInput("");
+    if (!c || !caixa) return;
+    const cn = c.toUpperCase();
+    let alvo = (await supabase.from("itens").select("*").eq("sku", cn).maybeSingle()).data;
+    if (!alvo) alvo = (await supabase.from("itens").select("*").eq("gtin", c).limit(1)).data?.[0];
+    if (!alvo) { setMsg({ tipo: "erro", texto: `"${c}" não encontrado.` }); return; }
+    if (alvo.caixa_id === caixa.codigo) { setMsg({ tipo: "ok", texto: `${alvo.sku} já está nesta caixa.` }); return; }
+    if (alvo.caixa_id && !window.confirm(`${alvo.sku} já está na caixa ${alvo.caixa_id}. Mover para ${caixa.codigo}?`)) return;
+    setBusy(true);
+    try {
+      const atualizado = await adicionarItemCaixa(alvo.sku, caixa, user);
+      setItens((arr) => [atualizado, ...arr.filter((i) => i.sku !== atualizado.sku)]);
+      setMsg({ tipo: "ok", texto: `${alvo.sku} encaixotado ✓` });
+      onChanged?.();
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBusy(false); }
+  };
+
+  const remover = async (sku) => {
+    setBusy(true);
+    try {
+      await removerItemCaixa(sku, user);
+      setItens((arr) => arr.filter((i) => i.sku !== sku));
+      onChanged?.();
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBusy(false); }
+  };
+
+  const fechar = async () => {
+    if (!window.confirm(`Fechar a caixa ${caixa.codigo} com ${itens.length} item(ns)?`)) return;
+    setBusy(true);
+    try {
+      await fecharCaixa(caixa.codigo, user);
+      setCaixa(null); setItens([]); onChanged?.(); await loadAbertas();
+    } finally { setBusy(false); }
+  };
+
+  const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens)]);
+  const baixarLista = () => {
+    if (!itens.length) return;
+    baixarArquivo(`caixa-${caixa.codigo}.csv`, toCSV(itens, COLUNAS_CAIXA));
+  };
+
+  // ── Caixa ativa ────────────────────────────────────────────────
+  if (caixa) {
+    const isMala = caixa.tipo === CAIXA_TIPO.MALA;
+    return (
+      <div className="px-4 pt-4 space-y-3">
+        <div className="bg-gray-900 rounded-2xl p-4 text-white">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-orange-400" />
+                <span className="font-mono font-bold">{caixa.codigo}</span>
+                <span className="text-[10px] font-bold uppercase bg-gray-700 rounded px-1.5 py-0.5">{isMala ? "Mala" : "Caixa"}</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
+            </div>
+            <button onClick={() => { setCaixa(null); setItens([]); }} className="text-xs text-gray-300 bg-gray-800 rounded-lg px-2.5 py-1.5">Trocar</button>
+          </div>
+          <p className="text-3xl font-bold mt-2">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
+        </div>
+
+        <form onSubmit={(e) => { e.preventDefault(); processarCodigo(scanInput); }} className="flex gap-2">
+          <input value={scanInput} onChange={(e) => setScanInput(e.target.value)} placeholder="Escaneie/digite SKU ou GTIN"
+            enterKeyHint="done" autoCapitalize="characters" autoComplete="off" className={`${inputCls} font-mono`} autoFocus />
+          <button type="submit" disabled={busy || !scanInput.trim()} className="px-4 rounded-lg bg-orange-500 text-white font-bold disabled:opacity-40">OK</button>
+          <button type="button" onClick={() => setScanning(true)} className="px-3 rounded-lg border border-gray-300 text-gray-600 flex items-center" title="Escanear">
+            <Camera className="w-5 h-5" />
+          </button>
+        </form>
+        {msg && (
+          <p className={`text-sm flex items-center gap-1.5 ${msg.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+            {msg.tipo === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />} {msg.texto}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={imprimir} disabled={!itens.length} className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold border border-gray-300 text-gray-700 bg-white rounded-xl py-2.5 disabled:opacity-40">
+            <Printer className="w-4 h-4" /> Etiqueta
+          </button>
+          <button onClick={baixarLista} disabled={!itens.length} className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold border border-gray-300 text-gray-700 bg-white rounded-xl py-2.5 disabled:opacity-40">
+            <FileDown className="w-4 h-4" /> Lista CSV
+          </button>
+          <button onClick={fechar} disabled={busy} className="flex-1 flex items-center justify-center gap-1.5 text-sm font-bold bg-gray-900 text-white rounded-xl py-2.5 disabled:opacity-40">
+            <Lock className="w-4 h-4" /> Fechar
+          </button>
+        </div>
+
+        {!itens.length ? (
+          <Vazio icon={Package} texto="Caixa vazia. Escaneie os produtos para encaixotar." />
+        ) : (
+          <div className="space-y-1.5">
+            {itens.map((it) => (
+              <div key={it.sku} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3">
+                <Miniatura url={fotos[it.sku]} />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                  <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                  <IdentLinha it={it} />
+                </div>
+                <button onClick={() => remover(it.sku)} disabled={busy} className="flex-shrink-0 w-9 h-9 rounded-lg border border-gray-200 text-gray-400 flex items-center justify-center active:bg-gray-100" title="Remover da caixa">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {scanning && (
+          <Suspense fallback={null}>
+            <LazyScanner onDetected={(code) => { setScanning(false); processarCodigo(code); }} onClose={() => setScanning(false)} />
+          </Suspense>
+        )}
+        {printLabels && (
+          <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+            <LazyLabelPrint labels={printLabels} user={user} onClose={() => setPrintLabels(null)} />
+          </Suspense>
+        )}
+      </div>
+    );
+  }
+
+  // ── Sem caixa ativa: criar / escolher ──────────────────────────
+  return (
+    <div className="px-4 pt-4 space-y-3">
+      <p className="text-sm text-gray-500">
+        Encaixotamento: abra uma caixa, escaneie os produtos e feche. Os itens <b>herdam o destino e o local</b> da caixa.
+      </p>
+
+      {nova ? (
+        <div className="bg-white rounded-2xl border border-gray-200 p-3 space-y-2">
+          <div className="flex gap-1.5">
+            {[{ id: CAIXA_TIPO.CAIXA, t: "Caixa" }, { id: CAIXA_TIPO.MALA, t: "Mala" }].map((m) => (
+              <button key={m.id} onClick={() => setTipo(m.id)}
+                className={`flex-1 px-2 py-1.5 rounded-lg text-sm font-semibold border ${tipo === m.id ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-300"}`}>
+                {m.t}
+              </button>
+            ))}
+          </div>
+          <select value={destino} onChange={(e) => setDestino(e.target.value)} className={inputCls}>
+            {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <input value={local} onChange={(e) => setLocal(e.target.value)} className={inputCls} placeholder="Local físico (ex.: estante 2)" />
+          {msg?.tipo === "erro" && <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {msg.texto}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => { setNova(false); setMsg(null); }} className="flex-1 rounded-lg border border-gray-300 text-gray-600 py-2.5 text-sm font-semibold">Cancelar</button>
+            <button onClick={criar} disabled={busy} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 text-white py-2.5 text-sm font-bold disabled:opacity-40">
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Criar caixa
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => { setNova(true); setMsg(null); }}
+          className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-sm active:bg-orange-600">
+          <Plus className="w-5 h-5" /> Nova caixa / mala
+        </button>
+      )}
+
+      {abertas === null ? <Carregando /> : !abertas.length ? (
+        <Vazio icon={Package} texto="Nenhuma caixa aberta. Crie uma para começar." />
+      ) : (
+        <>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-1">Caixas abertas ({abertas.length})</p>
+          <div className="space-y-1.5">
+            {abertas.map((c) => (
+              <button key={c.codigo} onClick={() => abrirCaixa(c)}
+                className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
+                  {c.tipo === CAIXA_TIPO.MALA ? <Inbox className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
+                  <p className="text-xs text-gray-500">{c.destino || "sem destino"}{c.local_fisico ? ` · ${c.local_fisico}` : ""}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
         </>
       )}
     </div>
