@@ -51,7 +51,9 @@ export const getPreset = (id) =>
   MEDIA_PRESETS.find((m) => m.id === id) || MEDIA_PRESETS[0];
 
 // Mapeia o item para o código de estado da operação (cores do guia, impressas em preto).
-// Prioridade: sucata > avaria > quarentena (sem teste) > novo/funcionando.
+// Prioridade: sucata > avaria > quarentena (sem teste) > novo > usado.
+// Estados atuais (model.js): Novo · Embalagem aberta/avariada · Usado · Avariado ·
+// Usado sem teste. Mantém também os legados (Usado funcionando · Incompleto · Sucata).
 export function estadoEtiqueta(item) {
   const estado = item?.estado || "";
   const status = item?.status || "";
@@ -59,13 +61,18 @@ export function estadoEtiqueta(item) {
     return { codigo: "VERMELHO", texto: "VERMELHO · Sucata / peças" };
   if (estado === "Avariado" || estado === "Incompleto" || item?.avaria === true)
     return { codigo: "AMARELO", texto: "AMARELO · Avaria / falta item" };
-  if (estado === "Usado sem teste" || (!estado && item?.testado !== true))
+  if (estado === "Usado sem teste")
     return { codigo: "QRT", texto: "QRT · Quarentena — testar" };
-  if (estado === "Novo")
+  if (estado === "Novo" || estado === "Embalagem aberta/avariada")
     return { codigo: "VERDE", texto: "VERDE · Novo / excelente" };
-  if (estado === "Usado funcionando")
+  if (estado === "Usado" || estado === "Usado funcionando")
     return { codigo: "AZUL", texto: "AZUL · Funcionando" };
-  return { codigo: "QRT", texto: "QRT · A catalogar" };
+  // Sem estado ainda (item não triado): a catalogar.
+  if (!estado)
+    return { codigo: "QRT", texto: "QRT · A catalogar" };
+  // Estado já definido mas não reconhecido: trata como quarentena (testar),
+  // nunca como "a catalogar" — o item já passou pela triagem.
+  return { codigo: "QRT", texto: "QRT · Quarentena — testar" };
 }
 
 // Tipos que exigem atenção usam o modelo "Quarentena/Avaria".
