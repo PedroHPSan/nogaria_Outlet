@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
 import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste } from "../lib/conferencia";
+import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
@@ -90,6 +91,33 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const gtinValido = !it.gtin || validarEAN(it.gtin);
 
   const set = (patch) => { dirty.current = true; setIt((p) => ({ ...p, ...patch })); };
+
+  // Origem da medida no momento em que a ficha abriu (p/ registrar no histórico só se mudar).
+  const fonteAbertura = useRef(item.medidas_fonte || null);
+  const [estimando, setEstimando] = useState(false);
+
+  // Edição manual de dimensão/peso = medição real → marca a fonte como MEDIDO.
+  const setMedida = (patch) => set({ ...patch, medidas_fonte: MEDIDAS_FONTE.MEDIDO });
+
+  // Estima dimensões/peso pela mediana da categoria (sem IA). Só preenche campos vazios
+  // e marca a fonte como ESTIMADO para rastrear que ainda falta medir.
+  const estimarCategoria = async () => {
+    if (!it.grupo) return;
+    setEstimando(true);
+    try {
+      const d = await estimarPorCategoria(it.grupo);
+      if (!d) { alert("Sem amostra suficiente nesta categoria para estimar."); return; }
+      set({
+        comprimento_cm: it.comprimento_cm ?? d.comprimento_cm,
+        largura_cm: it.largura_cm ?? d.largura_cm,
+        altura_cm: it.altura_cm ?? d.altura_cm,
+        peso_real_kg: it.peso_real_kg ?? d.peso_kg,
+        medidas_fonte: MEDIDAS_FONTE.ESTIMADO,
+      });
+    } finally {
+      setEstimando(false);
+    }
+  };
 
   // carregar fotos do item
   const carregarFotos = useCallback(async () => {
@@ -202,6 +230,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         apply: () => set({
           comprimento_cm: d.comprimento_cm ?? it.comprimento_cm, largura_cm: d.largura_cm ?? it.largura_cm,
           altura_cm: d.altura_cm ?? it.altura_cm, peso_real_kg: d.peso_kg ?? it.peso_real_kg,
+          medidas_fonte: MEDIDAS_FONTE.ESTIMADO,
         }),
       },
       (ia.preco_ref_novo != null || ia.preco_ref_usado != null) && {
@@ -288,6 +317,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       voltagem: it.voltagem || null, cor: it.cor?.trim() || null, num_serie: it.num_serie?.trim() || null,
       comprimento_cm: it.comprimento_cm || null, largura_cm: it.largura_cm || null,
       altura_cm: it.altura_cm || null, peso_real_kg: it.peso_real_kg || null,
+      medidas_fonte: it.medidas_fonte || null,
       ncm: it.ncm?.trim() || null, condicao_anuncio: it.condicao_anuncio || null,
       titulo_anuncio: it.titulo_anuncio?.trim() || null, descricao_anuncio: it.descricao_anuncio?.trim() || null,
       // Referência de preço (da IA) — durável p/ o PricingCard após reload.
@@ -301,6 +331,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     if (novoStatus) {
       await supabase.from("eventos").insert({ sku: it.sku, acao: "status:" + novoStatus, usuario: user.email });
       setIt((p) => ({ ...p, status: novoStatus }));
+    }
+    // Histórico de medição: registra só quando a origem mudou nesta sessão (best-effort).
+    if (it.medidas_fonte && it.medidas_fonte !== fonteAbertura.current) {
+      const det = `${it.comprimento_cm ?? "–"}×${it.largura_cm ?? "–"}×${it.altura_cm ?? "–"}cm · ${it.peso_real_kg ?? "–"}kg`;
+      try { await registrarMedida(it.sku, it.medidas_fonte, det, user); } catch { /* auditoria best-effort */ }
+      fonteAbertura.current = it.medidas_fonte;
     }
     dirty.current = false;
     onSaved(data);
@@ -519,15 +555,29 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           <Field label="Cor"><input className={inputCls} value={it.cor ?? ""} onChange={(e) => set({ cor: e.target.value })} placeholder="ex.: Preto" /></Field>
         </div>
 
-        {/* Dimensões & peso — pré-carregados, confirmar */}
+        {/* Dimensões & peso — pré-carregados, confirmar. Rastreia se foi medido ou só estimado. */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Dimensões & peso — confirme</h3>
-          <p className="text-xs text-gray-400 mb-1">Pré-preenchido por categoria. Ajuste se o real for diferente (afeta o frete).</p>
+          <div className="flex items-center justify-between pt-2 pb-1">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Dimensões & peso</h3>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${fonteLabel(it).cls}`}>{fonteLabel(it).texto}</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-1">Digitar = medido. Sem balança/trena? Use a estimativa e deixe p/ medir depois (afeta o frete).</p>
           <div className="grid grid-cols-4 gap-2">
-            <Field label="Comp cm"><input type="number" inputMode="decimal" className={inputCls} value={it.comprimento_cm ?? ""} onChange={(e) => set({ comprimento_cm: e.target.value })} /></Field>
-            <Field label="Larg cm"><input type="number" inputMode="decimal" className={inputCls} value={it.largura_cm ?? ""} onChange={(e) => set({ largura_cm: e.target.value })} /></Field>
-            <Field label="Alt cm"><input type="number" inputMode="decimal" className={inputCls} value={it.altura_cm ?? ""} onChange={(e) => set({ altura_cm: e.target.value })} /></Field>
-            <Field label="Peso kg"><input type="number" inputMode="decimal" className={inputCls} value={it.peso_real_kg ?? ""} onChange={(e) => set({ peso_real_kg: e.target.value })} /></Field>
+            <Field label="Comp cm"><input type="number" inputMode="decimal" className={inputCls} value={it.comprimento_cm ?? ""} onChange={(e) => setMedida({ comprimento_cm: e.target.value })} /></Field>
+            <Field label="Larg cm"><input type="number" inputMode="decimal" className={inputCls} value={it.largura_cm ?? ""} onChange={(e) => setMedida({ largura_cm: e.target.value })} /></Field>
+            <Field label="Alt cm"><input type="number" inputMode="decimal" className={inputCls} value={it.altura_cm ?? ""} onChange={(e) => setMedida({ altura_cm: e.target.value })} /></Field>
+            <Field label="Peso kg"><input type="number" inputMode="decimal" className={inputCls} value={it.peso_real_kg ?? ""} onChange={(e) => setMedida({ peso_real_kg: e.target.value })} /></Field>
+          </div>
+          <div className="flex flex-wrap gap-2 pb-2">
+            <button onClick={estimarCategoria} disabled={!it.grupo || estimando}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg px-3 py-1.5 disabled:opacity-40"
+              title={it.grupo ? "Preencher pela média da categoria" : "Defina a categoria primeiro"}>
+              {estimando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ruler className="w-3.5 h-3.5" />} Estimar pela categoria
+            </button>
+            <button onClick={() => set({ medidas_fonte: MEDIDAS_FONTE.A_MEDIR })}
+              className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5">
+              Marcar p/ medir depois
+            </button>
           </div>
         </div>
 

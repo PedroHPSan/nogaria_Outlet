@@ -22,6 +22,9 @@ const eventoLabel = (e) => {
   if (a === "desmembrado") return "desmembrado" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "etiqueta:impressa") return "etiqueta impressa" + (e.detalhe ? ` (${e.detalhe})` : "");
   if (a === "teste:dispensado") return "teste dispensado" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "medidas:medido") return "medidas confirmadas ✓" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "medidas:estimado") return "medidas estimadas" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "medidas:a_medir") return "marcado p/ medir depois";
   return a;
 };
 
