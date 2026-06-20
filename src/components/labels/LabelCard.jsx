@@ -1,4 +1,5 @@
 import React from "react";
+import { LOGO_ICON, LOGO_ICON_RATIO } from "../../lib/logo";
 
 // Renderiza UMA etiqueta no tamanho físico do rolo (mm), preto sobre branco.
 // Compacto (rolos de 29 mm) = layout vertical empilhado.
@@ -259,17 +260,35 @@ export default function LabelCard({ label, preset, preview = false }) {
     >
       <div
         style={{
-          fontSize: compact ? "5.5pt" : "7pt",
-          fontWeight: 800,
-          textTransform: "uppercase",
-          letterSpacing: "0.2px",
+          display: "flex",
+          alignItems: "center",
+          gap: mm(compact ? 1.2 : 1.6),
           borderBottom: "0.3mm solid #000",
           paddingBottom: mm(0.6),
           marginBottom: mm(1),
-          lineHeight: 1.1,
         }}
       >
-        {label.titulo}
+        <img
+          src={LOGO_ICON}
+          alt="NOGÁRIA"
+          style={{
+            height: mm(compact ? 4 : 5),
+            width: mm((compact ? 4 : 5) * LOGO_ICON_RATIO),
+            flexShrink: 0,
+            display: "block",
+          }}
+        />
+        <span
+          style={{
+            fontSize: compact ? "5.5pt" : "7pt",
+            fontWeight: 800,
+            textTransform: "uppercase",
+            letterSpacing: "0.2px",
+            lineHeight: 1.1,
+          }}
+        >
+          {label.titulo}
+        </span>
       </div>
       {compact
         ? isBox

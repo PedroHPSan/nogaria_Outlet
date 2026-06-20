@@ -1,0 +1,11 @@
+// Logo NOGÁRIA (ícone) para o cabeçalho das etiquetas impressas. Silhueta preta
+// (impressão térmica é P&B), aparada e otimizada a partir do logotipo oficial.
+// Embutida como data URL para funcionar sem rede tanto na renderização HTML
+// (LabelCard / impressão via iframe) quanto na geração de PDF (jsPDF.addImage).
+export const LOGO_ICON =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALEAAACACAYAAABED4jNAAADRklEQVR42u3dy47bMAwFUJHw//+yuuluWkwzTSSROndbFLCt4yvGk0eMPZnf/HsMkX90FIfhhVle9pQHA/7p/5GLAK9qundB1MryR1dZ7KA1s3wptyzSwjDLX11lMcDmZfmSbHBHwnxxC38S8YRZNDHM8n05RkfE5mVNrJWlXjHlJScPsyZusZXD3HQ8TBdEqq9XXnxhYK6duB0xzI12zXSdYPbCzrwsm9ciIdDKmtiIIZs/gwkxzOVHOojNy8YJrSy7iyI1FczVdzpN7MY1TohWXlwGATHM7XYziGE2Toh5efc1Sgumlavf5JoY5lHxPcQQw9xq1ILYvFz+3CHWysPTCQsB82YrmtiIUf78INbKVQAHxDC33WEghtkLOzEv7z7u9GJEK1e/8TQxzBUAB8Qwtx59IDYvlz8WiLVy+ZspvaiDufpuoIlhLj/OQGxePh1wQCyfauVjxsnHGo/tH69ZBGm+8Rhml4vqhd0aqEu+HvXgdY/R5ESg/eDPyh6+7hBfjrb6DBxmYnCveBcdxOCW33Uhhrf8yPiYh8GtvsaP1pXqJfXAK4fiDYjhvWZEfOAFuPoJPPDCOy77yP4EGGBNDC+8b17DB2B4NTG8AEMMMLz3IobX22RfRjwBhlcTAwzvB9b3gRdcTQwwvBADDO4axLMA4NkEPLSNmjj+E0CAO7xF8eQvzPjhsQaw/UbHExHv/pqlgBTiqt9VJkURZ/OnEOHpxvA7dqd8By3McnITx/DMWf5jbfLCP2RoZU3cphVhhrjNtg5zc8TzorkUZE3cAopWhrhN08FcqNwSYJg18R2zJsjGiTZbHszFEE8NBvPtTdx9oWE+xEkC7Fw1sWjlhogDZjkB8QTYjXxjE1s4rWwmhtmOtROxRYK5dBNbGNfLOKGV5d2Ip1aB+ZYmdvFhNk6IP9fvRKw1tLImFph3InZhjRhHI54uqFY2TgjMi3eXtK3BrInFvFwEsYullUsgngDDbJwQmA9ErIXNy8cflybWyq2bWAvDXAqx33uDuV0Ta2HzsqcTopVX3TyphWGuvuaaWFZhjlWItbBEtRk8hycT8tlWjpXjhBaWd2NeYuqxTvICxnniI7z4fWBaWF7JUe94/AW70r8jy2zJ5wAAAABJRU5ErkJggg==";
+
+// Proporção do ícone (largura/altura) — use para dimensionar mantendo o aspecto.
+export const LOGO_ICON_W = 177;
+export const LOGO_ICON_H = 128;
+export const LOGO_ICON_RATIO = 177 / 128;
