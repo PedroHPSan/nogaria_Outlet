@@ -177,32 +177,37 @@ function CompactBox({ label }) {
 }
 
 // --- Layout completo (62 mm+) --------------------------------------------
-function FullProduct({ label }) {
+function FullProduct({ label, tall = false }) {
   return (
     <>
       <div style={{ display: "flex", gap: mm(2) }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "11pt", whiteSpace: "nowrap" }}>
+          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: tall ? "12pt" : "11pt", whiteSpace: "nowrap" }}>
             {label.sku}
           </div>
-          <div style={{ fontSize: "7.5pt", marginBottom: mm(0.8) }}>
+          <div style={{ fontSize: tall ? "8pt" : "7.5pt", marginBottom: mm(0.8) }}>
             Lote {label.lote}
             {label.classe ? ` · Classe ${label.classe}` : ""} · Caixa/Mala: {label.caixa_num} · Local: {label.local_fisico}
           </div>
         </div>
-        <Qr data={label.qrData} size={20} />
+        <Qr data={label.qrData} size={tall ? 26 : 20} />
       </div>
-      <EstadoBox texto={label.estadoTexto} fontSize={8} />
-      <div style={{ fontSize: "9pt", fontWeight: 700, marginTop: mm(1.2), lineHeight: 1.2 }}>
+      <EstadoBox texto={label.estadoTexto} fontSize={tall ? 9 : 8} />
+      <div style={{ fontSize: tall ? "11pt" : "9pt", fontWeight: 700, marginTop: mm(1.2), lineHeight: 1.2 }}>
         {label.produto}
       </div>
-      <div style={{ fontSize: "8pt", marginTop: mm(1) }}>
+      {tall && label.medidas && (
+        <div style={{ fontSize: "9pt", marginTop: mm(1) }}>
+          Medidas: <b>{label.medidas}</b>
+        </div>
+      )}
+      <div style={{ fontSize: tall ? "9pt" : "8pt", marginTop: mm(1) }}>
         Destino: <b>{label.destino}</b>
       </div>
       {label.aviso && (
         <div
           style={{
-            fontSize: "8pt",
+            fontSize: tall ? "9pt" : "8pt",
             fontWeight: 800,
             marginTop: mm(1),
             border: "0.4mm solid #000",
@@ -213,30 +218,39 @@ function FullProduct({ label }) {
           {label.aviso}
         </div>
       )}
-      <Checkboxes items={label.checkboxes} size={7.5} />
+      {/* Empurra os checkboxes para o rodapé, ocupando o espaço vazio do 62×100. */}
+      {tall && <div style={{ flexGrow: 1, minHeight: mm(2) }} />}
+      <Checkboxes items={label.checkboxes} size={tall ? 9 : 7.5} />
     </>
   );
 }
 
-function FullBox({ label }) {
+function FullBox({ label, tall = false }) {
   return (
     <>
       <div style={{ display: "flex", gap: mm(2) }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "12pt", whiteSpace: "nowrap" }}>
+          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: tall ? "15pt" : "12pt", whiteSpace: "nowrap" }}>
             {label.sku}
           </div>
-          <div style={{ fontSize: "8pt", fontWeight: 700 }}>
+          <div style={{ fontSize: tall ? "9pt" : "8pt", fontWeight: 700 }}>
             {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens
           </div>
         </div>
-        <Qr data={label.qrData} size={20} />
+        <Qr data={label.qrData} size={tall ? 28 : 20} />
       </div>
-      <div style={{ fontSize: "8pt", marginTop: mm(1) }}>
+      <div style={{ fontSize: tall ? "9pt" : "8pt", marginTop: mm(1) }}>
         <div>Local: <b>{label.local_fisico}</b> · Destino: <b>{label.destino}</b></div>
-        {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
+        {!tall && label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
-      <div style={{ fontSize: "7.5pt", marginTop: mm(1.4), fontWeight: 700 }}>
+      {tall && (label.classeResumo || label.loteResumo) && (
+        <div style={{ fontSize: "9pt", marginTop: mm(1.4), lineHeight: 1.5 }}>
+          {label.classeResumo && <div>Classes: <b>{label.classeResumo}</b></div>}
+          {label.loteResumo && <div>Por lote: <b>{label.loteResumo}</b></div>}
+        </div>
+      )}
+      {tall && <div style={{ flexGrow: 1, minHeight: mm(2) }} />}
+      <div style={{ fontSize: tall ? "8.5pt" : "7.5pt", marginTop: mm(1.4), fontWeight: 700 }}>
         Escaneie o QR para ver o conteúdo da {label.tipo === "MALA" ? "mala" : "caixa"}.
       </div>
     </>
@@ -245,6 +259,9 @@ function FullBox({ label }) {
 
 export default function LabelCard({ label, preset, preview = false }) {
   const compact = preset.compact;
+  // Etiqueta "alta" (DK-11202, 62×100): aproveita o espaço extra com QR/fontes
+  // maiores e campos adicionais. Não afeta os formatos completos curtos (62×50, 100×50).
+  const tall = !compact && preset.height >= 80;
   const isBox = label.tipo === "CAIXA" || label.tipo === "MALA";
   return (
     <div
@@ -302,8 +319,8 @@ export default function LabelCard({ label, preset, preview = false }) {
           ? <CompactBox label={label} />
           : <CompactProduct label={label} />
         : isBox
-          ? <FullBox label={label} />
-          : <FullProduct label={label} />}
+          ? <FullBox label={label} tall={tall} />
+          : <FullProduct label={label} tall={tall} />}
     </div>
   );
 }

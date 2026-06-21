@@ -9,6 +9,9 @@ function drawLabel(doc, label, preset) {
   const W = preset.width;
   const H = preset.height;
   const compact = preset.compact;
+  // Etiqueta "alta" (DK-11202 62×100): QR/fontes maiores e campos extras.
+  const tall = !compact && H >= 80;
+  const isBox = label.tipo === "CAIXA" || label.tipo === "MALA";
   const m = compact ? 1.6 : 2.4;
   // Margem superior maior no compacto: evita o cabeçalho ser cortado pela zona
   // morta de topo da impressora térmica (espelha o paddingTop do LabelCard).
@@ -41,8 +44,8 @@ function drawLabel(doc, label, preset) {
   doc.line(m, y, W - m, y);
   y += 1.5;
 
-  // QR no canto superior direito
-  const qrSize = compact ? 16 : 19;
+  // QR no canto superior direito (maior na etiqueta alta 62×100)
+  const qrSize = compact ? 16 : (tall ? (isBox ? 28 : 26) : 19);
   const qrX = W - m - qrSize;
   const qrY = y;
   if (label.qrData) {
@@ -56,19 +59,20 @@ function drawLabel(doc, label, preset) {
   const leftW = qrX - m - 1.5; // largura útil ao lado do QR
 
   // SKU em destaque (fonte reduzida p/ não quebrar em duas linhas no compacto)
+  const skuPt = compact ? 10 : (tall ? (isBox ? 15 : 12) : 11);
   doc.setFont("courier", "bold");
-  doc.setFontSize(compact ? 10 : 11);
-  doc.text(doc.splitTextToSize(label.sku, leftW), m, y + ptToMm(compact ? 10 : 11));
-  y += ptToMm(compact ? 10 : 11) + 1;
+  doc.setFontSize(skuPt);
+  doc.text(doc.splitTextToSize(label.sku, leftW), m, y + ptToMm(skuPt));
+  y += ptToMm(skuPt) + 1;
 
   // Linha de identificação ao lado do QR
+  const idPt = compact ? 6.5 : (tall ? 8.5 : 7.5);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(compact ? 6.5 : 7.5);
-  const isBox = label.tipo === "CAIXA" || label.tipo === "MALA";
+  doc.setFontSize(idPt);
   const idLine = isBox
     ? `${label.tipo} · ${label.qtd} itens`
     : `Lote ${label.lote}${label.classe ? ` · Classe ${label.classe}` : ""}`;
-  doc.text(doc.splitTextToSize(idLine, leftW), m, y + ptToMm(compact ? 6.5 : 7.5));
+  doc.text(doc.splitTextToSize(idLine, leftW), m, y + ptToMm(idPt));
 
   // Abaixo do QR começa o corpo em largura total
   y = Math.max(y, qrY + qrSize) + 1.5;
@@ -86,24 +90,28 @@ function drawLabel(doc, label, preset) {
   if (!isBox) {
     // Faixa de estado — só no layout completo (62 mm). No compacto é omitida.
     if (!compact) {
+      const ePt = tall ? 9 : 8;
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
+      doc.setFontSize(ePt);
       doc.setLineWidth(0.4);
-      const boxH = ptToMm(8) + 1.6;
+      const boxH = ptToMm(ePt) + 1.6;
       doc.rect(m, y, W - 2 * m, boxH);
-      doc.text(label.estadoTexto, W / 2, y + boxH / 2 + ptToMm(8) / 2 - 0.3, {
+      doc.text(label.estadoTexto, W / 2, y + boxH / 2 + ptToMm(ePt) / 2 - 0.3, {
         align: "center",
       });
       y += boxH + 1.2;
     }
 
-    line(label.produto, { size: compact ? 7.5 : 9, bold: true });
+    line(label.produto, { size: compact ? 7.5 : (tall ? 11 : 9), bold: true });
+    if (tall && label.medidas) line(`Medidas: ${label.medidas}`, { bold: true });
     line(`Caixa/Mala: ${label.caixa_num}  ·  Local: ${label.local_fisico}`);
     line(`Destino: ${label.destino}`, { bold: true });
     if (label.aviso) line(label.aviso, { bold: true });
   } else {
     line(`Local: ${label.local_fisico}  ·  Destino: ${label.destino}`);
-    if (label.lotes?.length) line(`Lotes: ${label.lotes.join(", ")}`);
+    if (!tall && label.lotes?.length) line(`Lotes: ${label.lotes.join(", ")}`);
+    if (tall && label.classeResumo) line(`Classes: ${label.classeResumo}`, { bold: true });
+    if (tall && label.loteResumo) line(`Por lote: ${label.loteResumo}`, { bold: true });
     line("Conteúdo (SKUs):", { bold: true });
     line(label.skus.join(", "), { size: compact ? 6 : 7 });
   }

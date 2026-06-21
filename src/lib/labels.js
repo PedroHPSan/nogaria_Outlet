@@ -80,6 +80,20 @@ const TIPO_ATENCAO = new Set(["QRT", "AMARELO", "VERMELHO"]);
 
 const CHECKBOXES = ["TEST OK", "FOTO", "ANUNC", "VEND"];
 
+// Medidas do item p/ a etiqueta grande (62×100): "45×30×20 cm · 2,5 kg".
+// Devolve null se não houver nem dimensões nem peso (não ocupa espaço à toa).
+function fmtMedidas(item) {
+  const c = item?.comprimento_cm, l = item?.largura_cm, a = item?.altura_cm;
+  const peso = item?.peso_real_kg ?? item?.peso_kg;
+  const temDim = [c, l, a].some((v) => v != null);
+  const dim = temDim ? `${c ?? "–"}×${l ?? "–"}×${a ?? "–"} cm` : null;
+  const pesoTxt = peso != null ? `${String(peso).replace(".", ",")} kg` : null;
+  return [dim, pesoTxt].filter(Boolean).join(" · ") || null;
+}
+
+// Ordem visual das classes (model.js). Usada p/ o resumo da caixa.
+const CLASSE_ORDEM = ["A+", "A", "B", "C", "D", "E"];
+
 // QR conteúdo: codifica o SKU (ou caixa_num) para reconciliar com a planilha
 // e ser lido pelo scanner @zxing do próprio app.
 export async function genQrDataUrl(text) {
@@ -117,6 +131,7 @@ export function buildProductLabel(item) {
     estadoTexto: estado.texto,
     estadoCodigo: estado.codigo,
     destino: item?.destino || "—",
+    medidas: fmtMedidas(item),
     aviso: atencao ? "NÃO ANUNCIAR ANTES DE TESTAR" : null,
     checkboxes: CHECKBOXES,
     qrText: item?.sku || "",
@@ -135,7 +150,23 @@ export function buildBoxLabel(caixa, itens) {
     ? norm(caixa.tipo) === "MALA"
     : norm(caixa?.codigo).startsWith("MALA"));
   const lotes = new Set();
-  for (const it of lista) if (it?.lote != null) lotes.add(it.lote);
+  const classeCount = {}, loteCount = {};
+  for (const it of lista) {
+    if (it?.lote != null) { lotes.add(it.lote); loteCount[it.lote] = (loteCount[it.lote] || 0) + 1; }
+    if (it?.classe) classeCount[it.classe] = (classeCount[it.classe] || 0) + 1;
+  }
+  // Resumos "A+×2 · B×3" e "L12×3 · L15×2" para a etiqueta grande (62×100).
+  const classeResumo = Object.keys(classeCount)
+    .sort((a, b) => {
+      const ia = CLASSE_ORDEM.indexOf(a), ib = CLASSE_ORDEM.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    })
+    .map((k) => `${k}×${classeCount[k]}`)
+    .join(" · ");
+  const loteResumo = Object.keys(loteCount)
+    .sort((a, b) => Number(a) - Number(b))
+    .map((k) => `L${k}×${loteCount[k]}`)
+    .join(" · ");
   return {
     tipo: isMala ? "MALA" : "CAIXA",
     titulo: isMala
@@ -144,6 +175,8 @@ export function buildBoxLabel(caixa, itens) {
     sku: caixa?.codigo || "",
     qtd: lista.length,
     lotes: [...lotes].sort((a, b) => a - b),
+    classeResumo,
+    loteResumo,
     skus: lista.map((i) => i.sku),
     local_fisico: caixa?.local_fisico || "—",
     destino: caixa?.destino || "—",
