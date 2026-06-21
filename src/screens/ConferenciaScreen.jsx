@@ -663,7 +663,7 @@ function Encaixotar({ user, refreshKey, onChanged }) {
 
         {scanning && (
           <Suspense fallback={null}>
-            <LazyScanner onDetected={(code) => { setScanning(false); processarCodigo(code); }} onClose={() => setScanning(false)} />
+            <LazyScanner qr onDetected={(code) => { setScanning(false); processarCodigo(code); }} onClose={() => setScanning(false)} />
           </Suspense>
         )}
         {printLabels && (
