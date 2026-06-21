@@ -1,13 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Tag, TrendingUp, AlertTriangle, Check, Copy, Wand2, ChevronDown, Sparkles } from "lucide-react";
-import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO } from "../lib/model";
+import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO, ESTADOS } from "../lib/model";
 import { precificar, gerarTitulo, estadoToCondicao, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
 
-const CONDICOES = [
-  ["NOVO_LACRADO", "Novo lacrado"], ["NOVO_CAIXA_AVARIADA", "Novo caixa avariada"],
-  ["USADO_OK", "Usado funcionando"], ["AVARIA_ESTETICA", "Avaria estética"],
-  ["SEM_TESTE", "Sem teste"], ["DEFEITO_PECAS", "Defeito / peças"],
-];
 const CANAIS = [
   ["ML", "Mercado Livre"], ["SHOPEE", "Shopee"], ["TIKTOK", "TikTok Shop"],
   ["MAGALU", "Magalu"], ["AMAZON", "Amazon"], ["B2B", "B2B / lote"], ["LOCAL", "OLX / local"],
@@ -82,7 +77,9 @@ function Secao({ titulo, aberto, onToggle, children }) {
 // salvo no item ou a âncora do grupo.
 export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem = null, onChange }) {
   const grupo = params.grupos?.[item.grupo] || {};
-  const [cond, setCond] = useState(estadoToCondicao(item.estado, params.config?.condicaoPadrao));
+  // Condição do motor é derivada do Estado do item (fonte única). Editar o Estado aqui
+  // grava em item.estado via onChange, mantendo-o atrelado às chips de Estado da ficha.
+  const cond = estadoToCondicao(item.estado, params.config?.condicaoPadrao);
   const [canal, setCanal] = useState(normalizarCanal(item.canal_principal));
   const [copiado, setCopiado] = useState(false);
   const [minManual, setMinManual] = useState(false);
@@ -146,9 +143,11 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
 
       {/* Entradas do motor */}
       <div className="grid grid-cols-2 gap-2">
-        <Campo label="Condição">
-          <select className={sel + " w-full"} value={cond} onChange={(e) => setCond(e.target.value)}>
-            {CONDICOES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+        <Campo label="Estado">
+          <select className={sel + " w-full"} value={item.estado || ""}
+            onChange={(e) => onChange?.({ estado: e.target.value || null })}>
+            {!item.estado && <option value="">Selecione…</option>}
+            {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
         </Campo>
         <Campo label="Canal">
