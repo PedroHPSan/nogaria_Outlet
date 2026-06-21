@@ -151,10 +151,17 @@ export default function LabelPrint({ labels, user, onPrinted, onClose }) {
             <FileDown className="w-4 h-4" /> Baixar PDF
           </button>
         </div>
-        <p className="text-[11px] text-gray-400 leading-snug">
-          Na impressão, selecione a <b>Brother QL-800</b> e confirme a largura da mídia. O
-          driver corta entre as etiquetas. Conteúdo em preto (sem cores).
-        </p>
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+          <Printer className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-blue-800 leading-snug">
+            No diálogo de impressão, selecione a <b>Brother QL-800</b> e confirme o
+            tamanho do papel como <b>{preset.label.split(" — ")[0]} ({preset.width}×{preset.height} mm)</b>.
+            <br />
+            <b>Trocou de rolo?</b> Ajuste também o tamanho do papel no diálogo — se ele
+            continuar no rolo anterior, a impressora acusa <i>"o rolo interno não é esse"</i>.
+            O driver corta entre as etiquetas; conteúdo em preto (sem cores).
+          </p>
+        </div>
       </div>
 
       {/* Pré-visualização / área de impressão */}
