@@ -105,10 +105,10 @@ function CompactProduct({ label }) {
         style={{
           fontFamily: "monospace",
           fontWeight: 800,
-          fontSize: "12pt",
+          fontSize: "10pt",
           textAlign: "center",
           marginTop: mm(1),
-          wordBreak: "break-all",
+          whiteSpace: "nowrap",
           lineHeight: 1.1,
         }}
       >
@@ -153,10 +153,10 @@ function CompactBox({ label }) {
         style={{
           fontFamily: "monospace",
           fontWeight: 800,
-          fontSize: "11pt",
+          fontSize: "9.5pt",
           textAlign: "center",
           marginTop: mm(0.8),
-          wordBreak: "break-all",
+          whiteSpace: "nowrap",
         }}
       >
         {label.sku}
@@ -183,7 +183,7 @@ function FullProduct({ label }) {
     <>
       <div style={{ display: "flex", gap: mm(2) }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "13pt" }}>
+          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "11pt", whiteSpace: "nowrap" }}>
             {label.sku}
           </div>
           <div style={{ fontSize: "7.5pt", marginBottom: mm(0.8) }}>
@@ -224,7 +224,7 @@ function FullBox({ label }) {
     <>
       <div style={{ display: "flex", gap: mm(2) }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "14pt" }}>
+          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "12pt", whiteSpace: "nowrap" }}>
             {label.sku}
           </div>
           <div style={{ fontSize: "8pt", fontWeight: 700 }}>
@@ -256,6 +256,9 @@ export default function LabelCard({ label, preset, preview = false }) {
         height: mm(preset.height),
         boxSizing: "border-box",
         padding: mm(compact ? 1.6 : 2.4),
+        // Margem superior maior: a impressora térmica corta o topo e cortava o
+        // cabeçalho "NOGÁRIA OUTLET". Empurra o conteúdo para baixo da zona morta.
+        paddingTop: mm(compact ? 3.6 : 4),
         color: "#000",
         background: "#fff",
         overflow: "hidden",

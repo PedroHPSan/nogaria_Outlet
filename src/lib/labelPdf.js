@@ -10,7 +10,9 @@ function drawLabel(doc, label, preset) {
   const H = preset.height;
   const compact = preset.compact;
   const m = compact ? 1.6 : 2.4;
-  let y = m;
+  // Margem superior maior no compacto: evita o cabeçalho ser cortado pela zona
+  // morta de topo da impressora térmica (espelha o paddingTop do LabelCard).
+  let y = compact ? m + 2 : m;
 
   // Cabeçalho: logo (silhueta) + título do tipo de etiqueta, centralizados na altura.
   const logoH = compact ? 4 : 5;
@@ -53,11 +55,11 @@ function drawLabel(doc, label, preset) {
 
   const leftW = qrX - m - 1.5; // largura útil ao lado do QR
 
-  // SKU em destaque
+  // SKU em destaque (fonte reduzida p/ não quebrar em duas linhas no compacto)
   doc.setFont("courier", "bold");
-  doc.setFontSize(compact ? 11 : 13);
-  doc.text(doc.splitTextToSize(label.sku, leftW), m, y + ptToMm(compact ? 11 : 13));
-  y += ptToMm(compact ? 11 : 13) + 1;
+  doc.setFontSize(compact ? 10 : 11);
+  doc.text(doc.splitTextToSize(label.sku, leftW), m, y + ptToMm(compact ? 10 : 11));
+  y += ptToMm(compact ? 10 : 11) + 1;
 
   // Linha de identificação ao lado do QR
   doc.setFont("helvetica", "normal");
