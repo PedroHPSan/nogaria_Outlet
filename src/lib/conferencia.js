@@ -3,6 +3,7 @@
 // componentes, espelhando o padrão de retry-em-colisão de NewItem.jsx.
 import { supabase } from "./supabase";
 import { buildSku } from "./model";
+import { classeAutomatica } from "./classificacao";
 
 // Próximo sequencial dentro de um lote real (parseia o sufixo do maior SKU).
 async function proximoSeqLote(lote) {
@@ -159,4 +160,67 @@ export async function desmembrarItem(item, total, user) {
     sku: item.sku, acao: "desmembrado", detalhe: `+${extras} unidade(s)`, usuario: user.email,
   });
   return novos;
+}
+
+// ───────────────────────── Classificação em massa (backfill) ─────────────────────────
+// Itens parados em "A catalogar" (e quaisquer outros) podem ficar sem `classe`. Estas
+// funções dão classe a todos eles pelo sinal categoria → valor → C (lib/classificacao.js).
+
+// Quantos itens estão sem classe (para mostrar no botão de backfill).
+export async function contarSemClasse() {
+  const { count, error } = await supabase
+    .from("itens").select("sku", { count: "exact", head: true }).is("classe", null);
+  if (error) throw error;
+  return count || 0;
+}
+
+// Classifica TODOS os itens sem classe. Agrupa por classe calculada e aplica em lote
+// (.in()). Auditoria best-effort. Retorna { total, porClasse }.
+export async function classificarSemClasse(params, user) {
+  const PAGE = 1000;
+  let itens = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("itens")
+      .select("sku, grupo, preco_ideal, preco_sugerido, preco_ref_usado, preco_ref_novo, preco_novo_est")
+      .is("classe", null)
+      .order("sku")
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    itens = itens.concat(data);
+    if (data.length < PAGE) break;
+  }
+  if (!itens.length) return { total: 0, porClasse: {} };
+
+  // Agrupa os SKUs pela classe calculada.
+  const porClasseSkus = {};
+  const porClasse = {};
+  for (const it of itens) {
+    const { classe } = classeAutomatica(it, params);
+    (porClasseSkus[classe] = porClasseSkus[classe] || []).push(it.sku);
+    porClasse[classe] = (porClasse[classe] || 0) + 1;
+  }
+
+  // Atualiza em fatias por classe.
+  for (const [classe, skus] of Object.entries(porClasseSkus)) {
+    for (let i = 0; i < skus.length; i += 200) {
+      const slice = skus.slice(i, i + 200);
+      const { error } = await supabase
+        .from("itens").update({ classe, upd_by: user.email }).in("sku", slice);
+      if (error) throw error;
+    }
+  }
+
+  // Auditoria best-effort (um evento por item, em inserts fatiados).
+  try {
+    const eventos = [];
+    for (const [classe, skus] of Object.entries(porClasseSkus))
+      for (const sku of skus)
+        eventos.push({ sku, acao: "classe:backfill", detalhe: classe, usuario: user.email });
+    for (let i = 0; i < eventos.length; i += 500)
+      await supabase.from("eventos").insert(eventos.slice(i, i + 500));
+  } catch { /* auditoria best-effort */ }
+
+  return { total: itens.length, porClasse };
 }

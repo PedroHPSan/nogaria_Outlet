@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from "reac
 import { supabase } from "../lib/supabase";
 import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS } from "../lib/model";
 import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
-import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa } from "../lib/conferencia";
+import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa, contarSemClasse, classificarSemClasse } from "../lib/conferencia";
+import { classeAutomatica } from "../lib/classificacao";
 import {
   CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
   fecharCaixa, listarCaixas, itensDaCaixa,
@@ -193,6 +194,9 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
   const [visiveis, setVisiveis] = useState(60);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [semClasse, setSemClasse] = useState(null); // contagem de itens sem classe
+  const [bfBusy, setBfBusy] = useState(false);
+  const [bfMsg, setBfMsg] = useState(null);
 
   const catList = useMemo(
     () => Object.keys(params?.grupos || {}).sort((a, b) => a.localeCompare(b, "pt-BR")),
@@ -216,6 +220,24 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
     setSugs(sg); setEscolhas(esc); setSel(s); setItens(lista);
   }, [fLote, soSemCat, catList]);
   useEffect(() => { load(); }, [load, refreshKey]);
+
+  const recarregarSemClasse = useCallback(() => {
+    contarSemClasse().then(setSemClasse).catch(() => setSemClasse(null));
+  }, []);
+  useEffect(() => { recarregarSemClasse(); }, [recarregarSemClasse, refreshKey]);
+
+  const rodarBackfill = async () => {
+    setBfBusy(true); setBfMsg(null);
+    try {
+      const { total, porClasse } = await classificarSemClasse(params, user);
+      const detalhe = Object.entries(porClasse).map(([c, n]) => `${n} ${c}`).join(" · ");
+      setBfMsg({ tipo: "ok", texto: total ? `${total} item(ns) classificado(s): ${detalhe}` : "Nenhum item sem classe." });
+      recarregarSemClasse();
+      onChanged?.();
+    } catch (e) {
+      setBfMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBfBusy(false); }
+  };
 
   const setCat = (sku, g) => {
     setEscolhas((e) => ({ ...e, [sku]: g }));
@@ -243,7 +265,7 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
         if (!sel.has(it.sku)) continue;
         const g = escolhas[it.sku];
         if (!g) continue;
-        const classe = (!it.classe && params?.grupos?.[g]?.classe) ? params.grupos[g].classe : undefined;
+        const classe = it.classe ? undefined : classeAutomatica({ ...it, grupo: g }, params).classe;
         await definirCategoria(it.sku, g, user, classe);
         n++;
       }
@@ -262,6 +284,33 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
       <p className="text-sm text-gray-500">
         Sugere a categoria pelo nome do produto. Revise e <b>salve as marcadas</b>. Aceitar uma categoria nova preenche a classe quando estiver vazia.
       </p>
+
+      {/* Backfill: dá classe a itens sem classe (ex.: parados em "A catalogar") */}
+      {semClasse !== null && semClasse > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-200 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm min-w-0">
+              <p className="font-semibold text-gray-800">{semClasse} item(ns) sem classe</p>
+              <p className="text-xs text-gray-500">Atribui classe por categoria → valor → C.</p>
+            </div>
+            <button disabled={bfBusy} onClick={rodarBackfill}
+              className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gray-900 rounded-lg px-3 py-2 disabled:opacity-40">
+              {bfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Classificar
+            </button>
+          </div>
+          {bfMsg && (
+            <p className={`mt-2 text-sm flex items-center gap-1.5 ${bfMsg.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+              {bfMsg.tipo === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />} {bfMsg.texto}
+            </p>
+          )}
+        </div>
+      )}
+      {semClasse === 0 && bfMsg && (
+        <p className={`text-sm flex items-center gap-1.5 ${bfMsg.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+          {bfMsg.tipo === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />} {bfMsg.texto}
+        </p>
+      )}
       <select value={fLote} onChange={(e) => setFLote(e.target.value)} className={inputCls}>
         <option value="">Todos os lotes</option>
         <option value={LOTE_SEM}>Sem lote</option>

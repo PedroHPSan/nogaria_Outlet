@@ -4,6 +4,7 @@ import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import { sugerirCategoria } from "../lib/categorizar";
 import { desmembrarItem } from "../lib/conferencia";
+import { classeAutomatica } from "../lib/classificacao";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { ChevronLeft, Loader2, PackagePlus, AlertTriangle, RefreshCw } from "lucide-react";
 
@@ -100,11 +101,17 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
       }
 
       // 2) Insere o item (status/estado omitidos → usam o default do enum)
+      // Nenhum item nasce sem classe: usa a escolhida ou deriva (categoria → valor → C).
+      const grupoFinal = grupo.trim() || null;
+      const classeFinal = classe || classeAutomatica(
+        { grupo: grupoFinal, preco_novo_est: precoNovo || null, preco_sugerido: precoSug || null },
+        params,
+      ).classe;
       const base = {
         lote: loteN,
         produto: produto.trim(),
-        grupo: grupo.trim() || null,
-        ...(classe ? { classe } : {}),
+        grupo: grupoFinal,
+        classe: classeFinal,
         preco_novo_est: precoNovo || null,
         preco_sugerido: precoSug || null,
         ...(destino ? { destino } : {}),

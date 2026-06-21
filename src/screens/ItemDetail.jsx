@@ -14,6 +14,7 @@ import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { sugerirCategoria } from "../lib/categorizar";
 import { DEFAULT_PARAMS } from "../lib/pricing";
+import { classificarItem } from "../lib/classificacao";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
 const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -271,6 +272,25 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     try { await registrarSemTeste(it.sku, user); } catch { /* auditoria best-effort */ }
   };
 
+  // Classificação automática (tabela de negócio): condição + faixa de valor + volume.
+  // Sugestão (não sobrescreve sozinha); aplicada com 1 clique. Recalcula ao vivo de `it`.
+  const sugestaoClasse = useMemo(() => classificarItem(it, params), [it, params]);
+  const aplicarClasse = async () => {
+    const s = sugestaoClasse;
+    if (!s?.classe) return;
+    set({
+      classe: s.classe,
+      ...(it.destino ? {} : { destino: s.destino }),
+      ...(it.canal_principal ? {} : { canal_principal: s.canal }),
+    });
+    // Auditoria best-effort (igual a registrarMedida/registrarSemTeste).
+    try {
+      await supabase.from("eventos").insert({
+        sku: it.sku, acao: "classe:auto", detalhe: s.motivo, usuario: user.email,
+      });
+    } catch { /* auditoria best-effort */ }
+  };
+
   const gate = (() => {
     if (!next) return null;
     switch (next.id) {
@@ -319,6 +339,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     const patch = {
       estado: it.estado, testado: it.testado, funciona: it.funciona, avaria: it.avaria,
       acessorios_ok: it.acessorios_ok, caixa_original: it.caixa_original,
+      // Classe pode ser reclassificada na triagem (lib/classificacao.js).
+      classe: it.classe || null,
       preco_min: it.preco_min || null, preco_ideal: it.preco_ideal || null,
       preco_sugerido: it.preco_sugerido || null, canal_principal: it.canal_principal || null,
       destino: it.destino, local_fisico: it.local_fisico, caixa_num: it.caixa_num,
@@ -542,6 +564,38 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               Não vou testar → marcar como “Usado sem teste”
             </button>
           )}
+
+          {/* Classificação sugerida (condição + valor + volume) */}
+          <div className="mt-2 mb-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-500">Classe sugerida</span>
+              <span className="text-xs text-gray-400">
+                Atual:{" "}
+                {it.classe
+                  ? <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-200 text-gray-700"}`}>{it.classe}</span>
+                  : "—"}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {sugestaoClasse.classe
+                  ? <span className={`px-2 py-1 rounded-lg text-sm font-bold ${CLASSE_STYLE[sugestaoClasse.classe] || "bg-gray-200 text-gray-700"}`}>{sugestaoClasse.classe}</span>
+                  : <span className="text-sm text-gray-400 font-semibold">—</span>}
+                <span className="text-xs text-gray-500 truncate">{sugestaoClasse.motivo}</span>
+              </div>
+              {sugestaoClasse.classe && sugestaoClasse.classe !== it.classe && (
+                <button onClick={aplicarClasse}
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gray-900 rounded-lg px-3 py-1.5">
+                  <Check className="w-3.5 h-3.5" /> Aplicar
+                </button>
+              )}
+            </div>
+            {sugestaoClasse.classe && !it.destino && !it.canal_principal && (
+              <p className="mt-1.5 text-[11px] text-gray-400">
+                Aplicar também sugere destino <b>{sugestaoClasse.destino}</b> e canal <b>{sugestaoClasse.canal}</b> (campos vazios).
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Dados para venda (integrações) — Tier 1 */}
