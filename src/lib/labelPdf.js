@@ -82,16 +82,18 @@ function drawLabel(doc, label, preset) {
   };
 
   if (!isBox) {
-    // Faixa de estado
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 6.5 : 8);
-    doc.setLineWidth(0.4);
-    const boxH = ptToMm(compact ? 6.5 : 8) + 1.6;
-    doc.rect(m, y, W - 2 * m, boxH);
-    doc.text(label.estadoTexto, W / 2, y + boxH / 2 + ptToMm(compact ? 6.5 : 8) / 2 - 0.3, {
-      align: "center",
-    });
-    y += boxH + 1.2;
+    // Faixa de estado — só no layout completo (62 mm). No compacto é omitida.
+    if (!compact) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setLineWidth(0.4);
+      const boxH = ptToMm(8) + 1.6;
+      doc.rect(m, y, W - 2 * m, boxH);
+      doc.text(label.estadoTexto, W / 2, y + boxH / 2 + ptToMm(8) / 2 - 0.3, {
+        align: "center",
+      });
+      y += boxH + 1.2;
+    }
 
     line(label.produto, { size: compact ? 7.5 : 9, bold: true });
     line(`Caixa/Mala: ${label.caixa_num}  ·  Local: ${label.local_fisico}`);
@@ -104,8 +106,9 @@ function drawLabel(doc, label, preset) {
     line(label.skus.join(", "), { size: compact ? 6 : 7 });
   }
 
-  // Checkboxes (produto/quarentena) — perto do rodapé
-  if (!isBox) {
+  // Checkboxes (produto/quarentena) — perto do rodapé.
+  // No layout compacto (29 mm) são omitidos: o ticket prioriza espaço/identificação.
+  if (!isBox && !compact) {
     const cbY = Math.min(y + 0.5, H - m - 3);
     let cbX = m;
     const sq = 2.4;

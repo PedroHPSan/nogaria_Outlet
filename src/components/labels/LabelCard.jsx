@@ -87,52 +87,58 @@ function Qr({ data, size }) {
 }
 
 // --- Layout compacto (29 mm) ---------------------------------------------
+// Sem checkboxes de marcação: prioriza identificação e localização, com fontes
+// maiores e informações condensadas (uma linha por campo, sem quebras).
+const nowrap = {
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
 function CompactProduct({ label }) {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "center" }}>
-        <Qr data={label.qrData} size={18} />
+        <Qr data={label.qrData} size={20} />
       </div>
       <div
         style={{
           fontFamily: "monospace",
           fontWeight: 800,
-          fontSize: "11pt",
+          fontSize: "12pt",
           textAlign: "center",
-          marginTop: mm(0.8),
+          marginTop: mm(1),
           wordBreak: "break-all",
+          lineHeight: 1.1,
         }}
       >
         {label.sku}
       </div>
-      <div style={{ fontSize: "6.5pt", textAlign: "center", marginBottom: mm(1) }}>
+      <div style={{ fontSize: "7pt", textAlign: "center", marginBottom: mm(1.2) }}>
         Lote {label.lote}
         {label.classe ? ` · Classe ${label.classe}` : ""}
       </div>
-      <EstadoBox texto={label.estadoTexto} fontSize={6.5} />
-      <div style={{ fontSize: "7.5pt", fontWeight: 700, marginTop: mm(1.2), lineHeight: 1.15 }}>
+      <div style={{ fontSize: "8.5pt", fontWeight: 700, marginTop: mm(0.4), lineHeight: 1.2 }}>
         {label.produto}
       </div>
-      <div style={{ fontSize: "6.5pt", marginTop: mm(1) }}>
-        <div>Caixa/Mala: <b>{label.caixa_num}</b></div>
-        <div>Local: <b>{label.local_fisico}</b></div>
-        <div>Destino: <b>{label.destino}</b></div>
+      <div style={{ fontSize: "7.5pt", marginTop: mm(1.4), lineHeight: 1.45 }}>
+        <div style={nowrap}>Caixa <b>{label.caixa_num}</b> · Local <b>{label.local_fisico}</b></div>
+        <div style={nowrap}>Destino <b>{label.destino}</b></div>
       </div>
       {label.aviso && (
         <div
           style={{
-            fontSize: "6.5pt",
+            fontSize: "7pt",
             fontWeight: 800,
-            marginTop: mm(1),
+            marginTop: mm(1.2),
             border: "0.4mm solid #000",
-            padding: mm(0.8),
+            padding: mm(0.9),
             textAlign: "center",
           }}
         >
           {label.aviso}
         </div>
       )}
-      <Checkboxes items={label.checkboxes} size={6} />
     </>
   );
 }
