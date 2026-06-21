@@ -10,8 +10,9 @@ import ConferenciaScreen from "./screens/ConferenciaScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
+import CaixaQrScreen from "./screens/CaixaQrScreen";
 
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
 const eventoLabel = (e) => {
@@ -40,6 +41,7 @@ export default function App() {
   const [openItem, setOpenItem] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [showFotoQr, setShowFotoQr] = useState(false);
+  const [showCaixaQr, setShowCaixaQr] = useState(false);
   const [preFilter, setPreFilter] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [eventos, setEventos] = useState([]);
@@ -167,12 +169,16 @@ export default function App() {
         </div>
       </div>
 
-      {/* Botões flutuantes: foto por QR + criar novo item (somem com modal aberto) */}
-      {!openItem && !showNew && !showFotoQr && (
+      {/* Botões flutuantes: caixa por QR + foto por QR + criar novo item (somem com modal aberto) */}
+      {!openItem && !showNew && !showFotoQr && !showCaixaQr && (
         <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none">
-          <div className="max-w-lg mx-auto px-4 flex justify-end items-center gap-3">
+          <div className="max-w-lg mx-auto px-4 flex justify-end items-center gap-2.5">
+            <button onClick={() => setShowCaixaQr(true)} aria-label="Caixa por QR"
+              className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">
+              <Boxes className="w-5 h-5" /> Caixa QR
+            </button>
             <button onClick={() => setShowFotoQr(true)} aria-label="Foto por QR"
-              className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-2 pl-4 pr-5 text-sm font-semibold active:bg-gray-800">
+              className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">
               <QrCode className="w-5 h-5" /> Foto QR
             </button>
             <button onClick={() => setShowNew(true)} aria-label="Novo item"
@@ -189,6 +195,13 @@ export default function App() {
         <FotoQrScreen
           onClose={() => setShowFotoQr(false)}
           onOpenItem={(it) => { setShowFotoQr(false); setOpenItem(it); }}
+        />
+      )}
+      {showCaixaQr && (
+        <CaixaQrScreen
+          params={params}
+          onClose={() => setShowCaixaQr(false)}
+          onOpenItem={(it) => { setShowCaixaQr(false); setOpenItem(it); }}
         />
       )}
     </div>

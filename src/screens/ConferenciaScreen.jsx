@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS } from "../lib/model";
+import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL } from "../lib/model";
 import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa, contarSemClasse, classificarSemClasse } from "../lib/conferencia";
-import { classeAutomatica } from "../lib/classificacao";
+import { classeAutomatica, estimarValorCaixa, estimarValorVenda } from "../lib/classificacao";
 import {
   CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
   fecharCaixa, listarCaixas, itensDaCaixa,
@@ -61,7 +61,7 @@ export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS
       </div>
       {secao === "definir" && <DefinirLote lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "mover" && <MoverEtapa lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
-      {secao === "encaixotar" && <Encaixotar user={user} refreshKey={refreshKey} onChanged={onChanged} />}
+      {secao === "encaixotar" && <Encaixotar user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "categorizar" && <CategorizarMassa lotes={lotes} user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "inventario" && <Inventario lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "pendencias" && <Pendencias lotes={lotes} onOpen={onOpen} refreshKey={refreshKey} />}
@@ -511,7 +511,7 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
 }
 
 // ───────────────────────── Encaixotar (2ª etapa) ─────────────────────────
-function Encaixotar({ user, refreshKey, onChanged }) {
+function Encaixotar({ user, params, refreshKey, onChanged }) {
   const [abertas, setAbertas] = useState(null);   // caixas ABERTAS
   const [caixa, setCaixa] = useState(null);        // caixa ativa
   const [itens, setItens] = useState([]);          // itens da caixa ativa
@@ -612,7 +612,19 @@ function Encaixotar({ user, refreshKey, onChanged }) {
             </div>
             <button onClick={() => { setCaixa(null); setItens([]); }} className="text-xs text-gray-300 bg-gray-800 rounded-lg px-2.5 py-1.5">Trocar</button>
           </div>
-          <p className="text-3xl font-bold mt-2">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
+          <div className="flex items-end justify-between mt-2">
+            <p className="text-3xl font-bold">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
+            {(() => {
+              const { total, semPreco } = estimarValorCaixa(itens, params);
+              return (
+                <div className="text-right">
+                  <p className="text-xs text-gray-400 leading-none">valor estimado</p>
+                  <p className="text-xl font-bold text-emerald-400">~{fmtBRL(total)}</p>
+                  {semPreco > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPreco} sem preço</p>}
+                </div>
+              );
+            })()}
+          </div>
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); processarCodigo(scanInput); }} className="flex gap-2">
@@ -649,7 +661,12 @@ function Encaixotar({ user, refreshKey, onChanged }) {
               <div key={it.sku} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3">
                 <Miniatura url={fotos[it.sku]} />
                 <div className="flex-1 min-w-0">
-                  <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                    {estimarValorVenda(it, params) != null && (
+                      <span className="text-xs font-semibold text-emerald-600 flex-shrink-0">~{fmtBRL(estimarValorVenda(it, params))}</span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-600 truncate">{it.produto}</p>
                   <IdentLinha it={it} />
                 </div>

@@ -155,6 +155,24 @@ function withDestinoCanal(classe, motivo) {
   return { classe, motivo, destino, canal: CLASSE_CANAL[classe] || null };
 }
 
+// Valor de venda estimado de um item: preço-alvo (ideal) → sugerido → referência.
+export function estimarValorVenda(it, params) {
+  return num(it?.preco_ideal) ?? num(it?.preco_sugerido) ?? valorReferencia(it, params);
+}
+
+// Soma o valor de venda estimado de uma lista de itens (ex.: conteúdo de uma caixa).
+// Retorna { total, semPreco, count } — semPreco conta itens sem nenhum preço de referência.
+export function estimarValorCaixa(itens, params) {
+  let total = 0, semPreco = 0;
+  const lista = itens || [];
+  for (const it of lista) {
+    const v = estimarValorVenda(it, params);
+    if (v != null) total += v;
+    else semPreco++;
+  }
+  return { total, semPreco, count: lista.length };
+}
+
 // Classe automática para itens SEM triagem (ex.: parados em "A catalogar").
 // Diferente de classificarItem (condição/volume): aqui o sinal é categoria → valor → C,
 // e NUNCA retorna vazio — todo item recebe ao menos a classe padrão "C".

@@ -169,9 +169,8 @@ function CompactBox({ label }) {
         <div>Destino: <b>{label.destino}</b></div>
         {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
-      <div style={{ fontSize: "6pt", marginTop: mm(1), lineHeight: 1.2 }}>
-        <b>SKUs:</b>
-        <div style={{ wordBreak: "break-all" }}>{label.skus.join(", ")}</div>
+      <div style={{ fontSize: "6pt", marginTop: mm(1.2), textAlign: "center", fontWeight: 700 }}>
+        Escaneie o QR para ver o conteúdo
       </div>
     </>
   );
@@ -237,9 +236,8 @@ function FullBox({ label }) {
         <div>Local: <b>{label.local_fisico}</b> · Destino: <b>{label.destino}</b></div>
         {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
-      <div style={{ fontSize: "7pt", marginTop: mm(1), lineHeight: 1.25 }}>
-        <b>Conteúdo (SKUs):</b>
-        <div style={{ wordBreak: "break-all" }}>{label.skus.join(", ")}</div>
+      <div style={{ fontSize: "7.5pt", marginTop: mm(1.4), fontWeight: 700 }}>
+        Escaneie o QR para ver o conteúdo da {label.tipo === "MALA" ? "mala" : "caixa"}.
       </div>
     </>
   );

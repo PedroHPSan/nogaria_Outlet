@@ -106,6 +106,14 @@ export async function listarCaixas({ status } = {}) {
   return data || [];
 }
 
+// Busca uma caixa pelo código (ex.: ao escanear o QR da etiqueta). null se não existir.
+export async function buscarCaixa(codigo) {
+  const cod = String(codigo || "").trim().toUpperCase();
+  if (!cod) return null;
+  const { data } = await supabase.from("caixas").select("*").eq("codigo", cod).maybeSingle();
+  return data || null;
+}
+
 // Itens encaixotados numa caixa.
 export async function itensDaCaixa(codigo) {
   const { data } = await supabase.from("itens").select("*").eq("caixa_id", codigo).order("sku");
