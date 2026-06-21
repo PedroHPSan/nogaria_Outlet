@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
@@ -208,6 +208,20 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     } finally {
       setIaLoading(false);
     }
+  };
+
+  // Link de busca no Mercado Livre a partir da descrição do produto (sem IA).
+  // Usa o título do anúncio; se vazio, cai para produto + marca + modelo.
+  const termoBuscaML = () => {
+    const t = (it.titulo_anuncio || "").trim();
+    if (t) return t;
+    return [it.produto, it.marca, it.modelo].filter(Boolean).join(" ").trim();
+  };
+  const buscarNoML = () => {
+    const termo = termoBuscaML();
+    if (!termo) return;
+    const url = `https://lista.mercadolivre.com.br/${encodeURIComponent(termo)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   // Lista de sugestões aplicáveis a partir do retorno da IA (campo a campo).
@@ -429,6 +443,14 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               Com foto
             </button>
           </div>
+          <button
+            onClick={buscarNoML}
+            disabled={!termoBuscaML()}
+            title={!termoBuscaML() ? "Preencha título, produto, marca ou modelo" : "Abre a busca no Mercado Livre (sem IA)"}
+            className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-amber-900 bg-amber-300 rounded-lg px-3 py-2.5 active:bg-amber-400 disabled:opacity-40">
+            <ExternalLink className="w-4 h-4" />
+            Buscar no Mercado Livre
+          </button>
           <p className="text-[11px] text-gray-400 mt-1.5">Preços são estimativa de mercado da IA (não cotação real). Revise antes de aplicar.</p>
 
           {iaErro && (
