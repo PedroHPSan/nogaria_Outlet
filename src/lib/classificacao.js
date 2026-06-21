@@ -55,6 +55,9 @@ const ehDescarte = (it) =>
   it?.status === "DESCARTE" || it?.estado === "Sucata";
 
 // Gatilhos de condição (triagem) que derrubam o item para a classe E.
+// NÃO considera "sem teste"/testado=false: itens ainda não testados não são
+// rebaixados — a classificação por teste só vale depois do teste (funciona=false,
+// que só é preenchido após testar, ainda conta como E).
 export function condicaoEhE(it) {
   if (!it) return false;
   if (ehDescarte(it)) return true;
@@ -62,7 +65,6 @@ export function condicaoEhE(it) {
   if (it.avaria === true) return true;
   if (it.funciona === false) return true;
   if (it.acessorios_ok === false) return true;
-  if (it.estado === "Usado sem teste" || it.testado === false) return true;
   return false;
 }
 
@@ -126,7 +128,7 @@ export function classificarItem(it, params) {
 
   // 1. Condição (triagem) → E
   if (condicaoEhE(it)) {
-    return withDestinoCanal("E", "Condição (avaria/incompleto/sem teste) → E");
+    return withDestinoCanal("E", "Condição (avaria/quebrado/incompleto) → E");
   }
 
   // 2. Volume → D
