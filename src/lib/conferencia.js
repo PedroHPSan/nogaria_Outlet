@@ -4,6 +4,7 @@
 import { supabase } from "./supabase";
 import { buildSku } from "./model";
 import { classeAutomatica } from "./classificacao";
+import { copiarFotos } from "./fotos";
 
 // Próximo sequencial dentro de um lote real (parseia o sufixo do maior SKU).
 async function proximoSeqLote(lote) {
@@ -136,7 +137,8 @@ const CAMPOS_COPIA = [
 
 // Desmembra um item em `total` unidades individuais (1 SKU cada). O item original é a
 // unidade 1; cria total-1 novos itens no mesmo lote copiando os dados do produto (sem
-// nº de série, fotos ou dados de venda). Registra auditoria. Retorna os novos itens.
+// nº de série nem dados de venda). As fotos do original são REPLICADAS para cada nova
+// unidade (cópia física no storage). Registra auditoria. Retorna os novos itens.
 export async function desmembrarItem(item, total, user) {
   const extras = Math.max(0, Math.floor(Number(total) || 0) - 1);
   if (!extras) return [];
@@ -161,11 +163,17 @@ export async function desmembrarItem(item, total, user) {
       break;
     }
     if (!inserido) throw lastErr || new Error("Falha ao criar unidade.");
+    // Replica as fotos do original para a nova unidade (best-effort: falha na cópia
+    // não derruba o desmembramento, pois o item já foi criado).
+    try { await copiarFotos(item.sku, inserido.sku); } catch { /* cópia best-effort */ }
     novos.push(inserido);
   }
 
+  // Registra os SKUs criados no detalhe para rastreabilidade (operações futuras).
   await supabase.from("eventos").insert({
-    sku: item.sku, acao: "desmembrado", detalhe: `+${extras} unidade(s)`, usuario: user.email,
+    sku: item.sku, acao: "desmembrado",
+    detalhe: `+${extras} unidade(s): ${novos.map((n) => n.sku).join(", ")}`,
+    usuario: user.email,
   });
   return novos;
 }

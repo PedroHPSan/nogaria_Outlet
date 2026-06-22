@@ -52,3 +52,28 @@ export async function enviarFoto(sku, file, ordem = 0) {
 export async function marcarFotoFeita(sku) {
   await supabase.from("itens").update({ foto_feita: true }).eq("sku", sku);
 }
+
+// Replica as fotos de um item para outro (usado ao desmembrar em várias unidades).
+// Faz CÓPIA FÍSICA no storage — cada unidade fica com seus próprios arquivos sob o
+// próprio SKU, pois apagar a foto de uma (apagarFoto) remove o objeto do storage e
+// não pode afetar as irmãs. Best-effort por foto: um erro não aborta as demais.
+// Marca foto_feita=true no destino se copiou ao menos uma. Retorna a quantidade.
+export async function copiarFotos(skuOrigem, skuDestino) {
+  if (!skuOrigem || !skuDestino || skuOrigem === skuDestino) return 0;
+  const { data: origem, error } = await supabase
+    .from("fotos").select("storage_path, ordem").eq("sku", skuOrigem).order("ordem");
+  if (error || !origem?.length) return 0;
+
+  let n = 0;
+  for (const f of origem) {
+    const ext = (f.storage_path.split(".").pop() || "jpg").toLowerCase();
+    const novoPath = `${skuDestino}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const { error: ce } = await supabase.storage.from(BUCKET).copy(f.storage_path, novoPath);
+    if (ce) continue; // best-effort: pula esta foto
+    const { error: ie } = await supabase.from("fotos").insert({ sku: skuDestino, storage_path: novoPath, ordem: f.ordem });
+    if (ie) { await supabase.storage.from(BUCKET).remove([novoPath]); continue; } // evita órfão
+    n++;
+  }
+  if (n) await supabase.from("itens").update({ foto_feita: true }).eq("sku", skuDestino);
+  return n;
+}
