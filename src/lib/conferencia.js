@@ -75,9 +75,17 @@ export async function definirCategoria(sku, grupo, user, classe) {
 // "status:<novo>" com detalhe "de <etapa anterior>" para aparecer no Registro.
 // Usado tanto no avanço/retorno individual quanto no mover-etapa em massa.
 export async function moverEtapa(sku, novoStatus, user, deStatusLabel) {
+  // Carimba as datas de pós-venda mesmo no avanço em massa (sem exigir os detalhes
+  // manuais aqui). entregue_em a cada entrega; vendido_em só onde ainda não houver
+  // (update guardado por .is(null), idempotente em re-movimentações).
+  const patch = { status: novoStatus, upd_by: user.email };
+  if (novoStatus === "ENTREGUE") patch.entregue_em = new Date().toISOString();
   const { error } = await supabase
-    .from("itens").update({ status: novoStatus, upd_by: user.email }).eq("sku", sku);
+    .from("itens").update(patch).eq("sku", sku);
   if (error) throw error;
+  if (novoStatus === "VENDIDO")
+    await supabase.from("itens")
+      .update({ vendido_em: new Date().toISOString() }).eq("sku", sku).is("vendido_em", null);
   await supabase.from("eventos").insert({
     sku, acao: "status:" + novoStatus,
     detalhe: deStatusLabel ? `de ${deStatusLabel}` : null,

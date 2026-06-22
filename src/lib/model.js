@@ -9,6 +9,7 @@ export const STATUS_FLOW = [
   { id: "PRONTO", label: "Pronto p/ anúncio", short: "Pronto", color: "bg-orange-300 text-orange-900" },
   { id: "ANUNCIADO", label: "Anunciado", short: "Anunciado", color: "bg-emerald-200 text-emerald-900" },
   { id: "VENDIDO", label: "Vendido", short: "Vendido", color: "bg-emerald-600 text-white" },
+  { id: "ENTREGUE", label: "Entregue", short: "Entregue", color: "bg-teal-700 text-white" },
 ];
 export const STATUS_DESCARTE = { id: "DESCARTE", label: "Descarte / Sucata", short: "Descarte", color: "bg-red-200 text-red-900" };
 export const ALL_STATUS = [...STATUS_FLOW, STATUS_DESCARTE];

@@ -281,12 +281,9 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
           </Campo>
         </div>
         <div className="rounded-xl border border-gray-200 p-2 space-y-1">
+          {/* Valor vendido + detalhe da venda ficam no card "Venda" do ItemDetail. */}
           <TriToggle label="Anúncio publicado?" value={item.anuncio_feito ? true : null}
             onChange={(v) => onChange?.({ anuncio_feito: v === true })} />
-          <Campo label="Valor vendido (R$)">
-            <input type="number" inputMode="decimal" className={inputCls} value={item.valor_vendido ?? ""}
-              onChange={(e) => onChange?.({ valor_vendido: e.target.value })} />
-          </Campo>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Campo label="Nº de série / IMEI">

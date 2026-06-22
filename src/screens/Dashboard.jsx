@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx, LOTE_SEM } from "../lib/model";
 import { pendenteMedida } from "../lib/medidas";
-import { Loader2, Ruler, ChevronRight, Package } from "lucide-react";
+import { carregarResultadoLotes } from "../lib/vendas";
+import { Loader2, Ruler, ChevronRight, Package, TrendingUp } from "lucide-react";
 
 export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
   const [stats, setStats] = useState(null);
+  const [resultado, setResultado] = useState(null); // vw_lote_resultado (lucro realizado por lote)
 
   useEffect(() => {
     (async () => {
@@ -36,10 +38,19 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
         const l = (byLote[it.lote] = byLote[it.lote] || { n: 0, done: 0, val: 0 });
         l.n++; l.val += Number(it.preco_sugerido) || 0; if (done) l.done++;
         valSug += Number(it.preco_sugerido) || 0;
-        if (it.status === "VENDIDO") valVendido += Number(it.valor_vendido) || 0;
+        if (it.status === "VENDIDO" || it.status === "ENTREGUE") valVendido += Number(it.valor_vendido) || 0;
       }
       setStats({ byStatus, byClasse, byLote, valSug, valVendido, pendMedida, semCaixa, total: data.length });
     })();
+  }, [refreshKey]);
+
+  // Resultado realizado por lote (view vw_lote_resultado). Silencioso se a view não existir.
+  useEffect(() => {
+    let cancel = false;
+    carregarResultadoLotes()
+      .then((rows) => { if (!cancel) setResultado(rows.filter((r) => Number(r.n_vendidos) > 0)); })
+      .catch(() => { if (!cancel) setResultado([]); });
+    return () => { cancel = true; };
   }, [refreshKey]);
 
   if (!stats) return <div className="py-20 text-center"><Loader2 className="w-7 h-7 animate-spin text-orange-500 mx-auto" /></div>;
@@ -69,6 +80,36 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
           <div className="bg-gray-800 rounded-xl p-3"><p className="text-gray-400 text-xs">Já vendido</p><p className="font-bold text-emerald-400">{fmtBRL(stats.valVendido)}</p></div>
         </div>
       </div>
+
+      {resultado && resultado.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5" /> Resultado por lote
+          </h3>
+          <div className="space-y-2.5">
+            {resultado.map((r) => {
+              const pct = Math.round(Number(r.pct_breakeven || 0) * 100);
+              const cobriu = pct >= 100;
+              return (
+                <button key={String(r.lote)} onClick={() => onGoFiltered({ lote: r.lote == null ? LOTE_SEM : String(r.lote) })}
+                  className="w-full text-left active:opacity-70">
+                  <div className="flex justify-between items-baseline text-sm">
+                    <span className="font-semibold text-gray-800">{r.lote == null ? "Sem lote" : `Lote ${r.lote}`}</span>
+                    <span className={`font-bold ${Number(r.lucro_realizado) < 0 ? "text-red-600" : "text-emerald-600"}`}>{fmtBRL(r.lucro_realizado)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${cobriu ? "bg-emerald-500" : "bg-orange-400"}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                    </div>
+                    <span className={`text-xs font-bold w-10 text-right ${cobriu ? "text-emerald-600" : "text-gray-500"}`}>{pct}%</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{fmtBRL(r.receita_bruta)} de {fmtBRL(r.custo_total)} pago · {r.n_vendidos} vendido(s)</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {stats.pendMedida > 0 && (
         <button onClick={() => onGoFiltered({ pendMedida: true })}
