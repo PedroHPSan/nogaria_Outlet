@@ -354,6 +354,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       // Campos para integrações (Amazon / ML / TikTok / Hiper)
       gtin: it.gtin?.trim() || null, marca: it.marca?.trim() || null, modelo: it.modelo?.trim() || null,
       voltagem: it.voltagem || null, cor: it.cor?.trim() || null, num_serie: it.num_serie?.trim() || null,
+      tamanho: it.tamanho?.trim() || null,
       comprimento_cm: it.comprimento_cm || null, largura_cm: it.largura_cm || null,
       altura_cm: it.altura_cm || null, peso_real_kg: it.peso_real_kg || null,
       medidas_fonte: it.medidas_fonte || null,
@@ -641,6 +642,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             </div>
           </Field>
           <Field label="Cor"><input className={inputCls} value={it.cor ?? ""} onChange={(e) => set({ cor: e.target.value })} placeholder="ex.: Preto" /></Field>
+          {/cal[çc]ado/i.test(it.grupo || "") && (
+            <Field label="Tamanho / numeração (opcional)">
+              <input className={inputCls} value={it.tamanho ?? ""} onChange={(e) => set({ tamanho: e.target.value })} placeholder="ex.: 42, 38 BR, M" />
+            </Field>
+          )}
         </div>
 
         {/* Dimensões & peso — pré-carregados, confirmar. Rastreia se foi medido ou só estimado. */}

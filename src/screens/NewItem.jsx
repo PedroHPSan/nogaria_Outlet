@@ -40,6 +40,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
   const [precoNovo, setPrecoNovo] = useState("");
   const [precoSug, setPrecoSug] = useState("");
   const [destino, setDestino] = useState("");
+  const [tamanho, setTamanho] = useState("");
   const [qtdUnidades, setQtdUnidades] = useState("1");
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
@@ -48,6 +49,8 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
 
   // Sugestão de categoria a partir do nome do produto (casa com pricing_grupo).
   const sugCat = useMemo(() => sugerirCategoria(produto, catList), [produto, catList]);
+  // Calçado → habilita o campo de numeração/tamanho (opcional).
+  const ehCalcado = /cal[çc]ado/i.test(grupo);
   // Ao escolher/sugerir categoria, preenche a classe da categoria se ainda vazia.
   const aplicarCategoria = (g) => {
     setGrupo(g);
@@ -115,6 +118,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
         preco_novo_est: precoNovo || null,
         preco_sugerido: precoSug || null,
         ...(destino ? { destino } : {}),
+        ...(ehCalcado && tamanho.trim() ? { tamanho: tamanho.trim() } : {}),
         quantidade: 1,
         upd_by: user.email,
       };
@@ -241,6 +245,12 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
               ))}
             </div>
           </Field>
+          {ehCalcado && (
+            <Field label="Tamanho / numeração (opcional)">
+              <input className={inputCls} value={tamanho} onChange={(e) => setTamanho(e.target.value)}
+                placeholder="ex.: 42, 38 BR, M" />
+            </Field>
+          )}
           <Field label="Quantidade de unidades">
             <input type="number" inputMode="numeric" min="1" className={inputCls} value={qtdUnidades}
               onChange={(e) => setQtdUnidades(e.target.value)} />
