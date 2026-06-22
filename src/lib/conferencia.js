@@ -65,11 +65,43 @@ export async function limparConferencia(sku) {
 
 // Define a categoria (grupo) de um item; opcionalmente preenche a classe quando
 // passada (usado na categorização em massa para preencher classe ainda vazia).
+// Propaga a categoria para as unidades-irmãs do desmembramento (best-effort).
 export async function definirCategoria(sku, grupo, user, classe) {
   const patch = { grupo: grupo || null, upd_by: user.email };
   if (classe) patch.classe = classe;
   const { error } = await supabase.from("itens").update(patch).eq("sku", sku);
   if (error) throw error;
+  if (grupo) { try { await propagarCategoriaIrmaos(sku, user); } catch { /* best-effort */ } }
+}
+
+// Campos de identidade que definem as unidades-irmãs de um desmembramento (espelha
+// CAMPOS_COPIA + ID_FIELDS do backfill de fotos): mesmo lote, mesma identidade de
+// produto e sem nº de série (assinatura de cópia de split).
+const IRMAOS_ID = ["produto", "marca", "modelo", "gtin", "cor", "estado"];
+
+// Propaga a categoria (grupo) e a classe de um item já categorizado para suas
+// unidades-irmãs do desmembramento que ainda estão SEM categoria (grupo nulo). Só
+// preenche lacunas — nunca sobrescreve uma categoria definida de propósito. Retorna
+// o nº de irmãs atualizadas. Resolve o caso de desmembrar ANTES de categorizar.
+export async function propagarCategoriaIrmaos(sku, user) {
+  const sel = `sku, lote, num_serie, grupo, classe, ${IRMAOS_ID.join(", ")}`;
+  const { data: orig } = await supabase.from("itens").select(sel).eq("sku", sku).maybeSingle();
+  if (!orig || orig.lote == null || !orig.grupo) return 0;
+  const { data: cands } = await supabase
+    .from("itens").select(sel)
+    .eq("lote", orig.lote).is("grupo", null).is("num_serie", null).neq("sku", orig.sku);
+  const igual = (a, b) => (a ?? null) === (b ?? null);
+  const skus = (cands || [])
+    .filter((c) => IRMAOS_ID.every((k) => igual(c[k], orig[k])))
+    .map((c) => c.sku);
+  if (!skus.length) return 0;
+  const patch = { grupo: orig.grupo, upd_by: user.email };
+  if (orig.classe) patch.classe = orig.classe;
+  for (let i = 0; i < skus.length; i += 200) {
+    const { error } = await supabase.from("itens").update(patch).in("sku", skus.slice(i, i + 200));
+    if (error) throw error;
+  }
+  return skus.length;
 }
 
 // Move um item para outra etapa (status) com rastreabilidade. Registra um evento

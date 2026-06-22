@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
-import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste } from "../lib/conferencia";
+import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -382,6 +382,10 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     };
     const { data, error } = await supabase.from("itens").update(patch).eq("sku", it.sku).select().single();
     if (error) { alert("Erro ao salvar: " + error.message); return; }
+    // Categoria recém-definida → herda nas unidades-irmãs do desmembramento (best-effort).
+    if (patch.grupo && patch.grupo !== item.grupo) {
+      try { await propagarCategoriaIrmaos(it.sku, user); } catch { /* best-effort */ }
+    }
     if (novoStatus) {
       await supabase.from("eventos").insert({ sku: it.sku, acao: "status:" + novoStatus, usuario: user.email });
       setIt((p) => ({ ...p, status: novoStatus }));
