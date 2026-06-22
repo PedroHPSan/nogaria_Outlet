@@ -8,10 +8,11 @@ import NewItem from "./screens/NewItem";
 import ExportScreen from "./screens/ExportScreen";
 import ConferenciaScreen from "./screens/ConferenciaScreen";
 import VendasScreen from "./screens/VendasScreen";
+import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixaQrScreen from "./screens/CaixaQrScreen";
 
@@ -137,6 +138,7 @@ export default function App() {
       {tab === "vendas" && (
         <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} />
       )}
+      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} />}
       {tab === "exportar" && <ExportScreen lotes={lotes} refreshKey={refreshKey} />}
       {tab === "registro" && (
         <div className="px-4 pt-4 pb-24">
@@ -157,17 +159,18 @@ export default function App() {
       )}
 
       <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-200">
-        <div className="max-w-lg mx-auto grid grid-cols-6">
+        <div className="max-w-lg mx-auto grid grid-cols-7">
           {[
             { id: "painel", icon: BarChart3, t: "Painel" },
             { id: "itens", icon: ClipboardList, t: "Itens" },
             { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
             { id: "vendas", icon: Receipt, t: "Vendas" },
+            { id: "portfolio", icon: Footprints, t: "Portfólio" },
             { id: "exportar", icon: Upload, t: "Exportar" },
             { id: "registro", icon: History, t: "Registro" },
           ].map((n) => (
             <button key={n.id} onClick={() => { if (n.id !== "itens") setPreFilter(null); setTab(n.id); }}
-              className={`py-2.5 flex flex-col items-center gap-0.5 text-xs font-semibold ${tab === n.id ? "text-orange-600" : "text-gray-400"}`}>
+              className={`py-2.5 flex flex-col items-center gap-0.5 text-[11px] font-semibold ${tab === n.id ? "text-orange-600" : "text-gray-400"}`}>
               <n.icon className="w-5 h-5" /> {n.t}
             </button>
           ))}
