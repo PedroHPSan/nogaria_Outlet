@@ -76,7 +76,7 @@ export function agruparPorTamanho(itens) {
 
 // ───────────────────────── Impressão / PDF ─────────────────────────
 
-const escapeHtml = (s) =>
+export const escapeHtml = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // Monta o HTML do catálogo (documento A4 autônomo), agrupado por tamanho.

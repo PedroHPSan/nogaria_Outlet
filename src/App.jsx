@@ -138,7 +138,7 @@ export default function App() {
       {tab === "vendas" && (
         <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} />
       )}
-      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} />}
+      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} params={params} lotes={lotes} />}
       {tab === "exportar" && <ExportScreen lotes={lotes} refreshKey={refreshKey} />}
       {tab === "registro" && (
         <div className="px-4 pt-4 pb-24">
@@ -165,7 +165,7 @@ export default function App() {
             { id: "itens", icon: ClipboardList, t: "Itens" },
             { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
             { id: "vendas", icon: Receipt, t: "Vendas" },
-            { id: "portfolio", icon: Footprints, t: "Portfólio" },
+            { id: "portfolio", icon: Footprints, t: "Catálogo" },
             { id: "exportar", icon: Upload, t: "Exportar" },
             { id: "registro", icon: History, t: "Registro" },
           ].map((n) => (
