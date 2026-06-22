@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg } from "../lib/model";
+import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg, CLASSE_STYLE } from "../lib/model";
 import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa, contarSemClasse, classificarSemClasse } from "../lib/conferencia";
 import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
@@ -15,8 +15,8 @@ import CategoriaPicker from "../components/CategoriaPicker";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
-  PackageCheck, RotateCcw, Camera, ChevronRight, Tags, Sparkles, ArrowLeftRight,
-  Package, Printer, FileDown, Lock, Plus, Trash2,
+  PackageCheck, RotateCcw, Camera, ChevronRight, ChevronDown, Tags, Sparkles, ArrowLeftRight,
+  Package, Printer, FileDown, Lock, Plus, Trash2, ArrowLeft,
 } from "lucide-react";
 
 const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -513,6 +513,7 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
 // ───────────────────────── Encaixotar (2ª etapa) ─────────────────────────
 function Encaixotar({ user, params, refreshKey, onChanged }) {
   const [abertas, setAbertas] = useState(null);   // caixas ABERTAS
+  const [fechadas, setFechadas] = useState(null);  // caixas FECHADAS (consulta)
   const [caixa, setCaixa] = useState(null);        // caixa ativa
   const [itens, setItens] = useState([]);          // itens da caixa ativa
   const [nova, setNova] = useState(false);         // form "nova caixa"
@@ -526,7 +527,12 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
   const [printLabels, setPrintLabels] = useState(null);
 
   const loadAbertas = useCallback(async () => {
-    setAbertas(await listarCaixas({ status: CAIXA_STATUS.ABERTA }));
+    const [ab, fe] = await Promise.all([
+      listarCaixas({ status: CAIXA_STATUS.ABERTA }),
+      listarCaixas({ status: CAIXA_STATUS.FECHADA }),
+    ]);
+    setAbertas(ab);
+    setFechadas(fe);
   }, []);
   useEffect(() => { loadAbertas(); }, [loadAbertas, refreshKey]);
 
@@ -598,8 +604,13 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
   // ── Caixa ativa ────────────────────────────────────────────────
   if (caixa) {
     const isMala = caixa.tipo === CAIXA_TIPO.MALA;
+    const voltar = () => { setCaixa(null); setItens([]); setMsg(null); };
     return (
       <div className="px-4 pt-4 space-y-3">
+        <button onClick={voltar}
+          className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 -mb-1 active:text-gray-900">
+          <ArrowLeft className="w-4 h-4" /> Voltar para caixas
+        </button>
         <div className="bg-gray-900 rounded-2xl p-4 text-white">
           <div className="flex items-start justify-between">
             <div className="min-w-0">
@@ -610,7 +621,9 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
               </div>
               <p className="text-xs text-gray-400 mt-1">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
             </div>
-            <button onClick={() => { setCaixa(null); setItens([]); }} className="text-xs text-gray-300 bg-gray-800 rounded-lg px-2.5 py-1.5">Trocar</button>
+            <button onClick={voltar} className="flex items-center gap-1 text-xs text-gray-300 bg-gray-800 rounded-lg px-2.5 py-1.5 active:bg-gray-700">
+              <ArrowLeft className="w-3.5 h-3.5" /> Trocar
+            </button>
           </div>
           <div className="flex items-end justify-between mt-2">
             <p className="text-3xl font-bold">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
@@ -757,6 +770,75 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
             ))}
           </div>
         </>
+      )}
+
+      {/* Caixas fechadas: consulta de conteúdo e destino (somente leitura). */}
+      {fechadas && fechadas.length > 0 && (
+        <>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-2">Caixas fechadas ({fechadas.length})</p>
+          <div className="space-y-1.5">
+            {fechadas.map((c) => <CaixaFechadaItem key={c.codigo} caixa={c} params={params} />)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Linha de caixa FECHADA: expande para mostrar o conteúdo (carregado sob demanda),
+// com peso/valor estimados e a lista de itens. Destino/local já ficam visíveis na linha.
+function CaixaFechadaItem({ caixa, params }) {
+  const [aberta, setAberta] = useState(false);
+  const [itens, setItens] = useState(null);
+
+  const toggle = async () => {
+    const next = !aberta;
+    setAberta(next);
+    if (next && itens === null) setItens(await itensDaCaixa(caixa.codigo));
+  };
+
+  const { total } = itens ? estimarValorCaixa(itens, params) : { total: 0 };
+  const { pesoKg } = itens ? estimarPesoCaixa(itens, params) : { pesoKg: 0 };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <button onClick={toggle} className="w-full text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+        <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center flex-shrink-0">
+          {caixa.tipo === CAIXA_TIPO.MALA ? <Inbox className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-bold text-gray-900">{caixa.codigo}</span>
+            <span className="text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Fechada</span>
+          </div>
+          <p className="text-xs text-gray-500 truncate">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`} />
+      </button>
+      {aberta && (
+        <div className="border-t border-gray-100 px-3 py-2.5 bg-gray-50">
+          {itens === null ? (
+            <div className="flex justify-center py-3"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+          ) : !itens.length ? (
+            <p className="text-xs text-gray-400 text-center py-2">Caixa vazia.</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
+                <span><b>{itens.length}</b> item(ns)</span>
+                <span>peso <b>{pesoKg > 0 ? `~${fmtKg(pesoKg)}` : "—"}</b> · valor <b className="text-emerald-600">~{fmtBRL(total)}</b></span>
+              </div>
+              <div className="space-y-1">
+                {itens.map((it) => (
+                  <div key={it.sku} className="flex items-center gap-2 text-xs">
+                    <span className="font-mono font-bold text-gray-800">{it.sku}</span>
+                    {it.classe && <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-400 text-white"}`}>{it.classe}</span>}
+                    <span className="text-gray-500 truncate flex-1">{it.produto}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
