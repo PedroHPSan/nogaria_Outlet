@@ -38,6 +38,33 @@ export async function marcarEntregue(sku, user) {
   } catch { /* auditoria best-effort */ }
 }
 
+// Vendas agregadas por método (canal_venda). Inclui VENDIDO e ENTREGUE. Agrega no
+// cliente (sem view): canais reais de venda são livres e poucos. "Não informado"
+// agrupa vendas sem canal preenchido.
+export async function carregarVendasPorCanal() {
+  const PAGE = 1000;
+  let rows = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("itens")
+      .select("canal_venda, valor_vendido")
+      .in("status", ["VENDIDO", "ENTREGUE"])
+      .order("sku")
+      .range(from, from + PAGE - 1);
+    if (error || !data) break;
+    rows = rows.concat(data);
+    if (data.length < PAGE) break;
+  }
+  const map = {};
+  for (const r of rows) {
+    const k = r.canal_venda || "Não informado";
+    const m = (map[k] = map[k] || { canal: k, n: 0, total: 0 });
+    m.n++;
+    m.total += Number(r.valor_vendido) || 0;
+  }
+  return Object.values(map).sort((a, b) => b.total - a.total);
+}
+
 // Lê o resultado realizado por lote (view vw_lote_resultado). Pagina com .range()
 // (padrão do Dashboard) para não travar em 1.000 linhas caso haja muitos lotes.
 export async function carregarResultadoLotes() {

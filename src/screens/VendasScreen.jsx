@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMeta, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
-import { carregarResultadoLotes, marcarEntregue } from "../lib/vendas";
-import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package } from "lucide-react";
+import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
+import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store } from "lucide-react";
 
 const PAGE = 50;
 
@@ -11,6 +11,7 @@ const fmtData = (ts) => (ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2
 
 export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onGoFiltered }) {
   const [resultado, setResultado] = useState(null); // linhas de vw_lote_resultado
+  const [porCanal, setPorCanal] = useState(null); // vendas agregadas por método (canal_venda)
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(0);
@@ -29,6 +30,15 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
     carregarResultadoLotes()
       .then((rows) => { if (!cancel) setResultado(rows.filter((r) => r.n_itens > 0)); })
       .catch(() => { if (!cancel) setResultado([]); });
+    return () => { cancel = true; };
+  }, [refreshKey]);
+
+  // Vendas por método de venda (canal_venda) — agregação no cliente.
+  useEffect(() => {
+    let cancel = false;
+    carregarVendasPorCanal()
+      .then((rows) => { if (!cancel) setPorCanal(rows); })
+      .catch(() => { if (!cancel) setPorCanal([]); });
     return () => { cancel = true; };
   }, [refreshKey]);
 
@@ -139,6 +149,31 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
           </div>
         )}
       </div>
+
+      {/* Por método de venda */}
+      {porCanal && porCanal.length > 0 && (() => {
+        const maxTotal = Math.max(...porCanal.map((c) => c.total), 1);
+        return (
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1.5">
+              <Store className="w-3.5 h-3.5" /> Por método de venda
+            </h3>
+            <div className="space-y-2.5">
+              {porCanal.map((c) => (
+                <div key={c.canal} className="w-full">
+                  <div className="flex justify-between items-baseline text-sm">
+                    <span className="font-semibold text-gray-800">{c.canal}</span>
+                    <span className="text-gray-500">{fmtBRL(c.total)} · {c.n} venda{c.n === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.max(4, (c.total / maxTotal) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Vendas / a entregar */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4">

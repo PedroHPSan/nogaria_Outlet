@@ -28,6 +28,12 @@ export const CLASSE_STYLE = {
 export const ESTADOS = ["Novo", "Embalagem aberta/avariada", "Usado", "Avariado", "Usado sem teste"];
 export const DESTINOS = ["Belém", "SP storage", "Venda local SP", "A definir"];
 
+// Canais REAIS de venda (≠ CANAIS de export.js, que dirige o diagnóstico de anúncio).
+export const CANAIS_VENDA = [
+  "Mercado Livre", "Amazon", "TikTok Shop", "Hiper",
+  "Parceiro", "B2C / Venda direta", "Grupo WhatsApp",
+];
+
 // SKU = NOG-<lote3|SL>-<seq3>. Itens criados sem lote usam o prefixo SL (lote=null);
 // ao definir o lote depois, o SKU é regenerado para NOG-<lote3>-<seq3>.
 export const PREFIXO_SL = "SL";
