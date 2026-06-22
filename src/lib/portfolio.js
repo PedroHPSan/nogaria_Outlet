@@ -150,6 +150,32 @@ export function gerarPortfolioHTML(grupos, { mostrarPreco = true, fotos = {}, ti
   );
 }
 
+// Converte um mapa { sku: signedUrl } em { sku: dataURI base64 }. A impressão/PDF
+// não renderiza imagens remotas de forma confiável (carregam tarde no diálogo),
+// então embutimos o binário. Best-effort: foto que falhar é simplesmente omitida.
+export async function fotosComoDataURI(urlPorSku) {
+  const out = {};
+  await Promise.all(
+    Object.entries(urlPorSku || {}).map(async ([sku, url]) => {
+      if (!url) return;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) return;
+        const blob = await resp.blob();
+        out[sku] = await new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result);
+          fr.onerror = rej;
+          fr.readAsDataURL(blob);
+        });
+      } catch {
+        /* ignora esta foto */
+      }
+    })
+  );
+  return out;
+}
+
 function waitImage(img) {
   if (img.complete && img.naturalWidth > 0) return Promise.resolve();
   return new Promise((resolve) => {

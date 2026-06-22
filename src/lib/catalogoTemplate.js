@@ -139,7 +139,7 @@ function renderCard(card, { comFoto, mostrarPreco, fotos }) {
   const pmodel = modeloLinha(it);
   const spec = specCurta(it);
   const foto = comFoto ? fotos?.[it.sku] : null;
-  return `<div class="card${comFoto ? " foto" : ""}">
+  return `<div class="card${foto ? " foto" : ""}">
     <div class="stripe"></div>
     <div class="cbody">
       ${foto ? `<img class="photo" src="${escapeHtml(foto)}" alt="">` : ""}

@@ -6,7 +6,7 @@ import {
   listarItensCatalogo, dedupCatalogo, agruparCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE,
 } from "../lib/catalogo";
 import { gerarCatalogoHTML } from "../lib/catalogoTemplate";
-import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
+import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel, fotosComoDataURI } from "../lib/portfolio";
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
 import { listarCaixas } from "../lib/caixas";
@@ -121,21 +121,29 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
 
   const total = itens?.length || 0;
 
-  const gerar = () => {
+  const gerar = async () => {
     if (!total) return;
     setGerando(true);
     try {
       const cards = dedupCatalogo(itens);
       const secoes = agruparCatalogo(cards, agrupar);
       const cats = [...new Set(itens.map((i) => (i.grupo || "").trim()).filter(Boolean))];
+      // As fotos da galeria são signed URLs remotas; embutimos em base64 para a
+      // impressão/PDF (do contrário não aparecem no documento gerado).
+      let fotosPdf = {};
+      if (comFoto) {
+        const reps = {};
+        for (const c of cards) if (fotos[c.rep.sku]) reps[c.rep.sku] = fotos[c.rep.sku];
+        fotosPdf = await fotosComoDataURI(reps);
+      }
       const html = gerarCatalogoHTML(secoes, {
         titulo: titulo.trim() || "Catálogo de Produtos",
         subtitulo: cats.join(" · "),
-        edicao, parcial, comFoto, mostrarPreco, fotos,
+        edicao, parcial, comFoto, mostrarPreco, fotos: fotosPdf,
       });
       imprimirPortfolio(html);
     } finally {
-      setTimeout(() => setGerando(false), 1200);
+      setGerando(false);
     }
   };
 
