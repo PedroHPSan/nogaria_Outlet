@@ -3,7 +3,10 @@ import { X, Printer, FileDown, Loader2, AlertTriangle } from "lucide-react";
 import { MEDIA_PRESETS, DEFAULT_MEDIA_ID, getPreset, attachQrCodes } from "../../lib/labels";
 import { generateLabelsPdf } from "../../lib/labelPdf";
 import { printLabels } from "../../lib/labelPrint";
-import { registrarImpressao, buscarViasImpressao, aplicarViasLocal } from "../../lib/printLog";
+import {
+  registrarImpressao, buscarViasImpressao, buscarViasImpressaoCaixa,
+  aplicarViasLocal, isItemLabel, isBoxLabel,
+} from "../../lib/printLog";
 import LabelCard from "./LabelCard";
 
 const STORAGE_KEY = "nogaria_label_preset";
@@ -25,18 +28,15 @@ export default function LabelPrint({ labels, user, onPrinted, onClose }) {
     () => localStorage.getItem(STORAGE_KEY) || DEFAULT_MEDIA_ID
   );
   const [withQr, setWithQr] = useState(null);
-  const [vias, setVias] = useState({}); // sku -> { vias, ultima }
+  const [vias, setVias] = useState({}); // sku/código -> { vias, ultima }
 
   const preset = useMemo(() => getPreset(presetId), [presetId]);
 
-  // SKUs de itens reais (etiquetas de produto/quarentena; caixa/mala não contam).
-  const itemSkus = useMemo(
-    () =>
-      (withQr || [])
-        .filter((l) => l.sku && l.tipo !== "CAIXA" && l.tipo !== "MALA")
-        .map((l) => l.sku),
-    [withQr]
-  );
+  // Ids no controle de vias: SKUs de itens (produto/quarentena) e códigos de
+  // caixa/mala. Cada tipo é contado com sua própria ação no histórico.
+  const itemSkus = useMemo(() => (withQr || []).filter(isItemLabel).map((l) => l.sku), [withQr]);
+  const caixaCods = useMemo(() => (withQr || []).filter(isBoxLabel).map((l) => l.sku), [withQr]);
+  const todosIds = useMemo(() => [...itemSkus, ...caixaCods], [itemSkus, caixaCods]);
 
   // Gera os QRs uma vez (não dependem do rolo).
   useEffect(() => {
@@ -47,15 +47,18 @@ export default function LabelPrint({ labels, user, onPrinted, onClose }) {
     };
   }, [labels]);
 
-  // Carrega o nº de vias já impressas dos itens (aviso de reimpressão).
+  // Carrega o nº de vias já impressas (aviso de reimpressão) de itens e caixas.
   useEffect(() => {
-    if (!itemSkus.length) return;
+    if (!itemSkus.length && !caixaCods.length) return;
     let alive = true;
-    buscarViasImpressao(itemSkus).then((m) => alive && setVias(m));
+    Promise.all([
+      buscarViasImpressao(itemSkus),
+      buscarViasImpressaoCaixa(caixaCods),
+    ]).then(([itens, caixas]) => alive && setVias({ ...itens, ...caixas }));
     return () => {
       alive = false;
     };
-  }, [itemSkus]);
+  }, [itemSkus, caixaCods]);
 
   // Lembra o último rolo escolhido.
   useEffect(() => {
@@ -65,8 +68,8 @@ export default function LabelPrint({ labels, user, onPrinted, onClose }) {
   const ready = withQr != null;
   const count = labels?.length || 0;
 
-  // Itens que já têm pelo menos uma via impressa.
-  const jaImpressos = itemSkus.filter((s) => vias[s]?.vias > 0);
+  // Etiquetas (itens e/ou caixas) que já têm pelo menos uma via impressa.
+  const jaImpressos = todosIds.filter((s) => vias[s]?.vias > 0);
   const totalVias = jaImpressos.reduce((a, s) => a + (vias[s]?.vias || 0), 0);
   const ultima = jaImpressos
     .map((s) => vias[s]?.ultima)
@@ -79,11 +82,10 @@ export default function LabelPrint({ labels, user, onPrinted, onClose }) {
   const imprimir = async () => {
     if (!withQr) return;
     printLabels(withQr, preset);
-    const { skus } = await registrarImpressao(withQr, user, preset);
-    if (skus.length) {
-      setVias((prev) => aplicarViasLocal(prev, skus));
-      onPrinted?.(skus);
-    }
+    const { skus, caixas } = await registrarImpressao(withQr, user, preset);
+    const todos = [...(skus || []), ...(caixas || [])];
+    if (todos.length) setVias((prev) => aplicarViasLocal(prev, todos));
+    if (skus?.length) onPrinted?.(skus);
   };
   const baixarPdf = () => withQr && generateLabelsPdf(withQr, preset);
 
@@ -126,8 +128,8 @@ export default function LabelPrint({ labels, user, onPrinted, onClose }) {
             <p className="text-xs text-amber-800 leading-snug">
               <b>
                 {jaImpressos.length === 1
-                  ? "1 item já foi impresso"
-                  : `${jaImpressos.length} de ${itemSkus.length} itens já foram impressos`}
+                  ? "1 etiqueta já foi impressa"
+                  : `${jaImpressos.length} de ${todosIds.length} etiquetas já foram impressas`}
               </b>{" "}
               ({totalVias} {totalVias === 1 ? "via" : "vias"} no total
               {ultima ? ` · última ${fmtData(ultima)}` : ""}). Imprimir novamente

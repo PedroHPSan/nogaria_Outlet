@@ -9,6 +9,7 @@ import {
   fecharCaixa, listarCaixas, itensDaCaixa,
 } from "../lib/caixas";
 import { buildBoxLabel } from "../lib/labels";
+import { buscarViasImpressaoCaixa } from "../lib/printLog";
 import { primeirasFotos } from "../lib/fotos";
 import { sugerirCategoria } from "../lib/categorizar";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -777,7 +778,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
         <>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-2">Caixas fechadas ({fechadas.length})</p>
           <div className="space-y-1.5">
-            {fechadas.map((c) => <CaixaFechadaItem key={c.codigo} caixa={c} params={params} />)}
+            {fechadas.map((c) => <CaixaFechadaItem key={c.codigo} caixa={c} params={params} user={user} />)}
           </div>
         </>
       )}
@@ -786,15 +787,44 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
 }
 
 // Linha de caixa FECHADA: expande para mostrar o conteúdo (carregado sob demanda),
-// com peso/valor estimados e a lista de itens. Destino/local já ficam visíveis na linha.
-function CaixaFechadaItem({ caixa, params }) {
+// com peso/valor estimados, a lista de itens e a impressão da etiqueta (mesmo
+// controle de vias dos demais tíquetes). Destino/local já ficam visíveis na linha.
+function CaixaFechadaItem({ caixa, params, user }) {
   const [aberta, setAberta] = useState(false);
   const [itens, setItens] = useState(null);
+  const [printLabels, setPrintLabels] = useState(null);
+  const [vias, setVias] = useState(null); // { vias, ultima } a partir do histórico
+
+  // Carrega o nº de vias já impressas da etiqueta desta caixa.
+  const carregarVias = useCallback(async () => {
+    const m = await buscarViasImpressaoCaixa([caixa.codigo]);
+    setVias(m[caixa.codigo] || { vias: 0, ultima: null });
+  }, [caixa.codigo]);
+  useEffect(() => { carregarVias(); }, [carregarVias]);
+
+  // Garante que os itens estejam carregados (usado ao expandir e ao imprimir).
+  const garantirItens = async () => {
+    if (itens !== null) return itens;
+    const data = await itensDaCaixa(caixa.codigo);
+    setItens(data);
+    return data;
+  };
 
   const toggle = async () => {
     const next = !aberta;
     setAberta(next);
-    if (next && itens === null) setItens(await itensDaCaixa(caixa.codigo));
+    if (next) await garantirItens();
+  };
+
+  const imprimir = async (e) => {
+    e.stopPropagation();
+    const data = await garantirItens();
+    setPrintLabels([buildBoxLabel(caixa, data, params)]);
+  };
+
+  const fecharImpressao = async () => {
+    setPrintLabels(null);
+    await carregarVias(); // reflete a nova via impressa
   };
 
   const { total } = itens ? estimarValorCaixa(itens, params) : { total: 0 };
@@ -810,35 +840,53 @@ function CaixaFechadaItem({ caixa, params }) {
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-bold text-gray-900">{caixa.codigo}</span>
             <span className="text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Fechada</span>
+            {vias?.vias > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] font-bold text-gray-500" title={`Etiqueta impressa · ${vias.vias} via(s)`}>
+                <Printer className="w-3 h-3" /> {vias.vias}
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-500 truncate">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
         </div>
         <ChevronDown className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`} />
       </button>
       {aberta && (
-        <div className="border-t border-gray-100 px-3 py-2.5 bg-gray-50">
+        <div className="border-t border-gray-100 px-3 py-2.5 bg-gray-50 space-y-2.5">
           {itens === null ? (
             <div className="flex justify-center py-3"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
-          ) : !itens.length ? (
-            <p className="text-xs text-gray-400 text-center py-2">Caixa vazia.</p>
           ) : (
             <>
-              <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
-                <span><b>{itens.length}</b> item(ns)</span>
-                <span>peso <b>{pesoKg > 0 ? `~${fmtKg(pesoKg)}` : "—"}</b> · valor <b className="text-emerald-600">~{fmtBRL(total)}</b></span>
-              </div>
-              <div className="space-y-1">
-                {itens.map((it) => (
-                  <div key={it.sku} className="flex items-center gap-2 text-xs">
-                    <span className="font-mono font-bold text-gray-800">{it.sku}</span>
-                    {it.classe && <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-400 text-white"}`}>{it.classe}</span>}
-                    <span className="text-gray-500 truncate flex-1">{it.produto}</span>
+              {!itens.length ? (
+                <p className="text-xs text-gray-400 text-center py-2">Caixa vazia.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span><b>{itens.length}</b> item(ns)</span>
+                    <span>peso <b>{pesoKg > 0 ? `~${fmtKg(pesoKg)}` : "—"}</b> · valor <b className="text-emerald-600">~{fmtBRL(total)}</b></span>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-1">
+                    {itens.map((it) => (
+                      <div key={it.sku} className="flex items-center gap-2 text-xs">
+                        <span className="font-mono font-bold text-gray-800">{it.sku}</span>
+                        {it.classe && <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-400 text-white"}`}>{it.classe}</span>}
+                        <span className="text-gray-500 truncate flex-1">{it.produto}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              <button onClick={imprimir}
+                className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold border border-gray-300 text-gray-700 bg-white rounded-xl py-2.5 active:bg-gray-100">
+                <Printer className="w-4 h-4" /> Imprimir etiqueta{vias?.vias > 0 ? ` · ${vias.vias + 1}ª via` : ""}
+              </button>
             </>
           )}
         </div>
+      )}
+      {printLabels && (
+        <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <LazyLabelPrint labels={printLabels} user={user} onClose={fecharImpressao} />
+        </Suspense>
       )}
     </div>
   );
