@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL } from "../lib/model";
+import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
   ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt
 } from "lucide-react";
@@ -8,7 +8,7 @@ import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
 import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
-import { diagnosticarPorCanal, CANAIS } from "../lib/export";
+import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -398,6 +398,14 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
 
   const fechar = async () => { if (dirty.current) await salvar(null); onClose(); };
 
+  // Venda direta (atalho): conclui a venda a partir de qualquer etapa (ex.: direto da
+  // triagem), sem passar por Fotografado/Precificado/Anunciado. Reusa salvar("VENDIDO"),
+  // que grava os campos de venda, carimba vendido_em e registra o evento.
+  const venderDireto = () => {
+    if (!it.valor_vendido) { alert("Informe o valor vendido no card Venda antes de concluir."); return; }
+    salvar("VENDIDO");
+  };
+
   // Desmembra o item em N unidades individuais (1 SKU cada). Salva antes para que
   // as cópias herdem os dados atuais.
   const desmembrar = async () => {
@@ -699,8 +707,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           />
         </div>
 
-        {/* Venda — detalhe da venda real (a partir de Anunciado) p/ apurar o lucro líquido */}
-        {statusIdx(it.status) >= statusIdx("ANUNCIADO") && (
+        {/* Venda — detalhe da venda real (a partir de Triado, p/ vendas diretas) p/ apurar o lucro líquido */}
+        {statusIdx(it.status) >= statusIdx("TRIADO") && (
           <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1 flex items-center gap-1.5">
               <Receipt className="w-3.5 h-3.5" /> Venda
@@ -714,7 +722,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
                 <select className={inputCls} value={it.canal_venda || ""}
                   onChange={(e) => set({ canal_venda: e.target.value || null })}>
                   <option value="">Selecione…</option>
-                  {CANAIS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {CANAIS_VENDA.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
               <Field label="Taxa / comissão (R$)">
@@ -784,6 +792,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <button onClick={desmembrar} className="w-full flex items-center justify-center gap-2 text-gray-700 border border-gray-300 bg-white rounded-xl py-3 text-sm font-semibold mb-2">
           <Layers className="w-4 h-4" /> Desmembrar em várias unidades
         </button>
+
+        {statusIdx(it.status) >= statusIdx("TRIADO") && statusIdx(it.status) < statusIdx("VENDIDO") && it.status !== "DESCARTE" && (
+          <button onClick={venderDireto} className="w-full flex items-center justify-center gap-2 text-emerald-700 border border-emerald-200 bg-emerald-50 rounded-xl py-3 text-sm font-semibold mb-2">
+            <Receipt className="w-4 h-4" /> Marcar como vendido (venda direta)
+          </button>
+        )}
 
         <button onClick={() => salvar("DESCARTE")} className="w-full flex items-center justify-center gap-2 text-red-600 border border-red-200 bg-red-50 rounded-xl py-3 text-sm font-semibold">
           <Trash2 className="w-4 h-4" /> Marcar como descarte / sucata
