@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink
+  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
 import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
-import { diagnosticarPorCanal } from "../lib/export";
+import { diagnosticarPorCanal, CANAIS } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -307,9 +307,15 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       case "PRONTO": return null;
       case "ANUNCIADO": return it.anuncio_feito ? null : "Marque 'Anúncio publicado' para avançar.";
       case "VENDIDO": return it.valor_vendido ? null : "Informe o valor vendido.";
+      case "ENTREGUE": return null; // entrega não trava: só carimba a data
       default: return null;
     }
   })();
+
+  // Lucro líquido ao vivo da venda = bruto − taxa − frete − custo do item (rateio do lote).
+  const lucroVenda = it.valor_vendido
+    ? Number(it.valor_vendido) - (Number(it.taxa_venda) || 0) - (Number(it.frete_pago) || 0) - (Number(custoItem) || 0)
+    : null;
 
   const subirFotos = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -348,7 +354,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       // Nunca grava vazio (coluna obrigatória): mantém o nome atual se ficar em branco.
       produto: (it.produto || "").trim() || item.produto,
       foto_feita: it.foto_feita || fotos.length > 0, anuncio_feito: it.anuncio_feito,
-      valor_vendido: it.valor_vendido || null, obs: it.obs,
+      // Venda: valor bruto + detalhe (canal real, taxa, frete, comprador, nº do pedido).
+      valor_vendido: it.valor_vendido || null,
+      canal_venda: it.canal_venda || null, taxa_venda: it.taxa_venda || null,
+      frete_pago: it.frete_pago || null, comprador: it.comprador?.trim() || null,
+      pedido_ref: it.pedido_ref?.trim() || null,
+      obs: it.obs,
       // Categoria (casa com pricing_grupo p/ a âncora de preço)
       grupo: (it.grupo || "").trim() || null,
       // Campos para integrações (Amazon / ML / TikTok / Hiper)
@@ -365,6 +376,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       preco_ref_fonte: it.preco_ref_fonte || null, preco_ref_confianca: it.preco_ref_confianca || null,
       upd_by: user.email,
       ...(novoStatus ? { status: novoStatus } : {}),
+      // Carimbos de pós-venda na transição (vendido_em só se ainda vazio).
+      ...(novoStatus === "VENDIDO" && !it.vendido_em ? { vendido_em: new Date().toISOString() } : {}),
+      ...(novoStatus === "ENTREGUE" ? { entregue_em: new Date().toISOString() } : {}),
     };
     const { data, error } = await supabase.from("itens").update(patch).eq("sku", it.sku).select().single();
     if (error) { alert("Erro ao salvar: " + error.message); return; }
@@ -684,6 +698,55 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             onChange={(patch) => set(patch)}
           />
         </div>
+
+        {/* Venda — detalhe da venda real (a partir de Anunciado) p/ apurar o lucro líquido */}
+        {statusIdx(it.status) >= statusIdx("ANUNCIADO") && (
+          <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1 flex items-center gap-1.5">
+              <Receipt className="w-3.5 h-3.5" /> Venda
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Valor vendido (R$)">
+                <input type="number" inputMode="decimal" className={inputCls} value={it.valor_vendido ?? ""}
+                  onChange={(e) => set({ valor_vendido: e.target.value })} placeholder="bruto recebido" />
+              </Field>
+              <Field label="Canal da venda">
+                <select className={inputCls} value={it.canal_venda || ""}
+                  onChange={(e) => set({ canal_venda: e.target.value || null })}>
+                  <option value="">Selecione…</option>
+                  {CANAIS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Taxa / comissão (R$)">
+                <input type="number" inputMode="decimal" className={inputCls} value={it.taxa_venda ?? ""}
+                  onChange={(e) => set({ taxa_venda: e.target.value })} placeholder="0" />
+              </Field>
+              <Field label="Frete pago (R$)">
+                <input type="number" inputMode="decimal" className={inputCls} value={it.frete_pago ?? ""}
+                  onChange={(e) => set({ frete_pago: e.target.value })} placeholder="0" />
+              </Field>
+              <Field label="Comprador">
+                <input className={inputCls} value={it.comprador ?? ""}
+                  onChange={(e) => set({ comprador: e.target.value })} placeholder="nome / usuário" />
+              </Field>
+              <Field label="Nº do pedido">
+                <input className={inputCls} value={it.pedido_ref ?? ""}
+                  onChange={(e) => set({ pedido_ref: e.target.value })} placeholder="ref. no canal" />
+              </Field>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 mt-1 mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Lucro líquido da venda</span>
+              <span className={`text-base font-bold ${lucroVenda != null && lucroVenda < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                {lucroVenda == null ? "—" : fmtBRL(lucroVenda)}
+              </span>
+            </div>
+            {it.valor_vendido && custoItem == null && (
+              <p className="text-[11px] text-amber-600 flex items-center gap-1 pb-2">
+                <AlertTriangle className="w-3 h-3" /> Custo do lote não carregado — lucro sem o custo do item.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Diagnóstico de anúncio — prontidão por canal */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
