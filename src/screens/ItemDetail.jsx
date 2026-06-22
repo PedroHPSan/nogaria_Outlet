@@ -395,7 +395,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       if (dirty.current) await salvar(null);
       const novos = await desmembrarItem({ ...it }, total, user);
       onSaved();
-      alert(`${novos.length} unidade(s) criada(s) neste lote.`);
+      alert(`${novos.length} unidade(s) criada(s) neste lote${fotos.length ? " — fotos replicadas" : ""}.`);
     } catch (e) {
       alert("Falha ao desmembrar: " + (e?.message || e));
     }
