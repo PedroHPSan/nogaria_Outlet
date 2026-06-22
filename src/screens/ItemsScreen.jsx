@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM } from "../lib/model";
+import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM, DESTINOS } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
 import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -13,6 +13,7 @@ const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
+const DESTINO_SEM = "__sem__"; // sentinela: itens sem destino definido (campo nulo)
 
 export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params, user }) {
   const [q, setQ] = useState("");
@@ -20,6 +21,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fClasse, setFClasse] = useState(initialFilter?.classe || "");
   const [fStatus, setFStatus] = useState(initialFilter?.status || "");
   const [fGrupo, setFGrupo] = useState(initialFilter?.grupo || "");
+  const [fDestino, setFDestino] = useState(initialFilter?.destino || "");
   const [fPendMedida, setFPendMedida] = useState(!!initialFilter?.pendMedida);
   const [fSemCaixa, setFSemCaixa] = useState(!!initialFilter?.semCaixa);
   const [fSemEtiq, setFSemEtiq] = useState(!!initialFilter?.semEtiqueta);
@@ -108,6 +110,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fClasse) query = query.eq("classe", fClasse);
     if (fStatus) query = query.eq("status", fStatus);
     if (fGrupo) query = query.eq("grupo", fGrupo);
+    if (fDestino === DESTINO_SEM) query = query.is("destino", null);
+    else if (fDestino) query = query.eq("destino", fDestino);
     // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
     if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
     if (fSemCaixa) query = query.is("caixa_id", null);
@@ -122,7 +126,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, fSemEtiq, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -130,7 +134,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, fSemEtiq, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -184,7 +188,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fPendMedida, fSemCaixa, fSemEtiq].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -223,6 +227,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                 {catList.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             )}
+            <select value={fDestino} onChange={(e) => setFDestino(e.target.value)} className={inputCls}>
+              <option value="">Todos os destinos</option>
+              {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
+              <option value={DESTINO_SEM}>Sem destino definido</option>
+            </select>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 pt-0.5">
               <input type="checkbox" checked={fPendMedida} onChange={(e) => setFPendMedida(e.target.checked)}
                 className="w-4 h-4 rounded accent-orange-500" />
