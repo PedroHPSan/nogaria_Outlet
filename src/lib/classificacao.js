@@ -155,6 +155,34 @@ function withDestinoCanal(classe, motivo) {
   return { classe, motivo, destino, canal: CLASSE_CANAL[classe] || null };
 }
 
+// Peso físico estimado de UM item (kg), para somar no conteúdo de uma caixa.
+// Diferente de pesoEfetivo() (que usa max(real, cubado) p/ classificar volume): aqui
+// o peso é ADITIVO, então prioriza o peso declarado (real → padrão) e só recorre ao
+// peso cubado quando não há peso informado. null quando não há peso nem dimensões.
+export function pesoEstimadoItem(it, params) {
+  if (!it) return null;
+  const real = num(it.peso_real_kg) ?? num(it.peso_kg);
+  if (real != null) return real;
+  const vol = { ...VOLUME_DEFAULT, ...(params?.config?.volume || {}) };
+  const c = num(it.comprimento_cm), l = num(it.largura_cm), a = num(it.altura_cm);
+  if (c != null && l != null && a != null) return (c * l * a) / vol.divisorCubado;
+  return null;
+}
+
+// Soma o peso estimado de uma lista de itens (ex.: conteúdo de uma caixa). Espelha
+// estimarValorCaixa: retorna { pesoKg, semPeso, count } — semPeso conta itens sem
+// peso nem dimensões (logo o pesoKg é um piso, não o total real).
+export function estimarPesoCaixa(itens, params) {
+  let pesoKg = 0, semPeso = 0;
+  const lista = itens || [];
+  for (const it of lista) {
+    const p = pesoEstimadoItem(it, params);
+    if (p != null) pesoKg += p;
+    else semPeso++;
+  }
+  return { pesoKg, semPeso, count: lista.length };
+}
+
 // Valor de venda estimado de um item: preço-alvo (ideal) → sugerido → referência.
 export function estimarValorVenda(it, params) {
   return num(it?.preco_ideal) ?? num(it?.preco_sugerido) ?? valorReferencia(it, params);

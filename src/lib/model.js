@@ -62,4 +62,9 @@ export const fmtBRL = (v) =>
     ? "—"
     : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
+export const fmtKg = (v) =>
+  v == null || v === "" || isNaN(v)
+    ? "—"
+    : `${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`;
+
 export const triBool = (v) => (v === true ? "Sim" : v === false ? "Não" : "—");

@@ -397,6 +397,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
       {boxPicker && (
         <BoxPicker
+          params={params}
           onClose={() => setBoxPicker(false)}
           onPick={(label) => { setPrintLabels([label]); setBoxPicker(false); }}
         />
@@ -418,7 +419,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
 // Seletor de caixa/mala (tabela `caixas`): escolhe uma caixa e gera a etiqueta
 // externa (buildBoxLabel) com o conteúdo atual. Devolve a etiqueta pronta via onPick.
-function BoxPicker({ onClose, onPick }) {
+function BoxPicker({ onClose, onPick, params }) {
   const [loading, setLoading] = useState(true);
   const [caixas, setCaixas] = useState([]);
   const [q, setQ] = useState("");
@@ -435,7 +436,7 @@ function BoxPicker({ onClose, onPick }) {
     setBusy(c.codigo);
     try {
       const itens = await itensDaCaixa(c.codigo);
-      onPick(buildBoxLabel(c, itens));
+      onPick(buildBoxLabel(c, itens, params));
     } finally {
       setBusy(null);
     }

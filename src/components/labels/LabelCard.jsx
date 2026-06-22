@@ -162,7 +162,7 @@ function CompactBox({ label }) {
         {label.sku}
       </div>
       <div style={{ fontSize: "7pt", textAlign: "center", fontWeight: 700, marginBottom: mm(1) }}>
-        {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens
+        {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens{label.pesoTxt ? ` · ${label.pesoTxt}` : ""}
       </div>
       <div style={{ fontSize: "6.5pt" }}>
         <div>Local: <b>{label.local_fisico}</b></div>
@@ -234,7 +234,7 @@ function FullBox({ label, tall = false }) {
             {label.sku}
           </div>
           <div style={{ fontSize: tall ? "9pt" : "8pt", fontWeight: 700 }}>
-            {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens
+            {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens{label.pesoTxt ? ` · ${label.pesoTxt}` : ""}
           </div>
         </div>
         <Qr data={label.qrData} size={tall ? 28 : 20} />

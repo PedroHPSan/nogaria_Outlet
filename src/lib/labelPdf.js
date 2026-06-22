@@ -70,7 +70,7 @@ function drawLabel(doc, label, preset) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(idPt);
   const idLine = isBox
-    ? `${label.tipo} · ${label.qtd} itens`
+    ? `${label.tipo} · ${label.qtd} itens${label.pesoTxt ? ` · ${label.pesoTxt}` : ""}`
     : `Lote ${label.lote}${label.classe ? ` · Classe ${label.classe}` : ""}`;
   doc.text(doc.splitTextToSize(idLine, leftW), m, y + ptToMm(idPt));
 

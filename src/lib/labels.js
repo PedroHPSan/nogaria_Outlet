@@ -2,6 +2,8 @@
 // Sem UI: monta o "modelo de dados de etiqueta" usado tanto pela renderização HTML
 // (LabelCard / impressão via navegador) quanto pela geração de PDF (labelPdf.js).
 import QRCode from "qrcode";
+import { fmtKg } from "./model";
+import { estimarPesoCaixa } from "./classificacao";
 
 // Rolos DK compatíveis com a Brother QL-800. Dimensões em milímetros.
 // width = largura visual da etiqueta; height = comprimento (sentido de avanço do papel).
@@ -144,7 +146,7 @@ const norm = (s) => String(s || "").trim().toUpperCase();
 // Etiqueta de CAIXA ou MALA. Recebe a linha da caixa (tabela `caixas`: codigo,
 // tipo, destino, local_fisico) e os itens encaixotados. Destino/local vêm da
 // própria caixa (uma caixa = um destino); lotes/SKUs são agregados dos itens.
-export function buildBoxLabel(caixa, itens) {
+export function buildBoxLabel(caixa, itens, params) {
   const lista = itens || [];
   const isMala = (caixa?.tipo
     ? norm(caixa.tipo) === "MALA"
@@ -167,6 +169,10 @@ export function buildBoxLabel(caixa, itens) {
     .sort((a, b) => Number(a) - Number(b))
     .map((k) => `L${k}×${loteCount[k]}`)
     .join(" · ");
+  // Peso estimado da caixa (soma do conteúdo). "~" já sinaliza estimativa; se houver
+  // itens sem medida, o valor é um piso (sufixo "+").
+  const { pesoKg, semPeso } = estimarPesoCaixa(lista, params);
+  const pesoTxt = pesoKg > 0 ? `~${fmtKg(pesoKg)}${semPeso > 0 ? "+" : ""}` : null;
   return {
     tipo: isMala ? "MALA" : "CAIXA",
     titulo: isMala
@@ -174,6 +180,7 @@ export function buildBoxLabel(caixa, itens) {
       : "NOGÁRIA OUTLET · ETIQUETA DE CAIXA",
     sku: caixa?.codigo || "",
     qtd: lista.length,
+    pesoTxt,
     lotes: [...lotes].sort((a, b) => a - b),
     classeResumo,
     loteResumo,

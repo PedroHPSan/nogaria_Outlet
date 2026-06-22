@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL } from "../lib/model";
+import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg } from "../lib/model";
 import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa, contarSemClasse, classificarSemClasse } from "../lib/conferencia";
-import { classeAutomatica, estimarValorCaixa, estimarValorVenda } from "../lib/classificacao";
+import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
 import {
   CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
   fecharCaixa, listarCaixas, itensDaCaixa,
@@ -589,7 +589,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
     } finally { setBusy(false); }
   };
 
-  const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens)]);
+  const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens, params)]);
   const baixarLista = () => {
     if (!itens.length) return;
     baixarArquivo(`caixa-${caixa.codigo}.csv`, toCSV(itens, COLUNAS_CAIXA));
@@ -616,11 +616,19 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
             <p className="text-3xl font-bold">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
             {(() => {
               const { total, semPreco } = estimarValorCaixa(itens, params);
+              const { pesoKg, semPeso } = estimarPesoCaixa(itens, params);
               return (
-                <div className="text-right">
-                  <p className="text-xs text-gray-400 leading-none">valor estimado</p>
-                  <p className="text-xl font-bold text-emerald-400">~{fmtBRL(total)}</p>
-                  {semPreco > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPreco} sem preço</p>}
+                <div className="flex items-end gap-4">
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400 leading-none">peso estimado</p>
+                    <p className="text-xl font-bold text-sky-400">{pesoKg > 0 ? `~${fmtKg(pesoKg)}` : "—"}</p>
+                    {semPeso > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPeso} sem medida</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400 leading-none">valor estimado</p>
+                    <p className="text-xl font-bold text-emerald-400">~{fmtBRL(total)}</p>
+                    {semPreco > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPreco} sem preço</p>}
+                  </div>
                 </div>
               );
             })()}

@@ -1,7 +1,7 @@
 import React, { useState, Suspense } from "react";
 import { buscarCaixa, itensDaCaixa } from "../lib/caixas";
-import { estimarValorCaixa, estimarValorVenda } from "../lib/classificacao";
-import { CLASSE_STYLE, fmtBRL } from "../lib/model";
+import { estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
+import { CLASSE_STYLE, fmtBRL, fmtKg } from "../lib/model";
 import { X, Loader2, ScanLine, ArrowRight, AlertTriangle, Boxes, Package, ChevronRight } from "lucide-react";
 
 // Leitor de QR só carrega a lib (@zxing) quando a tela abre.
@@ -44,6 +44,7 @@ export default function CaixaQrScreen({ onClose, onOpenItem, params }) {
   if (fase === "caixa" && caixa) {
     const isMala = caixa.tipo === "MALA";
     const { total, semPreco } = estimarValorCaixa(itens, params);
+    const { pesoKg, semPeso } = estimarPesoCaixa(itens, params);
     return (
       <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
         <div className="bg-gray-900 text-white px-4 pt-4 pb-3">
@@ -60,10 +61,17 @@ export default function CaixaQrScreen({ onClose, onOpenItem, params }) {
           <p className="text-xs text-gray-400 mt-1">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
           <div className="flex items-end justify-between mt-2">
             <p className="text-3xl font-bold">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
-            <div className="text-right">
-              <p className="text-xs text-gray-400 leading-none">valor estimado</p>
-              <p className="text-xl font-bold text-emerald-400">~{fmtBRL(total)}</p>
-              {semPreco > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPreco} sem preço</p>}
+            <div className="flex items-end gap-4">
+              <div className="text-right">
+                <p className="text-xs text-gray-400 leading-none">peso estimado</p>
+                <p className="text-xl font-bold text-sky-400">{pesoKg > 0 ? `~${fmtKg(pesoKg)}` : "—"}</p>
+                {semPeso > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPeso} sem medida</p>}
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400 leading-none">valor estimado</p>
+                <p className="text-xl font-bold text-emerald-400">~{fmtBRL(total)}</p>
+                {semPreco > 0 && <p className="text-[10px] text-gray-500 leading-none">{semPreco} sem preço</p>}
+              </div>
             </div>
           </div>
         </div>
