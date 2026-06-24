@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Tag, TrendingUp, AlertTriangle, Check, Copy, Wand2, ChevronDown, Sparkles } from "lucide-react";
-import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO, ESTADOS } from "../lib/model";
+import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO, ESTADOS, EMBALAGENS } from "../lib/model";
 import { precificar, gerarTitulo, estadoToCondicao, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
 
 const CANAIS = [
@@ -91,11 +91,12 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
   const fonteRef = item.preco_ref_fonte ?? null;
   const risco = grupo.nivelRisco || "MEDIO";
 
+  const embalagem = item.cond_embalagem || "PERFEITA";
   const r = useMemo(() => precificar({
-    condicaoCod: cond, canalCod: canal, riscoNivel: risco,
+    condicaoCod: cond, canalCod: canal, riscoNivel: risco, embalagemCod: embalagem,
     destino: item.destino, pesoKg: item.peso_real_kg ?? item.peso_kg ?? 0,
     refNovo, refUsado, custoItem: custoItem ?? 0,
-  }, params), [cond, canal, risco, item.destino, item.peso_real_kg, item.peso_kg, refNovo, refUsado, custoItem, params]);
+  }, params), [cond, canal, risco, embalagem, item.destino, item.peso_real_kg, item.peso_kg, refNovo, refUsado, custoItem, params]);
 
   const tituloSugerido = gerarTitulo(item, canal);
   const titulo = item.titulo_anuncio || tituloSugerido;
@@ -148,6 +149,12 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
             onChange={(e) => onChange?.({ estado: e.target.value || null })}>
             {!item.estado && <option value="">Selecione…</option>}
             {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
+          </select>
+        </Campo>
+        <Campo label="Embalagem">
+          <select className={sel + " w-full"} value={embalagem}
+            onChange={(e) => onChange?.({ cond_embalagem: e.target.value })}>
+            {EMBALAGENS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
           </select>
         </Campo>
         <Campo label="Canal">
@@ -219,6 +226,11 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
           <span>Novo <b className="text-gray-800">{fmtBRL(refNovo)}</b></span>
           {refUsado != null && <span>Usado <b className="text-gray-800">{fmtBRL(refUsado)}</b></span>}
           {fonteRef && <span className="text-gray-400 truncate">({fonteRef})</span>}
+        </div>
+        <div className="text-[11px] text-gray-500">
+          {fmtBRL(r.refEff)} × <b className="text-gray-700">{r.fCond}</b> produto
+          {r.fEmb !== 1 && <> × <b className="text-gray-700">{r.fEmb}</b> caixa</>}
+          {" "}× <b className="text-gray-700">{r.fRisco}</b> risco = <b className="text-gray-800">{fmtBRL(r.pAnuncio)}</b>
         </div>
         <div className="grid grid-cols-2 gap-2 text-center">
           <div className="rounded-xl bg-orange-50 py-2">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
+import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
   ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt
 } from "lucide-react";
@@ -345,6 +345,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     const patch = {
       estado: it.estado, testado: it.testado, funciona: it.funciona, avaria: it.avaria,
       acessorios_ok: it.acessorios_ok, caixa_original: it.caixa_original,
+      cond_embalagem: it.cond_embalagem || null,
       // Classe pode ser reclassificada na triagem (lib/classificacao.js).
       classe: it.classe || null,
       preco_min: it.preco_min || null, preco_ideal: it.preco_ideal || null,
@@ -580,6 +581,19 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               ))}
             </div>
           </Field>
+          {/* Embalagem: eixo independente do Estado (corte pequeno só p/ produto novo). */}
+          {["Novo", "Embalagem aberta/avariada"].includes(it.estado) && (
+            <Field label="Embalagem">
+              <div className="flex flex-wrap gap-1.5">
+                {EMBALAGENS.map(([v, t]) => (
+                  <button key={v} onClick={() => set({ cond_embalagem: v })}
+                    className={`px-3 py-1.5 rounded-lg text-sm border ${(it.cond_embalagem || "PERFEITA") === v ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300"}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
           <TriToggle label="Testado?" value={it.testado} onChange={(v) => set({ testado: v })} />
           <TriToggle label="Funciona?" value={it.funciona} onChange={(v) => set({ funciona: v })} />
           <TriToggle label="Tem avaria?" value={it.avaria} onChange={(v) => set({ avaria: v })} />

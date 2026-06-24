@@ -123,6 +123,8 @@ export function precificar(inp, P = DEFAULT_PARAMS) {
   return {
     pAnuncio, pPiso, custoItem, frete, takeRate: cn.takeRate, fixo: cn.fixo, margemMin,
     lucroLiquido: lucro, margemLiquida: margem, viavel,
+    // Breakdown dos eixos (UI): refEff × fCond (produto) × fEmb (embalagem) × fRisco.
+    refEff, fCond: cond.fator, fEmb, fRisco, ancora: cond.ancora,
     sugestao: viavel ? "Publicar" : (isLocal ? "Rever preço/custo" : "Kit/Lote ou canal local"),
   };
 }
@@ -133,6 +135,10 @@ export function gerarTitulo(item, canalCod = "ML") {
   let t = partes.join(" ").replace(/\s+/g, " ").trim();
   const selo = item.estado === "Novo" ? "Novo" : "Outlet Testado";
   t = `${t} — ${selo}`;
+  // Produto novo com caixa avariada: declarar a avaria da embalagem vira sinal de confiança.
+  const novo = item.estado === "Novo" || item.estado === "Embalagem aberta/avariada";
+  const caixaAvariada = item.cond_embalagem && item.cond_embalagem !== "PERFEITA";
+  if (novo && caixaAvariada) t = `${t} (embalagem com avaria)`;
   const max = canalCod === "ML" ? 60 : 100;
   return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
 }

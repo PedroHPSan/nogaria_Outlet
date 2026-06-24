@@ -28,6 +28,17 @@ export const CLASSE_STYLE = {
 export const ESTADOS = ["Novo", "Embalagem aberta/avariada", "Usado", "Avariado", "Usado sem teste"];
 export const DESTINOS = ["Belém", "SP storage", "Venda local SP", "A definir"];
 
+// Condição da EMBALAGEM (eixo independente do Estado do produto). Pares [código, label]:
+// itens.cond_embalagem guarda o CÓDIGO (a view casa pricing_factor_embalagem.codigo).
+export const EMBALAGENS = [
+  ["PERFEITA", "Perfeita"],
+  ["LEVE", "Levemente avariada"],
+  ["MEDIA", "Média"],
+  ["FORTE", "Forte"],
+  ["SEM_CAIXA", "Sem caixa"],
+];
+export const embalagemLabel = (cod) => (EMBALAGENS.find(([c]) => c === cod) || [])[1] || cod || "Perfeita";
+
 // Canais REAIS de venda (≠ CANAIS de export.js, que dirige o diagnóstico de anúncio).
 export const CANAIS_VENDA = [
   "Mercado Livre", "Amazon", "TikTok Shop", "Hiper",

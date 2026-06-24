@@ -8,15 +8,18 @@ let _cache = null;
 export async function carregarParametros() {
   if (_cache) return _cache;
   try {
-    const [cfg, cond, risco, canal, grupo] = await Promise.all([
+    const [cfg, cond, risco, canal, grupo, emb] = await Promise.all([
       supabase.from("pricing_config").select("*"),
       supabase.from("pricing_factor_condicao").select("*"),
       supabase.from("pricing_factor_risco").select("*"),
       supabase.from("pricing_canal").select("*"),
       supabase.from("pricing_grupo").select("*"),
+      supabase.from("pricing_factor_embalagem").select("*"),
     ]);
     const C = {};
     (cond.data || []).forEach((r) => (C[r.codigo] = { fator: Number(r.fator), ancora: r.ancora }));
+    const E = {};
+    (emb.data || []).forEach((r) => (E[r.codigo] = Number(r.fator)));
     const R = {};
     (risco.data || []).forEach((r) => (R[r.nivel] = Number(r.fator)));
     const K = {};
@@ -29,6 +32,7 @@ export async function carregarParametros() {
     }));
     _cache = {
       condicao: Object.keys(C).length ? C : DEFAULT_PARAMS.condicao,
+      embalagemFator: Object.keys(E).length ? E : DEFAULT_PARAMS.embalagemFator,
       risco: Object.keys(R).length ? R : DEFAULT_PARAMS.risco,
       canal: Object.keys(K).length ? K : DEFAULT_PARAMS.canal,
       grupos,
