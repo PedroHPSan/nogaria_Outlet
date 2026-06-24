@@ -88,6 +88,15 @@ const SINONIMOS = {
   "Alimentos/Bebidas": ["chocolate", "biscoito", "azeite", "cafe em po"],
 };
 
+// Marcadores de ACESSÓRIO: quando presentes no texto, NÃO se herda a categoria do
+// produto-pai (corrige "capa iphone" / "carregador xiaomi" virando Smartphone A+).
+// Os tokens de marca (iphone, xiaomi, galaxy...) fazem o scoring puxar o acessório
+// para a categoria do aparelho; este pré-filtro tem prioridade sobre o scoring.
+const ACESSORIO_CELULAR_RE =
+  /(^|[^a-z0-9])(capa|case|pelicula|protetor de tela|suporte (de |p\/ |para )?(celular|telefone)|skin)([^a-z0-9]|$)/;
+const ACESSORIO_ENERGIA_RE =
+  /(^|[^a-z0-9])(carregador|power ?bank|fonte|adaptador|cabo (usb|tipo ?c|lightning))([^a-z0-9]|$)/;
+
 const cacheKw = new Map();
 function keywordsDe(cat) {
   if (cacheKw.has(cat)) return cacheKw.get(cat);
@@ -106,6 +115,12 @@ export function sugerirCategoria(texto, categoriasDisponiveis) {
   const t = norm(texto);
   if (t.length < 3 || !categoriasDisponiveis?.length) return null;
   if (t.includes("a catalogar")) return null; // placeholder de importação
+
+  // Pré-filtro de acessório: tem prioridade sobre o scoring por marca.
+  if (ACESSORIO_CELULAR_RE.test(t) && categoriasDisponiveis.includes("Acessórios celular/info"))
+    return "Acessórios celular/info";
+  if (ACESSORIO_ENERGIA_RE.test(t) && categoriasDisponiveis.includes("Carregadores/Acessórios eletrônicos"))
+    return "Carregadores/Acessórios eletrônicos";
 
   let best = null;
   let bestScore = 0;

@@ -12,7 +12,7 @@
 //   D   volumoso, frete caro, venda trabalhosa          → SP / OLX / Facebook
 //   E   incompleto/quebrado/sem teste/avaria relevante  → peças / lote / descarte
 
-import { DESTINOS } from "./model";
+import { DESTINOS } from "./model.js";
 
 // Faixas de valor (R$) — limites inferiores de cada classe.
 export const VALOR_BANDAS = { aplus: 1000, a: 300, b: 100 };
@@ -205,11 +205,14 @@ export function estimarValorCaixa(itens, params) {
 // Diferente de classificarItem (condição/volume): aqui o sinal é categoria → valor → C,
 // e NUNCA retorna vazio — todo item recebe ao menos a classe padrão "C".
 export function classeAutomatica(it, params) {
-  const grupo = it?.grupo;
-  const cat = params?.grupos?.[grupo]?.classe;
-  if (cat) return { classe: cat, motivo: `Categoria ${grupo} → ${cat}`, origem: "categoria" };
+  // 1. PREÇO manda (preco_ideal → ref). Corrige a herança de categoria do acessório:
+  // um item de R$25 vira C mesmo que o grupo herdado seja "Smartphone".
   const v = valorReferencia(it, params);
   const cv = classePorValor(v);
   if (cv) return { classe: cv, motivo: `${fmtBRLcurto(v)} → ${cv}`, origem: "valor" };
+  // 2. Sem preço: classe típica da categoria, só como âncora grosseira.
+  const grupo = it?.grupo;
+  const cat = params?.grupos?.[grupo]?.classe;
+  if (cat) return { classe: cat, motivo: `Categoria ${grupo} → ${cat} (sem preço)`, origem: "categoria" };
   return { classe: "C", motivo: "Sem categoria/preço → C (padrão)", origem: "fallback" };
 }

@@ -1,11 +1,17 @@
 // pricing.js — Motor de precificação Nogária Outlet (espelho da view vw_precificacao).
 // JS puro, sem dependências. Calcula P_anúncio (teto) e P_piso (mínimo) ao vivo na UI.
 
-// Mapa do campo itens.estado (ESTADOS em model.js) -> código de condição do motor.
+// Precificação de 2 eixos: a CONDIÇÃO DO PRODUTO (estado de uso/funcionamento) é
+// independente da CONDIÇÃO DA EMBALAGEM (caixa). "Novo com caixa amassada" continua
+// novo no produto e leva só um pequeno corte de embalagem — não cai pra faixa de usado.
+
+// Mapa do campo itens.estado (ESTADOS em model.js) -> código de condição DO PRODUTO.
 // As chaves antigas seguem mapeadas por segurança (dados legados / enum órfão).
 export const ESTADO_TO_COND = {
   "Novo": "NOVO_LACRADO",
-  "Embalagem aberta/avariada": "NOVO_CAIXA_AVARIADA",
+  // Caixa avariada NÃO é condição de produto: o produto é novo, o eixo embalagem
+  // (cond_embalagem) carrega a avaria da caixa. (corrige a queda pra USADO_OK)
+  "Embalagem aberta/avariada": "NOVO_LACRADO",
   "Usado": "USADO_OK",
   "Avariado": "AVARIA_ESTETICA",
   "Usado sem teste": "SEM_TESTE",
@@ -13,9 +19,27 @@ export const ESTADO_TO_COND = {
   "Usado funcionando": "USADO_OK",
   "Incompleto": "SEM_TESTE",
   "Sucata": "DEFEITO_PECAS",
+  "NOVO_CAIXA_AVARIADA": "NOVO_LACRADO", // enum de condição legado → produto novo
 };
 export const estadoToCondicao = (estado, padrao = "USADO_OK") =>
   ESTADO_TO_COND[estado] || padrao;
+
+// Eixo EMBALAGEM: multiplicador pequeno aplicado por cima da condição do produto.
+// Calibrado pelo que o mercado online realmente cobra por caixa avariada (~3–12%),
+// não pelo corte de usado.
+export const EMBALAGEM_FATOR = {
+  PERFEITA: 1.00, LEVE: 0.97, MEDIA: 0.93, FORTE: 0.88, SEM_CAIXA: 0.88,
+};
+// Normaliza texto livre de embalagem (EMBALAGENS em model.js) -> código do eixo.
+export const embalagemToCod = (v) => {
+  const s = (v || "").toLowerCase();
+  if (s.includes("perfeit")) return "PERFEITA";
+  if (s.includes("leve")) return "LEVE";
+  if (s.includes("medi") || s.includes("méd")) return "MEDIA";
+  if (s.includes("forte")) return "FORTE";
+  if (s.includes("sem caixa") || s.includes("sem embalagem")) return "SEM_CAIXA";
+  return "PERFEITA";
+};
 
 // Normaliza o texto livre de canal_principal para um código de canal.
 export const normalizarCanal = (txt) => {
@@ -33,14 +57,17 @@ export const normalizarCanal = (txt) => {
 // Defaults espelhando os seeds da migration (pesquisa 2026). Em produção carregue do
 // banco (pricing_*) via pricingParams.js e passe para precificar().
 export const DEFAULT_PARAMS = {
+  // Eixo CONDIÇÃO DO PRODUTO (a caixa sai daqui e vira multiplicador de embalagem).
   condicao: {
-    NOVO_LACRADO: { fator: 0.80, ancora: "NOVO" },
-    NOVO_CAIXA_AVARIADA: { fator: 0.70, ancora: "NOVO" },
-    USADO_OK: { fator: 0.92, ancora: "USADO" },
-    AVARIA_ESTETICA: { fator: 0.75, ancora: "USADO" },
-    SEM_TESTE: { fator: 0.55, ancora: "USADO" },
-    DEFEITO_PECAS: { fator: 0.20, ancora: "USADO" },
+    NOVO_LACRADO:    { fator: 0.85, ancora: "NOVO"  }, // era 0.80; +5pts pois a caixa agora ajusta à parte
+    NOVO_SEM_LACRE:  { fator: 0.78, ancora: "NOVO"  }, // novo, sem lacre, não usado
+    USADO_OK:        { fator: 0.92, ancora: "USADO" },
+    AVARIA_ESTETICA: { fator: 0.75, ancora: "USADO" }, // avaria no PRODUTO, não na caixa
+    SEM_TESTE:       { fator: 0.55, ancora: "USADO" },
+    DEFEITO_PECAS:   { fator: 0.20, ancora: "USADO" },
+    // NOVO_CAIXA_AVARIADA: removido — vira NOVO_LACRADO × fator_embalagem
   },
+  embalagemFator: EMBALAGEM_FATOR,
   risco: { BAIXO: 0.95, MEDIO: 0.90, ALTO: 0.85 },
   canal: {
     ML: { takeRate: 0.14, fixo: 6.75 }, SHOPEE: { takeRate: 0.14, fixo: 20 },
@@ -72,7 +99,9 @@ export function precificar(inp, P = DEFAULT_PARAMS) {
   const refNovo = inp.refNovo ?? 0;
   const refUsado = inp.refUsado ?? refNovo * P.config.convNovoUsado;
   const refEff = cond.ancora === "NOVO" ? refNovo : refUsado;
-  const pAnuncio = r2(refEff * cond.fator * fRisco);
+  // Eixo embalagem: só corta produto novo (caixa de usado já está no fator de condição).
+  const fEmb = (P.embalagemFator || EMBALAGEM_FATOR)[inp.embalagemCod] ?? 1;
+  const pAnuncio = r2(refEff * cond.fator * fEmb * fRisco);
 
   const custoItem = inp.custoItem != null
     ? inp.custoItem
