@@ -49,7 +49,7 @@ const OUTPUT_SCHEMA = {
     modelo: { type: ["string", "null"] },
     grupo: { type: ["string", "null"], description: "Categoria EXATAMENTE como uma das fornecidas em `categorias`; null se nenhuma servir." },
     ncm: { type: ["string", "null"], description: "Código NCM de 8 dígitos, sem pontuação; null se incerto." },
-    voltagem: { type: ["string", "null"], enum: ["110V", "220V", "Bivolt", "N/A", null] },
+    voltagem: { enum: ["110V", "220V", "Bivolt", "N/A", null] }, // enum-only (com null); type+enum quebra structured outputs
     cor: { type: ["string", "null"] },
     dimensoes_estimadas: {
       type: "object",
@@ -65,12 +65,31 @@ const OUTPUT_SCHEMA = {
     preco_ref_novo: { type: ["number", "null"], description: "Preço de mercado BR estimado para o item NOVO (R$)." },
     preco_ref_usado: { type: ["number", "null"], description: "Preço de mercado BR estimado para o item USADO em bom estado (R$)." },
     preco_ref_confianca: { type: "string", enum: ["ALTA", "MEDIA", "BAIXA"] },
+    // Conteúdo de listagem (Amazon flat file / outros marketplaces):
+    pontos: {
+      type: "array", items: { type: "string" },
+      description: "Até 5 bullet points curtos (benefício ou spec), um por item. Não repita o título. Não invente specs que não dê para inferir.",
+    },
+    palavras_chave: {
+      type: ["string", "null"],
+      description: "Termos de busca (generic_keywords) separados por vírgula, sem repetir a marca/título e sem palavras proibidas. null se não houver.",
+    },
+    ficha_tecnica: {
+      type: "array",
+      items: {
+        type: "object", additionalProperties: false,
+        properties: { atributo: { type: "string" }, valor: { type: "string" } },
+        required: ["atributo", "valor"],
+      },
+      description: "Atributos técnicos relevantes (ex.: Potência, Capacidade, Material, Cor, Voltagem). Só o que der para inferir com segurança.",
+    },
     campos_faltantes: { type: "array", items: { type: "string" }, description: "Campos importantes ainda vazios/duvidosos para um bom anúncio." },
     observacoes: { type: "string", description: "Diagnóstico curto: o que melhorar no cadastro antes de anunciar." },
   },
   required: [
     "titulo_anuncio", "descricao_anuncio", "marca", "modelo", "grupo", "ncm", "voltagem", "cor",
     "dimensoes_estimadas", "preco_ref_novo", "preco_ref_usado", "preco_ref_confianca",
+    "pontos", "palavras_chave", "ficha_tecnica",
     "campos_faltantes", "observacoes",
   ],
 };
@@ -84,16 +103,32 @@ const SYSTEM = [
   "- NCM só quando tiver razoável certeza (8 dígitos, sem pontuação); senão null.",
   "- Não invente marca/modelo/série que não dê para inferir; use null.",
   "- Título e descrição honestos quanto à condição informada (Novo, Usado, Avariado, etc.).",
+  "- 'pontos': até 5 bullet points objetivos para anúncio (benefício/spec), sem repetir o título.",
+  "- 'palavras_chave': termos de busca úteis, sem repetir marca/título, separados por vírgula.",
+  "- 'ficha_tecnica': só atributos que você consiga inferir com segurança; na dúvida, omita (não invente specs).",
   "- Responda SEMPRE no formato estruturado pedido.",
 ].join("\n");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    // valida o chamador (JWT de usuário autenticado do app)
+    // Auth (verify_jwt está off no gateway; validamos aqui). Aceita:
+    //  1) JWT de sessão de um usuário do app; OU
+    //  2) uma chave de serviço (sb_secret_ nova ou service-role legada) — usada por
+    //     scripts/enriquecer_precos.mjs. Validamos a chave de serviço tentando uma
+    //     operação admin, em vez de comparar strings (robusto ao formato de chave).
     const jwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    let autorizado = false;
     const { data: u } = await admin.auth.getUser(jwt);
-    if (!u?.user) return json({ error: "não autenticado" }, 401);
+    if (u?.user) autorizado = true;
+    if (!autorizado && jwt) {
+      try {
+        const probe = createClient(Deno.env.get("SUPABASE_URL")!, jwt, { auth: { persistSession: false } });
+        const { error: pErr } = await probe.auth.admin.listUsers({ page: 1, perPage: 1 });
+        if (!pErr) autorizado = true;
+      } catch { /* não é chave de serviço */ }
+    }
+    if (!autorizado) return json({ error: "não autenticado" }, 401);
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY não configurada" }, 500);

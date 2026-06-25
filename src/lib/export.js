@@ -121,6 +121,71 @@ export const COLUNAS = [
   { header: "Canal sugerido", get: (it) => it.canal_principal },
 ];
 
+// --- Amazon (flat file / postagem em massa) ---------------------------------
+// Condição Amazon a partir de estado + embalagem. A Amazon BR não aceita "Novo"
+// para itens de caixa aberta/avariada, então caem em "Usado - como novo".
+export const condicaoAmazon = (it) => {
+  const caixaAvariada = it.cond_embalagem && it.cond_embalagem !== "PERFEITA";
+  let tipo, base;
+  switch (it.estado) {
+    case "Novo":
+      if (caixaAvariada) { tipo = "UsedLikeNew"; base = "Produto novo, embalagem avariada"; }
+      else { tipo = "New"; base = ""; }
+      break;
+    case "Embalagem aberta/avariada": tipo = "UsedLikeNew"; base = "Produto novo, embalagem aberta/avariada"; break;
+    case "Usado":
+    case "Usado funcionando": tipo = "UsedGood"; base = "Usado, funcionando e testado"; break;
+    case "Usado sem teste": tipo = "UsedAcceptable"; base = "Usado, vendido sem teste"; break;
+    case "Avariado": tipo = "UsedAcceptable"; base = "Usado com avaria estética"; break;
+    default: tipo = "UsedGood"; base = "Usado";
+  }
+  const notas = [base];
+  if (it.acessorios_ok === false) notas.push("acessórios incompletos");
+  return { tipo, nota: notas.filter(Boolean).join("; ") };
+};
+
+const bullet = (it, i) => (Array.isArray(it.bullet_points) ? it.bullet_points[i] ?? "" : "");
+const fichaTxt = (it) =>
+  Array.isArray(it.ficha_tecnica) ? it.ficha_tecnica.map((f) => `${f.atributo}: ${f.valor}`).join(" | ") : "";
+const idTipo = (g) => { const s = String(g || ""); return s.length === 13 ? "EAN" : s.length === 12 ? "UPC" : ""; };
+
+// Colunas estilo flat file Amazon. Os atributos de categoria (product_type / browse
+// node e specs por categoria) ficam fora — variam por template; a ficha técnica vai
+// anexada na descrição. No upload da Amazon, mapeie estas colunas no template.
+export const COLUNAS_AMAZON = [
+  { header: "sku", get: (it) => it.sku },
+  { header: "product-id", get: (it) => it.gtin },
+  { header: "product-id-type", get: (it) => idTipo(it.gtin) },
+  { header: "item-name", get: (it) => it.titulo_anuncio || it.produto },
+  { header: "brand-name", get: (it) => it.marca },
+  { header: "manufacturer", get: (it) => it.marca },
+  { header: "part-number", get: (it) => it.modelo },
+  { header: "product-description", get: (it) => {
+      const d = it.descricao_anuncio || it.produto || "";
+      const f = fichaTxt(it);
+      return f ? `${d}\n\nFicha técnica: ${f}` : d;
+    } },
+  { header: "bullet-point1", get: (it) => bullet(it, 0) },
+  { header: "bullet-point2", get: (it) => bullet(it, 1) },
+  { header: "bullet-point3", get: (it) => bullet(it, 2) },
+  { header: "bullet-point4", get: (it) => bullet(it, 3) },
+  { header: "bullet-point5", get: (it) => bullet(it, 4) },
+  { header: "generic-keywords", get: (it) => it.palavras_chave },
+  { header: "standard-price", get: (it) => precoVenda(it) },
+  { header: "quantity", get: (it) => (Number(it.quantidade) > 0 ? it.quantidade : 1) },
+  { header: "condition-type", get: (it) => condicaoAmazon(it).tipo },
+  { header: "condition-note", get: (it) => condicaoAmazon(it).nota },
+  { header: "color-name", get: (it) => it.cor },
+  { header: "ncm", get: (it) => it.ncm },
+  { header: "voltage", get: (it) => it.voltagem },
+  { header: "item-weight", get: (it) => it.peso_real_kg ?? it.peso_kg },
+  { header: "item-weight-unit", get: () => "KG" },
+  { header: "package-length", get: (it) => it.comprimento_cm },
+  { header: "package-width", get: (it) => it.largura_cm },
+  { header: "package-height", get: (it) => it.altura_cm },
+  { header: "package-dimensions-unit", get: () => "CM" },
+];
+
 // Packing list de uma caixa: o conteúdo para conferência/envio.
 export const COLUNAS_CAIXA = [
   { header: "SKU", get: (it) => it.sku },

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, fmtBRL, LOTE_SEM } from "../lib/model";
-import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo, COLUNAS_MEDICAO } from "../lib/export";
+import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo, COLUNAS_MEDICAO, COLUNAS_AMAZON } from "../lib/export";
 import { pendenteMedida } from "../lib/medidas";
-import { Download, Loader2, AlertTriangle, CheckCircle2, FileSpreadsheet, Ruler } from "lucide-react";
+import { Download, Loader2, AlertTriangle, CheckCircle2, FileSpreadsheet, Ruler, ShoppingCart } from "lucide-react";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 1000;
@@ -71,6 +71,14 @@ export default function ExportScreen({ lotes, refreshKey }) {
     const sufLote = fLote === LOTE_SEM ? "-semlote" : fLote ? `-lote${fLote}` : "";
     const sufCanal = fCanal ? `-${fCanal.toLowerCase().replace(/\s+/g, "")}` : "";
     baixarArquivo(`nogaria-hub${sufLote}${sufCanal}-${dt}.csv`, toCSV(alvo));
+  };
+
+  const exportarAmazon = () => {
+    const alvo = soCompletos ? analise.completos : itens;
+    if (!alvo.length) return;
+    const dt = new Date().toISOString().slice(0, 10);
+    const sufLote = fLote === LOTE_SEM ? "-semlote" : fLote ? `-lote${fLote}` : "";
+    baixarArquivo(`nogaria-amazon${sufLote}-${dt}.csv`, toCSV(alvo, COLUNAS_AMAZON));
   };
 
   const alvoLen = analise ? (soCompletos ? analise.completos.length : itens.length) : 0;
@@ -152,6 +160,12 @@ export default function ExportScreen({ lotes, refreshKey }) {
             className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-sm active:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
             <Download className="w-5 h-5" />
             Baixar CSV ({alvoLen.toLocaleString("pt-BR")} {alvoLen === 1 ? "item" : "itens"})
+          </button>
+
+          <button onClick={exportarAmazon} disabled={!alvoLen}
+            className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white rounded-2xl py-3 font-semibold active:bg-black disabled:opacity-40 disabled:cursor-not-allowed">
+            <ShoppingCart className="w-4.5 h-4.5" />
+            Baixar Amazon flat file ({alvoLen.toLocaleString("pt-BR")})
           </button>
 
           <button onClick={exportarPendentes} disabled={!pendentes.length}
