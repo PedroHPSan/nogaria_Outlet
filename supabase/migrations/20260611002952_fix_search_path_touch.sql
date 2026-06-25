@@ -1,0 +1,3 @@
+-- Migration aplicada via Supabase Studio/dashboard antes da padronização de nomes.
+-- O SQL está no histórico do projeto (supabase_migrations.schema_migrations).
+-- Stub mantido só para reconciliar `supabase migration list` / `db push`.
