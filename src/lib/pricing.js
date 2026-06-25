@@ -120,8 +120,16 @@ export function precificar(inp, P = DEFAULT_PARAMS) {
   const margem = pAnuncio > 0 ? r2((lucro / pAnuncio) * 100) / 100 : 0;
   const viavel = pPiso > 0 && pAnuncio >= pPiso;
 
+  // Custos da plataforma em R$ (no preço recomendado), só para EXIBIR — já estão
+  // embutidos no piso/lucro acima; expor aqui não muda a conta, só a deixa visível.
+  const custoTaxa = r2(pAnuncio * cn.takeRate);          // comissão % (ex.: Amazon 13%, ML 14%)
+  const custoReserva = r2(pAnuncio * P.config.reserva);  // reserva/antifraude da plataforma
+  const custoPlataforma = r2(custoTaxa + cn.fixo);       // comissão + tarifa fixa = o que a plataforma leva
+
   return {
     pAnuncio, pPiso, custoItem, frete, takeRate: cn.takeRate, fixo: cn.fixo, margemMin,
+    reserva: P.config.reserva, custoEmbalagem: P.config.embalagem,
+    custoTaxa, custoReserva, custoPlataforma,
     lucroLiquido: lucro, margemLiquida: margem, viavel,
     // Breakdown dos eixos (UI): refEff × fCond (produto) × fEmb (embalagem) × fRisco.
     refEff, fCond: cond.fator, fEmb, fRisco, ancora: cond.ancora,

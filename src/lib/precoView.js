@@ -53,7 +53,14 @@ export function derivarPreco(item, grupo = {}, params = DEFAULT_PARAMS, custoIte
     piso: r.pPiso,
     referencia: { novo: refNovo || null, usado: refUsado, fonte: fonteRef, confianca: it.preco_ref_confianca || null },
     derivacao,
-    economia: { custo: r.custoItem, frete: r.frete, taxa: r.takeRate, fixo: r.fixo, lucro: r.lucroLiquido, margem: r.margemLiquida, viavel: r.viavel, sugestao: r.sugestao },
+    economia: {
+      custo: r.custoItem, frete: r.frete, taxa: r.takeRate, fixo: r.fixo,
+      reserva: r.reserva, custoEmbalagem: r.custoEmbalagem,
+      // Plataforma em R$ (no recomendado): comissão, reserva e o total que ela leva.
+      custoTaxa: r.custoTaxa, custoReserva: r.custoReserva, custoPlataforma: r.custoPlataforma,
+      receita: recomendado, lucro: r.lucroLiquido, margem: r.margemLiquida,
+      margemMin: r.margemMin, viavel: r.viavel, sugestao: r.sugestao,
+    },
     manual,
     delta,
     flags,

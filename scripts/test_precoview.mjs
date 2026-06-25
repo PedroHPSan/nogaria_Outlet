@@ -19,6 +19,14 @@ eq(d.derivacao[3].valor, d.recomendado, "último passo da derivação = recomend
 eq(d.derivacao.length, 4, "4 passos: Referência → Condição → Embalagem → Risco");
 eq(d.derivacao[2].detalhe, "Levemente avariada", "rótulo da embalagem legível");
 
+console.log("\ncustos da plataforma visíveis (não dobram a conta)");
+const e = d.economia;
+near(e.custoTaxa, d.recomendado * e.taxa, 0.02, "custoTaxa = recomendado × takeRate");
+near(e.custoPlataforma, e.custoTaxa + e.fixo, 0.02, "custoPlataforma = comissão + tarifa fixa");
+// A quebra fecha: receita − (taxa+reserva+frete+embalagem+fixo+custo) = lucro do motor.
+const reconc = e.receita - e.custoTaxa - e.custoReserva - e.frete - e.custoEmbalagem - e.fixo - e.custo;
+near(reconc, e.lucro, 0.02, "receita − custos = lucro (quebra fecha com o motor)");
+
 console.log("\nmanual + referência + flags");
 eq(d.manual, 120, "manual reflete preco_ideal (não preco_sugerido)");
 eq(d.referencia.confianca, "MEDIA", "confiança da referência");

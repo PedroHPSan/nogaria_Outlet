@@ -94,6 +94,11 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
   const copiar = () => { navigator.clipboard?.writeText(titulo); setCopiado(true); setTimeout(() => setCopiado(false), 1500); };
 
   const manualAbaixoPiso = d.flags.some((f) => f.tipo === "erro");
+  // Inviável = o piso (preço mínimo p/ a margem) está acima do que o mercado paga.
+  const inviavel = !d.economia.viavel;
+  const canalLabel = (CANAIS.find(([v]) => v === canal) || [null, canal])[1];
+  const destinoTxt = item.destino || "destino atual";
+  const margemPct = Math.round((d.economia.margemMin ?? 0) * 100);
   const badge = d.economia.viavel
     ? { txt: "Publicar", cls: "bg-emerald-600 text-white", Icon: Check }
     : (canal === "LOCAL" || canal === "B2B")
@@ -132,16 +137,30 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
         </Campo>
       </div>
 
-      {/* ZONA 1 — Recomendação (a sugestão única) */}
-      <div className="rounded-2xl bg-orange-50 border border-orange-100 p-3 text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">Preço recomendado</p>
-        <p className="text-3xl font-extrabold text-orange-700 leading-tight">{fmtBRL(d.recomendado)}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{d.economia.sugestao}</p>
-        <button type="button" onClick={usarSugerido}
-          className="mt-2 w-full inline-flex items-center justify-center gap-1.5 bg-orange-500 text-white rounded-xl py-2 text-sm font-bold active:bg-orange-600">
-          <Sparkles className="w-4 h-4" /> Usar esta sugestão
-        </button>
-      </div>
+      {/* ZONA 1 — Recomendação OU veredito de inviabilidade (piso acima do mercado) */}
+      {!inviavel ? (
+        <div className="rounded-2xl bg-orange-50 border border-orange-100 p-3 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">Preço recomendado</p>
+          <p className="text-3xl font-extrabold text-orange-700 leading-tight">{fmtBRL(d.recomendado)}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{d.economia.sugestao}</p>
+          <button type="button" onClick={usarSugerido}
+            className="mt-2 w-full inline-flex items-center justify-center gap-1.5 bg-orange-500 text-white rounded-xl py-2 text-sm font-bold active:bg-orange-600">
+            <Sparkles className="w-4 h-4" /> Usar esta sugestão
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 inline-flex items-center justify-center gap-1">
+            <AlertTriangle className="w-3.5 h-3.5" /> Inviável em {canalLabel} · {destinoTxt}
+          </p>
+          <p className="text-3xl font-extrabold text-amber-700 leading-tight">{fmtBRL(d.recomendado)}</p>
+          <p className="text-[11px] uppercase tracking-wide text-amber-700/80">preço que o mercado paga</p>
+          <p className="text-xs text-gray-600 mt-1">
+            Piso p/ {margemPct}% de margem: <b className="text-gray-800">{fmtBRL(d.piso)}</b> — acima do mercado.
+          </p>
+          <p className="text-xs font-semibold text-amber-800 mt-0.5">{d.economia.sugestao}</p>
+        </div>
+      )}
 
       {/* ZONA 2 — Por quê (derivação dos fatores até o recomendado) */}
       <div className="rounded-xl border border-gray-100 p-2.5 space-y-1">
@@ -175,6 +194,37 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
           <span>Mínimo (piso): <b className="text-gray-800">{fmtBRL(d.piso)}</b></span>
           <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> Lucro {fmtBRL(d.economia.lucro)} · Margem {(d.economia.margem * 100).toFixed(0)}%</span>
         </div>
+
+        {/* Para onde vai o preço — a comissão da plataforma (Amazon/ML/etc.) visível em R$ */}
+        <details className="mt-2 rounded-xl border border-gray-100">
+          <summary className="flex items-center justify-between cursor-pointer list-none px-2.5 py-2 text-[11px] font-semibold uppercase text-gray-500">
+            <span>Para onde vai o preço</span>
+            <span className="normal-case font-bold text-gray-700">{canalLabel} leva {fmtBRL(d.economia.custoPlataforma)}</span>
+          </summary>
+          <div className="px-2.5 pb-2.5 space-y-1">
+            <div className="flex items-center justify-between text-xs border-b border-gray-100 pb-1">
+              <span className="text-gray-700 font-semibold">Receita (preço recomendado)</span>
+              <span className="text-gray-800 font-semibold">{fmtBRL(d.economia.receita)}</span>
+            </div>
+            {[
+              [`Comissão ${canalLabel} (${(d.economia.taxa * 100).toFixed(0)}%)`, d.economia.custoTaxa],
+              ["Tarifa fixa", d.economia.fixo],
+              [`Reserva (${(d.economia.reserva * 100).toFixed(0)}%)`, d.economia.custoReserva],
+              ["Frete", d.economia.frete],
+              ["Embalagem", d.economia.custoEmbalagem],
+              ["Custo do item", d.economia.custo],
+            ].map(([lbl, val], i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">{lbl}</span>
+                <span className="text-red-600">− {fmtBRL(val)}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between text-xs border-t border-gray-100 pt-1">
+              <span className="font-semibold text-gray-700">Lucro</span>
+              <span className={`font-bold ${d.economia.lucro >= 0 ? "text-emerald-600" : "text-red-600"}`}>{fmtBRL(d.economia.lucro)}</span>
+            </div>
+          </div>
+        </details>
         {custoItem == null && (
           <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
             <AlertTriangle className="w-3 h-3" /> Custo do lote não carregado — piso aproximado.
