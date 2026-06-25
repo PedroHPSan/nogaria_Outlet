@@ -46,6 +46,9 @@ export const CLASSE_CANAL = {
 };
 
 const num = (v) => {
+  // null/undefined/"" → null (NÃO 0), para o `??` em valorReferencia/estimarValorVenda
+  // cair na próxima fonte (âncora de categoria) em vez de tratar ausência como R$0.
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
