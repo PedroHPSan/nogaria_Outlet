@@ -598,7 +598,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="flex-1 flex items-center justify-center px-2 pb-6">
+            <div className="flex-1 min-h-0 flex items-center justify-center px-2 pb-6">
               <img src={fotos[lightbox].url} alt="" onClick={(e) => e.stopPropagation()}
                 className="max-h-full max-w-full object-contain rounded-lg" />
             </div>
