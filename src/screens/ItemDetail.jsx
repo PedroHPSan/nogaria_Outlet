@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
-import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos } from "../lib/conferencia";
+import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -444,6 +444,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     // Categoria recém-definida → herda nas unidades-irmãs do desmembramento (best-effort).
     if (patch.grupo && patch.grupo !== item.grupo) {
       try { await propagarCategoriaIrmaos(it.sku, user); } catch { /* best-effort */ }
+    }
+    // Enriquecimento da IA recém-aplicado (ou refeito) → propaga p/ as unidades-irmãs do
+    // desmembramento, preenchendo só os campos vazios delas (best-effort).
+    if (it.preco_ref_fonte === "IA:claude" && (item.preco_ref_fonte !== "IA:claude" || forcarIA)) {
+      try { await propagarEnriquecimentoIrmaos(it.sku, user); } catch { /* best-effort */ }
     }
     if (novoStatus) {
       await supabase.from("eventos").insert({ sku: it.sku, acao: "status:" + novoStatus, usuario: user.email });

@@ -104,6 +104,41 @@ export async function propagarCategoriaIrmaos(sku, user) {
   return skus.length;
 }
 
+// Campos que a IA (enriquecer-produto) preenche e que devem propagar para as irmãs.
+const CAMPOS_IA = [
+  "preco_ref_novo", "preco_ref_usado", "preco_ref_confianca", "preco_ref_fonte",
+  "titulo_anuncio", "descricao_anuncio", "marca", "modelo", "grupo", "ncm", "voltagem", "cor",
+  "comprimento_cm", "largura_cm", "altura_cm", "peso_real_kg", "medidas_fonte",
+  "bullet_points", "palavras_chave", "ficha_tecnica",
+];
+const vazioCampo = (v) => v == null || v === "" || (Array.isArray(v) && v.length === 0);
+
+// Propaga o enriquecimento da IA de um item para suas unidades-irmãs do desmembramento,
+// preenchendo SÓ os campos vazios de cada irmã (nunca sobrescreve dado humano). Mesma
+// identidade (IRMAOS_ID), mesmo lote, sem nº de série. Retorna o nº de irmãs atualizadas.
+export async function propagarEnriquecimentoIrmaos(sku, user) {
+  const sel = [...new Set(["sku", "lote", "num_serie", ...IRMAOS_ID, ...CAMPOS_IA])].join(", ");
+  const { data: orig } = await supabase.from("itens").select(sel).eq("sku", sku).maybeSingle();
+  if (!orig || orig.lote == null) return 0;
+  const { data: cands } = await supabase
+    .from("itens").select(sel)
+    .eq("lote", orig.lote).is("num_serie", null).neq("sku", orig.sku);
+  const igual = (a, b) => (a ?? null) === (b ?? null);
+  const irmas = (cands || []).filter((c) => IRMAOS_ID.every((k) => igual(c[k], orig[k])));
+  let n = 0;
+  for (const c of irmas) {
+    const patch = {};
+    for (const campo of CAMPOS_IA) {
+      if (!vazioCampo(orig[campo]) && vazioCampo(c[campo])) patch[campo] = orig[campo];
+    }
+    if (!Object.keys(patch).length) continue;
+    patch.upd_by = user.email;
+    const { error } = await supabase.from("itens").update(patch).eq("sku", c.sku);
+    if (!error) n++;
+  }
+  return n;
+}
+
 // Move um item para outra etapa (status) com rastreabilidade. Registra um evento
 // "status:<novo>" com detalhe "de <etapa anterior>" para aparecer no Registro.
 // Usado tanto no avanço/retorno individual quanto no mover-etapa em massa.
