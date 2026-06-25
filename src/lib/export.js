@@ -7,11 +7,10 @@
 // Canais alvo do plano. ML é prioridade 1 para o lote usado.
 export const CANAIS = ["Mercado Livre", "Amazon", "TikTok Shop", "Hiper"];
 
-// Preço de venda efetivo: ideal > sugerido > mínimo (primeiro > 0).
-export const precoVenda = (it) =>
-  [it.preco_ideal, it.preco_sugerido, it.preco_min, it.preco_novo_est]
-    .map(Number)
-    .find((v) => v > 0) ?? null;
+// Preço de venda efetivo: SÓ preco_ideal (a recomendação revisada pelo operador).
+// Nunca cai em preco_sugerido (×0.65 quebrado) / preco_min (invertido) / preco_novo_est
+// (estimativa) — esses não são preços de venda válidos. Sem preco_ideal ⇒ não exporta preço.
+export const precoVenda = (it) => (Number(it?.preco_ideal) > 0 ? Number(it.preco_ideal) : null);
 
 // Condição do anúncio: usa a capturada; senão deriva de `estado` (plano §1).
 export const condicaoAnuncio = (it) => {
