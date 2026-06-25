@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
-  ChevronLeft, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt
+  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
@@ -56,6 +56,7 @@ function Field({ label, children }) {
 export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClose, onSaved }) {
   const [it, setIt] = useState({ ...item });
   const [fotos, setFotos] = useState([]);
+  const [lightbox, setLightbox] = useState(null); // índice da foto ampliada (ou null)
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -134,6 +135,18 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     }
   }, [it.sku]);
   useEffect(() => { carregarFotos(); }, [carregarFotos]);
+
+  // Lightbox: Esc fecha, setas navegam (desktop). No mobile, usa os toques/botões.
+  useEffect(() => {
+    if (lightbox === null) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setLightbox(null);
+      else if (e.key === "ArrowLeft") setLightbox((i) => (i - 1 + fotos.length) % fotos.length);
+      else if (e.key === "ArrowRight") setLightbox((i) => (i + 1) % fotos.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, fotos.length]);
 
   // custo proporcional do item (rateio do lote) — usado pelo PricingCard p/ o piso de custo.
   // A view pode não existir ainda (migration não aplicada); nesse caso o card mostra aviso.
@@ -544,15 +557,22 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           </div>
           <p className="text-xs text-gray-400 mb-2">Sugestão: frente, etiqueta (marca/modelo), defeitos e acessórios. Dá para enviar várias de uma vez.</p>
           {fotos[0]?.url && (
-            <button onClick={() => fileRef.current.click()} className="block w-full mb-2">
+            <button onClick={() => setLightbox(0)} className="block w-full mb-2 relative" title="Toque para ampliar">
               <img src={fotos[0].url} alt="" className="w-full h-48 object-cover rounded-xl bg-gray-100" />
+              <span className="absolute bottom-1.5 right-1.5 bg-black/55 text-white rounded-lg p-1.5">
+                <ZoomIn className="w-4 h-4" />
+              </span>
             </button>
           )}
           <div className="flex gap-2 flex-wrap">
-            {fotos.map((f) => (
+            {fotos.map((f, i) => (
               <div key={f.id} className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
-                {f.url && <img src={f.url} alt="" className="w-full h-full object-cover" />}
-                <button onClick={() => apagarFoto(f)} className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5">
+                {f.url && (
+                  <button onClick={() => setLightbox(i)} className="block w-full h-full" title="Toque para ampliar">
+                    <img src={f.url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                )}
+                <button onClick={(e) => { e.stopPropagation(); apagarFoto(f); }} className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5">
                   <X className="w-3 h-3 text-white" />
                 </button>
               </div>
@@ -567,6 +587,37 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               onChange={(e) => { subirFotos(e.target.files); e.target.value = ""; }} />
           </div>
         </div>
+
+        {/* Lightbox de fotos: toque na foto p/ ampliar; toca fora/X fecha; setas navegam. */}
+        {lightbox !== null && fotos[lightbox]?.url && (
+          <div className="fixed inset-0 z-[80] bg-black/90 flex flex-col" onClick={() => setLightbox(null)}>
+            <div className="flex items-center justify-between px-4 py-3 text-white/90">
+              <span className="text-sm font-semibold">{lightbox + 1} / {fotos.length}</span>
+              <button onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
+                className="p-2 rounded-lg bg-white/10 active:bg-white/20" aria-label="Fechar">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center px-2 pb-6">
+              <img src={fotos[lightbox].url} alt="" onClick={(e) => e.stopPropagation()}
+                className="max-h-full max-w-full object-contain rounded-lg" />
+            </div>
+            {fotos.length > 1 && (
+              <>
+                <button aria-label="Anterior"
+                  onClick={(e) => { e.stopPropagation(); setLightbox((i) => (i - 1 + fotos.length) % fotos.length); }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white active:bg-white/20">
+                  <ChevronLeft className="w-7 h-7" />
+                </button>
+                <button aria-label="Próxima"
+                  onClick={(e) => { e.stopPropagation(); setLightbox((i) => (i + 1) % fotos.length); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white active:bg-white/20">
+                  <ChevronRight className="w-7 h-7" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Checklist de condição */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
