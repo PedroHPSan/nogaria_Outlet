@@ -186,6 +186,50 @@ export const COLUNAS_AMAZON = [
   { header: "package-dimensions-unit", get: () => "CM" },
 ];
 
+// --- Unificação de produtos iguais (publicação mãe) --------------------------
+// Para postagem em marketplaces (Amazon etc.), unidades idênticas viram UMA oferta
+// com estoque = nº de unidades, em vez de 1 linha por SKU. Identidade = a mesma do
+// catálogo (produto+marca+modelo+cor+tamanho+estado) + condição da embalagem (p/ a
+// Amazon não fundir "New" com "Used-Like-New"). Não grava nada; só transforma o export.
+const norm = (v) => String(v ?? "").trim().toLowerCase();
+const identUnif = (it) =>
+  ["produto", "marca", "modelo", "cor", "tamanho", "estado"]
+    .map((k) => norm(it[k]))
+    .concat(norm(it.cond_embalagem || "PERFEITA"))
+    .join("|");
+
+// Completude: escolhe o item representante do grupo (o mais rico em conteúdo).
+const completude = (it) =>
+  (it.gtin ? 1 : 0) + (it.foto_feita ? 1 : 0) + (it.titulo_anuncio ? 1 : 0) +
+  (Array.isArray(it.bullet_points) && it.bullet_points.length ? 1 : 0) +
+  ((Number(precoVenda(it)) || 0) > 0 ? 1 : 0);
+
+export const unificarIguais = (itens) => {
+  const grupos = new Map();
+  for (const it of itens || []) {
+    const k = identUnif(it);
+    let arr = grupos.get(k);
+    if (!arr) { arr = []; grupos.set(k, arr); }
+    arr.push(it);
+  }
+  return [...grupos.values()].map((membros) => {
+    const rep = membros.reduce((a, b) => (completude(b) > completude(a) ? b : a), membros[0]);
+    const skus = membros.map((m) => m.sku).sort();
+    const precos = membros.map((m) => Number(precoVenda(m))).filter((v) => v > 0);
+    const preco = precos.length ? Math.min(...precos) : null;
+    return {
+      ...rep,
+      sku: skus[0],                          // SKU mãe = menor SKU do grupo
+      quantidade: membros.length,            // estoque = nº de unidades
+      preco_ideal: preco ?? rep.preco_ideal, // menor preço do grupo (precoVenda usa este)
+      __skus: skus,
+    };
+  });
+};
+
+// Coluna extra (só no modo unificado): os SKUs físicos agregados na oferta.
+export const COL_SKUS_UNIFICADOS = { header: "SKUs unificados", get: (it) => (it.__skus || []).join(" ") };
+
 // Packing list de uma caixa: o conteúdo para conferência/envio.
 export const COLUNAS_CAIXA = [
   { header: "SKU", get: (it) => it.sku },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, fmtBRL, LOTE_SEM } from "../lib/model";
-import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo, COLUNAS_MEDICAO, COLUNAS_AMAZON } from "../lib/export";
+import { CANAIS, checarCompletude, diagnosticarPorCanal, precoVenda, toCSV, baixarArquivo, COLUNAS, COLUNAS_MEDICAO, COLUNAS_AMAZON, unificarIguais, COL_SKUS_UNIFICADOS } from "../lib/export";
 import { pendenteMedida } from "../lib/medidas";
 import { Download, Loader2, AlertTriangle, CheckCircle2, FileSpreadsheet, Ruler, ShoppingCart } from "lucide-react";
 
@@ -13,6 +13,7 @@ export default function ExportScreen({ lotes, refreshKey }) {
   const [fStatus, setFStatus] = useState("");
   const [fCanal, setFCanal] = useState("");
   const [soCompletos, setSoCompletos] = useState(true);
+  const [unificar, setUnificar] = useState(false); // produtos iguais → 1 publicação mãe
   const [itens, setItens] = useState(null); // null = carregando
 
   // Carrega todos os itens que batem com os filtros (paginado: o PostgREST
@@ -65,23 +66,31 @@ export default function ExportScreen({ lotes, refreshKey }) {
   }, [itens, fCanal]);
 
   const exportar = () => {
-    const alvo = soCompletos ? analise.completos : itens;
+    let alvo = soCompletos ? analise.completos : itens;
     if (!alvo.length) return;
+    const cols = unificar ? [...COLUNAS, COL_SKUS_UNIFICADOS] : undefined;
+    if (unificar) alvo = unificarIguais(alvo);
     const dt = new Date().toISOString().slice(0, 10);
     const sufLote = fLote === LOTE_SEM ? "-semlote" : fLote ? `-lote${fLote}` : "";
     const sufCanal = fCanal ? `-${fCanal.toLowerCase().replace(/\s+/g, "")}` : "";
-    baixarArquivo(`nogaria-hub${sufLote}${sufCanal}-${dt}.csv`, toCSV(alvo));
+    baixarArquivo(`nogaria-hub${sufLote}${sufCanal}${unificar ? "-unificado" : ""}-${dt}.csv`, toCSV(alvo, cols));
   };
 
   const exportarAmazon = () => {
-    const alvo = soCompletos ? analise.completos : itens;
+    let alvo = soCompletos ? analise.completos : itens;
     if (!alvo.length) return;
+    if (unificar) alvo = unificarIguais(alvo);
     const dt = new Date().toISOString().slice(0, 10);
     const sufLote = fLote === LOTE_SEM ? "-semlote" : fLote ? `-lote${fLote}` : "";
-    baixarArquivo(`nogaria-amazon${sufLote}-${dt}.csv`, toCSV(alvo, COLUNAS_AMAZON));
+    baixarArquivo(`nogaria-amazon${sufLote}${unificar ? "-unificado" : ""}-${dt}.csv`, toCSV(alvo, COLUNAS_AMAZON));
   };
 
   const alvoLen = analise ? (soCompletos ? analise.completos.length : itens.length) : 0;
+  // Nº de ofertas quando unificado (publicações mãe), p/ o operador ver o ganho.
+  const nOfertas = useMemo(() => {
+    if (!unificar || !analise) return null;
+    return unificarIguais(soCompletos ? analise.completos : itens).length;
+  }, [unificar, soCompletos, analise, itens]);
 
   // Lista de campo dos itens ainda não medidos/pesados (dentro dos filtros atuais).
   const pendentes = useMemo(() => (itens || []).filter(pendenteMedida), [itens]);
@@ -120,6 +129,16 @@ export default function ExportScreen({ lotes, refreshKey }) {
             className="w-4 h-4 rounded accent-orange-500" />
           {fCanal ? `Exportar só itens prontos para ${fCanal}` : "Exportar só itens completos"}
         </label>
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input type="checkbox" checked={unificar} onChange={(e) => setUnificar(e.target.checked)}
+            className="w-4 h-4 rounded accent-violet-500" />
+          Unificar produtos iguais (1 publicação mãe, estoque = nº de unidades)
+        </label>
+        {unificar && nOfertas != null && (
+          <p className="text-xs text-violet-600 pl-6">
+            {nOfertas.toLocaleString("pt-BR")} oferta(s) de {alvoLen.toLocaleString("pt-BR")} SKU(s) — iguais agrupados por identidade + condição.
+          </p>
+        )}
         {fCanal && (
           <p className="text-xs text-gray-400">Prontidão para <b>{fCanal}</b> inclui GTIN, NCM, dimensões/peso e foto.</p>
         )}
