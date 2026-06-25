@@ -1,14 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { Tag, TrendingUp, AlertTriangle, Check, Copy, Wand2, ChevronDown, Sparkles } from "lucide-react";
 import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO, ESTADOS, EMBALAGENS } from "../lib/model";
-import { precificar, gerarTitulo, estadoToCondicao, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
+import { gerarTitulo, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
+import { derivarPreco } from "../lib/precoView";
 
 const CANAIS = [
   ["ML", "Mercado Livre"], ["SHOPEE", "Shopee"], ["TIKTOK", "TikTok Shop"],
   ["MAGALU", "Magalu"], ["AMAZON", "Amazon"], ["B2B", "B2B / lote"], ["LOCAL", "OLX / local"],
 ];
-// Piso de fallback (só quando o motor não tem custo do lote p/ calcular o piso real).
-const PISO_PCT = 0.70;
 
 const sel = "rounded-lg border border-gray-300 px-2 py-2 text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none";
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
@@ -76,57 +75,26 @@ function Secao({ titulo, aberto, onToggle, children }) {
 // Obs.: a busca de preço no Mercado Livre está aposentada; a referência usa o valor
 // salvo no item ou a âncora do grupo.
 export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem = null, onChange }) {
-  const grupo = params.grupos?.[item.grupo] || {};
-  // Condição do motor é derivada do Estado do item (fonte única). Editar o Estado aqui
-  // grava em item.estado via onChange, mantendo-o atrelado às chips de Estado da ficha.
-  const cond = estadoToCondicao(item.estado, params.config?.condicaoPadrao);
   const [canal, setCanal] = useState(normalizarCanal(item.canal_principal));
   const [copiado, setCopiado] = useState(false);
-  const [minManual, setMinManual] = useState(false);
-  const [verCalculo, setVerCalculo] = useState(false);
   const [detalhes, setDetalhes] = useState(false);
 
-  const refNovo = item.preco_ref_novo ?? grupo.ancoraNovo ?? item.preco_novo_est ?? 0;
-  const refUsado = item.preco_ref_usado ?? grupo.ancoraUsado ?? null;
-  const fonteRef = item.preco_ref_fonte ?? null;
-  const risco = grupo.nivelRisco || "MEDIO";
-
-  const embalagem = item.cond_embalagem || "PERFEITA";
-  const r = useMemo(() => precificar({
-    condicaoCod: cond, canalCod: canal, riscoNivel: risco, embalagemCod: embalagem,
-    destino: item.destino, pesoKg: item.peso_real_kg ?? item.peso_kg ?? 0,
-    refNovo, refUsado, custoItem: custoItem ?? 0,
-  }, params), [cond, canal, risco, embalagem, item.destino, item.peso_real_kg, item.peso_kg, refNovo, refUsado, custoItem, params]);
+  // Fonte ÚNICA da UI: derivarPreco consome precificar() (sem recalcular). O canal
+  // selecionado entra por override para a recomendação reagir na hora.
+  const d = useMemo(() => {
+    const grupo = params.grupos?.[item.grupo] || {};
+    return derivarPreco({ ...item, canal_principal: canal }, grupo, params, custoItem);
+  }, [item, canal, params, custoItem]);
 
   const tituloSugerido = gerarTitulo(item, canal);
   const titulo = item.titulo_anuncio || tituloSugerido;
 
-  // Mínimo derivado: piso real do motor; sem custo do lote, cai em % do preço de venda.
-  const calcMin = (vendaVal) => {
-    if (r.pPiso > 0) return r.pPiso;
-    const base = Number(vendaVal) || r.pAnuncio || 0;
-    return base > 0 ? Math.round(base * PISO_PCT) : null;
-  };
-  const precoMinEff = item.preco_min ?? calcMin(item.preco_ideal);
-
-  const setVenda = (v) => onChange?.({ preco_ideal: v, ...(minManual ? {} : { preco_min: calcMin(v) }) });
-  const usarSugerido = () => onChange?.({
-    preco_ideal: r.pAnuncio, preco_sugerido: r.pAnuncio,
-    ...(minManual ? {} : { preco_min: calcMin(r.pAnuncio) }),
-  });
-  const toggleMin = () => setMinManual((m) => {
-    const next = !m;
-    if (!next) onChange?.({ preco_min: calcMin(item.preco_ideal) }); // voltou ao automático
-    return next;
-  });
+  const setVenda = (v) => onChange?.({ preco_ideal: v });
+  const usarSugerido = () => onChange?.({ preco_ideal: d.recomendado });
   const copiar = () => { navigator.clipboard?.writeText(titulo); setCopiado(true); setTimeout(() => setCopiado(false), 1500); };
 
-  const presets = [
-    { key: "novo", label: "Novo", v: refNovo, action: () => setVenda(refNovo) },
-    { key: "usado", label: "Usado", v: refUsado, action: () => setVenda(refUsado) },
-  ].filter((p) => p.v && p.v > 0);
-
-  const badge = r.viavel
+  const manualAbaixoPiso = d.flags.some((f) => f.tipo === "erro");
+  const badge = d.economia.viavel
     ? { txt: "Publicar", cls: "bg-emerald-600 text-white", Icon: Check }
     : (canal === "LOCAL" || canal === "B2B")
       ? { txt: "Rever preço/custo", cls: "bg-amber-500 text-white", Icon: AlertTriangle }
@@ -152,7 +120,7 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
           </select>
         </Campo>
         <Campo label="Embalagem">
-          <select className={sel + " w-full"} value={embalagem}
+          <select className={sel + " w-full"} value={item.cond_embalagem || "PERFEITA"}
             onChange={(e) => onChange?.({ cond_embalagem: e.target.value })}>
             {EMBALAGENS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
           </select>
@@ -164,53 +132,54 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
         </Campo>
       </div>
 
-      {/* Preço de venda — campo principal */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-semibold uppercase text-gray-500">Preço de venda (R$)</span>
-          <button type="button" onClick={usarSugerido}
-            className="text-xs font-semibold text-orange-600 inline-flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" /> Usar sugerido {r.pAnuncio ? fmtBRL(r.pAnuncio) : ""}
-          </button>
-        </div>
-        <input type="number" inputMode="decimal"
-          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-2xl font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-          value={item.preco_ideal ?? ""} onChange={(e) => setVenda(e.target.value)}
-          placeholder={r.pAnuncio ? String(r.pAnuncio) : "0"} />
-        {presets.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {presets.map((p) => (
-              <button key={p.key} type="button" onClick={p.action}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-gray-300 text-gray-600 bg-white active:bg-gray-100">
-                {p.label} {fmtBRL(p.v)}
-              </button>
-            ))}
+      {/* ZONA 1 — Recomendação (a sugestão única) */}
+      <div className="rounded-2xl bg-orange-50 border border-orange-100 p-3 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">Preço recomendado</p>
+        <p className="text-3xl font-extrabold text-orange-700 leading-tight">{fmtBRL(d.recomendado)}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{d.economia.sugestao}</p>
+        <button type="button" onClick={usarSugerido}
+          className="mt-2 w-full inline-flex items-center justify-center gap-1.5 bg-orange-500 text-white rounded-xl py-2 text-sm font-bold active:bg-orange-600">
+          <Sparkles className="w-4 h-4" /> Usar esta sugestão
+        </button>
+      </div>
+
+      {/* ZONA 2 — Por quê (derivação dos fatores até o recomendado) */}
+      <div className="rounded-xl border border-gray-100 p-2.5 space-y-1">
+        <p className="text-[11px] font-semibold uppercase text-gray-500">Por que esse preço</p>
+        {d.derivacao.map((p, i) => (
+          <div key={i} className="flex items-center justify-between text-xs gap-2">
+            <span className="text-gray-600 truncate">
+              {p.passo}{p.detalhe && p.detalhe !== "—" ? <span className="text-gray-400"> · {p.detalhe}</span> : null}
+            </span>
+            <span className="text-gray-800 flex-shrink-0">
+              {p.fator != null && <span className="text-gray-400">× {p.fator} = </span>}
+              <b>{fmtBRL(p.valor)}</b>
+            </span>
           </div>
-        )}
+        ))}
       </div>
 
-      {/* Mínimo automático (com ajuste manual) */}
+      {/* ZONA 3 — Seu preço & piso (override + guarda-corpo) */}
       <div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">
-            Mínimo: <b className="text-gray-700">{fmtBRL(precoMinEff)}</b>{" "}
-            <span className="text-gray-400">{minManual ? "(manual)" : "(automático)"}</span>
-          </span>
-          <button type="button" onClick={toggleMin} className="text-orange-600 font-semibold">
-            {minManual ? "voltar ao automático" : "ajustar"}
-          </button>
+        <span className="text-[11px] font-semibold uppercase text-gray-500">Seu preço de venda (R$)</span>
+        <input type="number" inputMode="decimal"
+          className={`w-full rounded-xl border px-3 py-2.5 text-2xl font-bold bg-white focus:outline-none focus:ring-2 mt-1 ${manualAbaixoPiso ? "border-red-400 text-red-700 focus:ring-red-400" : "border-gray-300 text-gray-900 focus:ring-orange-500"}`}
+          value={item.preco_ideal ?? ""} onChange={(e) => setVenda(e.target.value)}
+          placeholder={d.recomendado ? String(d.recomendado) : "0"} />
+        {d.flags.map((f, i) => (
+          <p key={i} className={`text-xs mt-1 inline-flex items-center gap-1 ${f.tipo === "erro" ? "text-red-600" : "text-amber-600"}`}>
+            <AlertTriangle className="w-3 h-3" /> {f.msg}
+          </p>
+        ))}
+        <div className="flex items-center justify-between text-xs text-gray-600 mt-2 px-0.5">
+          <span>Mínimo (piso): <b className="text-gray-800">{fmtBRL(d.piso)}</b></span>
+          <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> Lucro {fmtBRL(d.economia.lucro)} · Margem {(d.economia.margem * 100).toFixed(0)}%</span>
         </div>
-        {minManual && (
-          <input type="number" inputMode="decimal" className={inputCls + " mt-1"} value={item.preco_min ?? ""}
-            onChange={(e) => onChange?.({ preco_min: e.target.value })}
-            placeholder={calcMin(item.preco_ideal) ? `sug. ${calcMin(item.preco_ideal)}` : ""} />
+        {custoItem == null && (
+          <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
+            <AlertTriangle className="w-3 h-3" /> Custo do lote não carregado — piso aproximado.
+          </p>
         )}
-      </div>
-
-      {/* Status compacto */}
-      <div className="flex items-center justify-between text-xs text-gray-600 px-0.5">
-        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> Lucro {fmtBRL(r.lucroLiquido)}</span>
-        <span>Margem {(r.margemLiquida * 100).toFixed(0)}%</span>
       </div>
 
       {/* Destino — afeta margem mínima / piso */}
@@ -218,40 +187,6 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
         <Chips options={DESTINOS} value={item.destino || null}
           onChange={(v) => onChange?.({ destino: v })} activeCls="bg-orange-500 text-white border-orange-500" />
       </Campo>
-
-      {/* Ver cálculo (detalhe do motor) */}
-      <Secao titulo="Ver cálculo" aberto={verCalculo} onToggle={() => setVerCalculo((o) => !o)}>
-        <div className="flex items-center gap-3 text-xs text-gray-600">
-          <span className="text-[11px] font-semibold uppercase text-gray-500">Ref.</span>
-          <span>Novo <b className="text-gray-800">{fmtBRL(refNovo)}</b></span>
-          {refUsado != null && <span>Usado <b className="text-gray-800">{fmtBRL(refUsado)}</b></span>}
-          {fonteRef && <span className="text-gray-400 truncate">({fonteRef})</span>}
-        </div>
-        <div className="text-[11px] text-gray-500">
-          {fmtBRL(r.refEff)} × <b className="text-gray-700">{r.fCond}</b> produto
-          {r.fEmb !== 1 && <> × <b className="text-gray-700">{r.fEmb}</b> caixa</>}
-          {" "}× <b className="text-gray-700">{r.fRisco}</b> risco = <b className="text-gray-800">{fmtBRL(r.pAnuncio)}</b>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-center">
-          <div className="rounded-xl bg-orange-50 py-2">
-            <p className="text-[11px] font-semibold uppercase text-orange-700">P. anúncio</p>
-            <p className="text-lg font-bold text-orange-700">{fmtBRL(r.pAnuncio)}</p>
-          </div>
-          <div className="rounded-xl bg-gray-50 py-2">
-            <p className="text-[11px] font-semibold uppercase text-gray-500">P. mínimo (piso)</p>
-            <p className="text-lg font-bold text-gray-700">{fmtBRL(r.pPiso)}</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-between text-xs text-gray-600 px-1">
-          <span>Frete {fmtBRL(r.frete)}</span>
-          <span>Taxa {(r.takeRate * 100).toFixed(0)}% + {fmtBRL(r.fixo)}</span>
-        </div>
-        {custoItem == null && (
-          <p className="text-[11px] text-amber-600 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" /> Custo do lote não carregado — piso aproximado.
-          </p>
-        )}
-      </Secao>
 
       {/* Detalhes do anúncio e envio (secundário) */}
       <Secao titulo="Detalhes do anúncio e envio" aberto={detalhes} onToggle={() => setDetalhes((o) => !o)}>

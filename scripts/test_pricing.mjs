@@ -2,6 +2,7 @@
 // Rode: node scripts/test_pricing.mjs   (ou: npm run test:pricing)
 import assert from "node:assert/strict";
 import { precificar, estadoToCondicao } from "../src/lib/pricing.js";
+import { precoVenda } from "../src/lib/export.js";
 
 let passou = 0;
 const eq = (a, b, msg) => { assert.equal(a, b, msg); passou++; console.log(`  ok  ${msg}`); };
@@ -53,5 +54,11 @@ const semEmb = precificar({
   destino: "Venda local SP", pesoKg: 0, refNovo: 900,
 });
 near(semEmb.pAnuncio, 471.96, 0.01, "Sem embalagemCod: fator embalagem neutro (=1)");
+
+console.log("\nprecoVenda (export): só preco_ideal, sem fallback quebrado");
+eq(precoVenda({ preco_ideal: 150 }), 150, "com preco_ideal → usa ele");
+eq(precoVenda({ preco_sugerido: 99 }), null, "só preco_sugerido → null (não usa o campo quebrado)");
+eq(precoVenda({ preco_min: 80, preco_novo_est: 200 }), null, "só preco_min/novo_est → null");
+eq(precoVenda({ preco_ideal: 0 }), null, "preco_ideal 0 → null");
 
 console.log(`\n${passou} asserções OK`);

@@ -11,6 +11,7 @@ import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from 
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
 import PricingCard from "../components/PricingCard";
+import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { sugerirCategoria } from "../lib/categorizar";
 import { DEFAULT_PARAMS } from "../lib/pricing";
@@ -775,6 +776,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             onChange={(patch) => set(patch)}
           />
         </div>
+
+        {/* Publicar em marketplace (Amazon) — após revisão; gate de preço/GTIN no PublishPanel */}
+        <PublishPanel item={it} />
 
         {/* Venda — detalhe da venda real (a partir de Triado, p/ vendas diretas) p/ apurar o lucro líquido */}
         {statusIdx(it.status) >= statusIdx("TRIADO") && (

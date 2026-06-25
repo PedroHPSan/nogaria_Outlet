@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test:pricing": "node scripts/test_pricing.mjs",
-    "test:categoria": "node scripts/test_categoria.mjs"
+    "test:categoria": "node scripts/test_categoria.mjs",
+    "test:preflight": "node scripts/test_preflight.mjs",
+    "test:precoview": "node scripts/test_precoview.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
