@@ -6,6 +6,10 @@
 import { supabase } from "./supabase.js";
 import { precoVenda } from "./export.js";
 import { fmtBRL } from "./model.js";
+import { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
+
+// Reexporta os helpers de tamanho (agora em tamanhos.js) para manter a API antiga.
+export { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
 
 // Categoria canônica de calçados (definida no motor de precificação / categorizar).
 export const GRUPO_CALCADOS = "Calçados";
@@ -26,30 +30,6 @@ export async function listarCalcados({ incluirIndisponiveis = false } = {}) {
     if (chunk.length < PAGE) break;
   }
   return data;
-}
-
-// Rótulo de tamanho normalizado (vazio vira "Sem tamanho").
-export const tamanhoLabel = (t) => {
-  const s = String(t ?? "").trim();
-  return s || "Sem tamanho";
-};
-
-// Ordena tamanhos de forma natural: numéricos crescentes primeiro, depois texto
-// (ex.: "M", "G"), e "Sem tamanho" sempre por último.
-export function ordenarTamanhos(tams) {
-  const num = (t) => {
-    const m = String(t).match(/\d+([.,]\d+)?/);
-    return m ? parseFloat(m[0].replace(",", ".")) : null;
-  };
-  return [...tams].sort((a, b) => {
-    if (a === "Sem tamanho") return 1;
-    if (b === "Sem tamanho") return -1;
-    const na = num(a), nb = num(b);
-    if (na != null && nb != null) return na - nb || String(a).localeCompare(String(b));
-    if (na != null) return -1;
-    if (nb != null) return 1;
-    return String(a).localeCompare(String(b), "pt-BR");
-  });
 }
 
 // Lista ordenada de tamanhos distintos presentes nos itens.

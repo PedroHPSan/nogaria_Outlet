@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import {
   dedupCatalogo, agruparCatalogo, CATALOGO_ESTADO_BADGE, CATALOGO_STATUS_EXCLUIR,
-} from "../src/lib/catalogo.js";
+} from "../src/lib/catalogoCore.js";
 
 let passou = 0;
 const eq = (a, b, msg) => { assert.equal(a, b, msg); passou++; console.log(`  ok  ${msg}`); };
