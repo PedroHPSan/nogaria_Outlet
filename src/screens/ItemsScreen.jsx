@@ -6,7 +6,7 @@ import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package } from "lucide-react";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -27,6 +27,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fSemEtiq, setFSemEtiq] = useState(!!initialFilter?.semEtiqueta);
   const [fSemClasse, setFSemClasse] = useState(!!initialFilter?.semClasse);
   const [fSemFoto, setFSemFoto] = useState(!!initialFilter?.semFoto);
+  const [fIaPreco, setFIaPreco] = useState(!!initialFilter?.iaPreco); // precificados pela IA (preco_ref_fonte=IA:claude)
   const [showFilters, setShowFilters] = useState(!!initialFilter);
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
@@ -122,6 +123,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fSemClasse) query = query.is("classe", null);
     // Triados (já catalogados) que ainda não têm foto.
     if (fSemFoto) query = query.neq("status", "A_CATALOGAR").eq("foto_feita", false);
+    // Precificados pela IA (lote enriquecer_precos.mjs grava preco_ref_fonte=IA:claude).
+    if (fIaPreco) query = query.eq("preco_ref_fonte", "IA:claude");
     if (q.trim()) {
       const t = q.trim();
       query = query.or(`sku.ilike.%${t}%,produto.ilike.%${t}%,marca.ilike.%${t}%,modelo.ilike.%${t}%`);
@@ -131,7 +134,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -139,7 +142,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -193,7 +196,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -261,6 +264,13 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <input type="checkbox" checked={fSemClasse} onChange={(e) => setFSemClasse(e.target.checked)}
                 className="w-4 h-4 rounded accent-orange-500" />
               Só sem classe (classificar)
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={fIaPreco} onChange={(e) => setFIaPreco(e.target.checked)}
+                className="w-4 h-4 rounded accent-violet-500" />
+              <span className="inline-flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-violet-500" /> Só precificados pela IA
+              </span>
             </label>
           </div>
         )}
@@ -347,6 +357,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                       <span title={`Na caixa ${it.caixa_id}`}
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex-shrink-0">
                         <Package className="w-3 h-3" />{it.caixa_id}
+                      </span>
+                    )}
+                    {it.preco_ref_fonte === "IA:claude" && (
+                      <span title="Precificado e enriquecido pela IA"
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 flex-shrink-0">
+                        <Sparkles className="w-3 h-3" />IA
                       </span>
                     )}
                   </div>
