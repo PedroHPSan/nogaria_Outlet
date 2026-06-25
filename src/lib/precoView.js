@@ -31,12 +31,60 @@ export function derivarPreco(item, grupo = {}, params = DEFAULT_PARAMS, custoIte
   // Derivação: cada passo aplica um fator até chegar ao recomendado (o "porquê").
   const v1 = r2(refEff * r.fCond);
   const v2 = r2(v1 * r.fEmb);
+  const pct = (f) => Math.round((f ?? 1) * 100);
+  const embLabel = embalagemLabel(embalagem);
   const derivacao = [
-    { passo: "Referência", detalhe: fonteRef, fator: null, valor: r2(refEff) },
-    { passo: "Condição do produto", detalhe: it.estado || "—", fator: r.fCond, valor: v1 },
-    { passo: "Embalagem", detalhe: embalagemLabel(embalagem), fator: r.fEmb, valor: v2 },
-    { passo: "Risco", detalhe: risco, fator: r.fRisco, valor: recomendado },
+    {
+      passo: "Referência", detalhe: fonteRef, fator: null, valor: r2(refEff),
+      ajuda: `Preço de um item igual a este${fonteRef && fonteRef !== "—" ? ` (fonte: ${fonteRef})` : ""}. É a base de todo o cálculo do teto.`,
+    },
+    {
+      passo: "Condição do produto", detalhe: it.estado || "—", fator: r.fCond, valor: v1,
+      ajuda: `${it.estado || "Esta condição"} vale ${pct(r.fCond)}% do valor de ${r.ancora === "NOVO" ? "um novo" : "um usado"}.`,
+    },
+    {
+      passo: "Embalagem", detalhe: embLabel, fator: r.fEmb, valor: v2,
+      ajuda: r.fEmb < 1 ? `Caixa "${embLabel}": corte de ${100 - pct(r.fEmb)}% no preço.` : `Caixa "${embLabel}": sem corte.`,
+    },
+    {
+      passo: "Risco", detalhe: risco, fator: r.fRisco, valor: recomendado,
+      ajuda: `Risco ${risco} da categoria: mantém ${pct(r.fRisco)}% (desconto pela chance de devolução/disputa).`,
+    },
   ];
+
+  // Lucro/margem em QUALQUER preço (mesma fórmula do motor): lucro(P) = P − custos
+  // diretos − P×(comissão+reserva). Em P=recomendado bate com economia.lucro; em
+  // P=piso a margem bate com a margem mínima. Deixa o card reagir ao preço digitado.
+  const custosDiretos = r2(r.custoItem + r.frete + r.custoEmbalagem + r.fixo);
+  const taxaSobreVenda = r.takeRate + r.reserva;
+  const lucroEm = (p) => {
+    const v = Number(p);
+    if (!Number.isFinite(v) || v <= 0) return null;
+    return r2(v - custosDiretos - v * taxaSobreVenda);
+  };
+  const margemEm = (p) => {
+    const v = Number(p), l = lucroEm(p);
+    return l == null || v <= 0 ? null : r2(l / v);
+  };
+
+  // Memória de cálculo com VALORES (R$): o piso (custos ÷ (1−taxas−margem)) e o teto
+  // (referência × fatores). Cada linha leva o "porquê" em português.
+  const memoria = {
+    piso: {
+      componentes: [
+        { label: "Custo do item", valor: r.custoItem, ajuda: "Quanto esta unidade custou (rateio do custo do lote)." },
+        { label: "Frete estimado", valor: r.frete, ajuda: "Envio ao cliente. Zero em canais locais (OLX/B2B)." },
+        { label: "Embalagem", valor: r.custoEmbalagem, ajuda: "Caixa, plástico e material de envio." },
+        { label: "Tarifa fixa do canal", valor: r.fixo, ajuda: "Custo fixo por venda cobrado pela plataforma." },
+      ],
+      custosDiretos,
+      partes: { comissao: r.takeRate, reserva: r.reserva, margem: r.margemMin },
+      denom: r2(1 - r.takeRate - r.reserva - r.margemMin),
+      resultado: r.pPiso,
+      inviavel: !(r.pPiso > 0),
+    },
+    teto: derivacao,
+  };
 
   const manual = Number(it.preco_ideal) > 0 ? Number(it.preco_ideal) : null;
   const delta = manual != null ? r2(manual - recomendado) : null;
@@ -64,5 +112,8 @@ export function derivarPreco(item, grupo = {}, params = DEFAULT_PARAMS, custoIte
     manual,
     delta,
     flags,
+    memoria,
+    lucroEm,
+    margemEm,
   };
 }

@@ -27,6 +27,16 @@ near(e.custoPlataforma, e.custoTaxa + e.fixo, 0.02, "custoPlataforma = comissão
 const reconc = e.receita - e.custoTaxa - e.custoReserva - e.frete - e.custoEmbalagem - e.fixo - e.custo;
 near(reconc, e.lucro, 0.02, "receita − custos = lucro (quebra fecha com o motor)");
 
+console.log("\nlucro/margem ao vivo + memória de cálculo");
+near(d.lucroEm(d.recomendado), d.economia.lucro, 0.05, "lucroEm(recomendado) = lucro do motor");
+near(d.margemEm(d.recomendado), d.economia.margem, 0.005, "margemEm(recomendado) = margem do motor");
+near(d.margemEm(d.piso), d.economia.margemMin, 0.005, "margemEm(piso) = margem mínima");
+eq(d.lucroEm(0), null, "lucroEm(0) = null");
+eq(d.memoria.piso.resultado, d.piso, "memória do piso fecha no piso");
+eq(d.memoria.teto[d.memoria.teto.length - 1].valor, d.recomendado, "memória do teto fecha no recomendado");
+near(d.memoria.piso.custosDiretos, d.economia.custo + d.economia.frete + d.economia.custoEmbalagem + d.economia.fixo, 0.02, "custos diretos = custo+frete+embalagem+fixo");
+eq(d.memoria.teto.every((p) => p.ajuda), true, "todo passo da memória do teto tem ajuda em PT");
+
 console.log("\nmanual + referência + flags");
 eq(d.manual, 120, "manual reflete preco_ideal (não preco_sugerido)");
 eq(d.referencia.confianca, "MEDIA", "confiança da referência");
