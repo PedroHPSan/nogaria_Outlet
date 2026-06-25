@@ -200,6 +200,62 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     }
   };
 
+  // Constrói as sugestões aplicáveis a partir do retorno da IA (campo a campo).
+  // Função pura (não usa estado/`set`): cada item já carrega o `patch` pronto, o que
+  // permite reusá-la tanto no fill automático (assim que a IA retorna) quanto nos
+  // botões de revisão. `item` entra só p/ os fallbacks de dimensão.
+  const construirSugestoes = (iaData, item) => {
+    if (!iaData) return [];
+    const d = iaData.dimensoes_estimadas || {};
+    const temDim = [d.comprimento_cm, d.largura_cm, d.altura_cm, d.peso_kg].some((v) => v != null);
+    const lista = [
+      { k: "titulo_anuncio", label: "Título", val: iaData.titulo_anuncio, patch: { titulo_anuncio: iaData.titulo_anuncio } },
+      { k: "descricao_anuncio", label: "Descrição", val: iaData.descricao_anuncio, patch: { descricao_anuncio: iaData.descricao_anuncio } },
+      { k: "marca", label: "Marca", val: iaData.marca, patch: { marca: iaData.marca } },
+      { k: "modelo", label: "Modelo", val: iaData.modelo, patch: { modelo: iaData.modelo } },
+      { k: "grupo", label: "Categoria", val: iaData.grupo, patch: { grupo: iaData.grupo } },
+      { k: "ncm", label: "NCM", val: iaData.ncm, patch: { ncm: iaData.ncm } },
+      { k: "voltagem", label: "Voltagem", val: iaData.voltagem, patch: { voltagem: iaData.voltagem } },
+      { k: "cor", label: "Cor", val: iaData.cor, patch: { cor: iaData.cor } },
+      temDim && {
+        k: "dimensoes", label: "Dimensões (C×L×A, peso)",
+        val: `${d.comprimento_cm ?? "–"}×${d.largura_cm ?? "–"}×${d.altura_cm ?? "–"} cm · ${d.peso_kg ?? "–"} kg`,
+        patch: {
+          comprimento_cm: d.comprimento_cm ?? item.comprimento_cm, largura_cm: d.largura_cm ?? item.largura_cm,
+          altura_cm: d.altura_cm ?? item.altura_cm, peso_real_kg: d.peso_kg ?? item.peso_real_kg,
+          medidas_fonte: MEDIDAS_FONTE.ESTIMADO,
+        },
+      },
+      (iaData.preco_ref_novo != null || iaData.preco_ref_usado != null) && {
+        k: "preco", label: `Preço ref. (IA · ${iaData.preco_ref_confianca || "—"})`,
+        val: `Novo ${fmtBRL(iaData.preco_ref_novo)} · Usado ${fmtBRL(iaData.preco_ref_usado)}`,
+        patch: {
+          preco_ref_novo: iaData.preco_ref_novo, preco_ref_usado: iaData.preco_ref_usado,
+          preco_ref_confianca: iaData.preco_ref_confianca, preco_ref_fonte: "IA:claude",
+        },
+      },
+      Array.isArray(iaData.pontos) && iaData.pontos.length > 0 && {
+        k: "bullet_points", label: "Bullets (anúncio)", val: iaData.pontos.join(" · "),
+        patch: { bullet_points: iaData.pontos },
+      },
+      iaData.palavras_chave && {
+        k: "palavras_chave", label: "Palavras-chave", val: iaData.palavras_chave,
+        patch: { palavras_chave: iaData.palavras_chave },
+      },
+      Array.isArray(iaData.ficha_tecnica) && iaData.ficha_tecnica.length > 0 && {
+        k: "ficha_tecnica", label: "Ficha técnica",
+        val: iaData.ficha_tecnica.map((f) => `${f.atributo}: ${f.valor}`).join(" · "),
+        patch: { ficha_tecnica: iaData.ficha_tecnica },
+      },
+    ];
+    return lista.filter((s) => s && s.val != null && s.val !== "");
+  };
+
+  // Junta os patches de todas as sugestões num único patch e sinaliza "completado via IA"
+  // (marcador durável = mesmo do selo/filtro na tela de Itens).
+  const patchTodasIA = (sugestoes) =>
+    Object.assign({}, ...sugestoes.map((s) => s.patch), { preco_ref_fonte: "IA:claude" });
+
   // Enriquecimento por IA (edge function enriquecer-produto). Texto-primeiro;
   // comFoto=true reenvia as URLs assinadas das fotos (custo ~2x).
   const enriquecer = async (comFoto) => {
@@ -232,6 +288,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       if (data?.error) throw new Error(data.error);
       setIa(data);
       setIaProgresso(100);
+      // Fill automático: aplica todas as sugestões aos campos assim que a IA retorna.
+      // (Continua editável; só persiste ao Salvar/Avançar.) A lista de sugestões abaixo
+      // permanece para revisão e reaplicação campo a campo.
+      const sugeridas = construirSugestoes(data, it);
+      if (sugeridas.length) set(patchTodasIA(sugeridas));
     } catch (e) {
       setIaErro(e?.message || String(e));
     } finally {
@@ -255,60 +316,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // Lista de sugestões aplicáveis a partir do retorno da IA (campo a campo).
-  const sugestoesIA = (() => {
-    if (!ia) return [];
-    const d = ia.dimensoes_estimadas || {};
-    const temDim = [d.comprimento_cm, d.largura_cm, d.altura_cm, d.peso_kg].some((v) => v != null);
-    const lista = [
-      { k: "titulo_anuncio", label: "Título", val: ia.titulo_anuncio, apply: () => set({ titulo_anuncio: ia.titulo_anuncio }) },
-      { k: "descricao_anuncio", label: "Descrição", val: ia.descricao_anuncio, apply: () => set({ descricao_anuncio: ia.descricao_anuncio }) },
-      { k: "marca", label: "Marca", val: ia.marca, apply: () => set({ marca: ia.marca }) },
-      { k: "modelo", label: "Modelo", val: ia.modelo, apply: () => set({ modelo: ia.modelo }) },
-      { k: "grupo", label: "Categoria", val: ia.grupo, apply: () => set({ grupo: ia.grupo }) },
-      { k: "ncm", label: "NCM", val: ia.ncm, apply: () => set({ ncm: ia.ncm }) },
-      { k: "voltagem", label: "Voltagem", val: ia.voltagem, apply: () => set({ voltagem: ia.voltagem }) },
-      { k: "cor", label: "Cor", val: ia.cor, apply: () => set({ cor: ia.cor }) },
-      temDim && {
-        k: "dimensoes", label: "Dimensões (C×L×A, peso)",
-        val: `${d.comprimento_cm ?? "–"}×${d.largura_cm ?? "–"}×${d.altura_cm ?? "–"} cm · ${d.peso_kg ?? "–"} kg`,
-        apply: () => set({
-          comprimento_cm: d.comprimento_cm ?? it.comprimento_cm, largura_cm: d.largura_cm ?? it.largura_cm,
-          altura_cm: d.altura_cm ?? it.altura_cm, peso_real_kg: d.peso_kg ?? it.peso_real_kg,
-          medidas_fonte: MEDIDAS_FONTE.ESTIMADO,
-        }),
-      },
-      (ia.preco_ref_novo != null || ia.preco_ref_usado != null) && {
-        k: "preco", label: `Preço ref. (IA · ${ia.preco_ref_confianca || "—"})`,
-        val: `Novo ${fmtBRL(ia.preco_ref_novo)} · Usado ${fmtBRL(ia.preco_ref_usado)}`,
-        apply: () => set({
-          preco_ref_novo: ia.preco_ref_novo, preco_ref_usado: ia.preco_ref_usado,
-          preco_ref_confianca: ia.preco_ref_confianca, preco_ref_fonte: "IA:claude",
-        }),
-      },
-      Array.isArray(ia.pontos) && ia.pontos.length > 0 && {
-        k: "bullet_points", label: "Bullets (anúncio)", val: ia.pontos.join(" · "),
-        apply: () => set({ bullet_points: ia.pontos }),
-      },
-      ia.palavras_chave && {
-        k: "palavras_chave", label: "Palavras-chave", val: ia.palavras_chave,
-        apply: () => set({ palavras_chave: ia.palavras_chave }),
-      },
-      Array.isArray(ia.ficha_tecnica) && ia.ficha_tecnica.length > 0 && {
-        k: "ficha_tecnica", label: "Ficha técnica",
-        val: ia.ficha_tecnica.map((f) => `${f.atributo}: ${f.valor}`).join(" · "),
-        apply: () => set({ ficha_tecnica: ia.ficha_tecnica }),
-      },
-    ];
-    return lista.filter((s) => s && s.val != null && s.val !== "");
-  })();
-
-  // "Aplicar tudo" também sinaliza que o item foi completado via IA (marcador durável
-  // = mesmo do selo/filtro na tela de Itens), o que desabilita o botão depois.
-  const aplicarTodasIA = () => {
-    sugestoesIA.forEach((s) => s.apply());
-    set({ preco_ref_fonte: "IA:claude" });
-  };
+  // Sugestões do retorno atual (revisão/reaplicação). O fill já aconteceu em `enriquecer`.
+  const sugestoesIA = construirSugestoes(ia, it);
+  const aplicarTodasIA = () => { if (sugestoesIA.length) set(patchTodasIA(sugestoesIA)); };
 
   // Item já completado via IA (marcador durável). Desabilita os botões salvo "refazer".
   const jaIA = it.preco_ref_fonte === "IA:claude";
@@ -383,7 +393,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         setFotos((f) => [...f, nova]);
       }
       if (!it.foto_feita) set({ foto_feita: true });
-    } catch (e) {
+    } catch {
       alert("Falha ao enviar a(s) foto(s). Tente novamente.");
     } finally {
       setUploading(false);
@@ -589,7 +599,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <ExternalLink className="w-4 h-4" />
             Buscar no Mercado Livre
           </button>
-          <p className="text-[11px] text-gray-400 mt-1.5">Preços são estimativa de mercado da IA (não cotação real). Revise antes de aplicar.</p>
+          <p className="text-[11px] text-gray-400 mt-1.5">A IA preenche os campos automaticamente; revise e clique em Salvar. Preços são estimativa de mercado (não cotação real).</p>
 
           {iaErro && (
             <p className="text-xs text-red-600 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {iaErro}</p>
@@ -598,8 +608,10 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           {ia && sugestoesIA.length > 0 && (
             <div className="mt-3 border-t border-gray-100 pt-3">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-gray-600">Sugestões {ia.usou_foto ? "(com foto)" : ""}</span>
-                <button onClick={aplicarTodasIA} className="text-xs font-semibold text-violet-700">Aplicar tudo</button>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Campos preenchidos {ia.usou_foto ? "(com foto)" : ""}
+                </span>
+                <button onClick={aplicarTodasIA} className="text-xs font-semibold text-violet-700">Reaplicar tudo</button>
               </div>
               <div className="space-y-1.5">
                 {sugestoesIA.map((s) => (
@@ -608,9 +620,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
                       <span className="text-[11px] uppercase tracking-wide text-gray-400">{s.label}</span>
                       <p className="text-gray-800 leading-snug break-words">{s.val}</p>
                     </div>
-                    <button onClick={s.apply}
+                    <button onClick={() => set(s.patch)}
                       className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg px-2 py-1 active:bg-violet-50">
-                      <Check className="w-3 h-3" /> Usar
+                      <Check className="w-3 h-3" /> Reaplicar
                     </button>
                   </div>
                 ))}
