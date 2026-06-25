@@ -5,6 +5,7 @@
 // Arial/Helvetica + logos base64), impresso pelo iframe de portfolio.js.
 import { escapeHtml } from "./portfolio";
 import { CATALOGO_ESTADO_BADGE } from "./catalogo";
+import { precoVenda } from "./export";
 import { LOGO_VERTICAL, LOGO_HORIZONTAL, LOGO_BRANCO } from "./catalogoLogos";
 
 // ───────────────────────── helpers ─────────────────────────
@@ -148,7 +149,7 @@ function renderCard(card, { comFoto, mostrarPreco, fotos }) {
       ${pmodel ? `<div class="pmodel">${escapeHtml(pmodel)}</div>` : ""}
       <div class="pspec">${escapeHtml(spec)}</div>
       <div class="pfoot">
-        <span class="price">${mostrarPreco ? precoCatalogo(it.preco_sugerido) : ""}</span>
+        <span class="price">${mostrarPreco ? precoCatalogo(precoVenda(it)) : ""}</span>
         ${card.qtd > 1 ? `<span class="qty">${card.qtd} disponíveis</span>` : ""}
       </div>
     </div>
@@ -199,7 +200,7 @@ html,body { margin:0; padding:0; font-family:Arial,"Helvetica Neue",Helvetica,sa
 .stripe{ width:5px; flex:none; background:linear-gradient(180deg,var(--cyan),var(--green)); }
 .cbody{ position:relative; padding:9px 11px 10px; flex:1; min-width:0; }
 .badge{ position:absolute; top:9px; right:10px; font-size:6.4pt; font-weight:800; letter-spacing:.6px; text-transform:uppercase; white-space:nowrap; padding:3px 7px; border-radius:20px; }
-.badge.novo{ background:#e7f6ec; color:#2f8b46; } .badge.semi{ background:#eaf4fb; color:#1f6fa8; } .badge.aberta{ background:#fdf3e6; color:#bd7a1e; }
+.badge.novo{ background:#e7f6ec; color:#2f8b46; } .badge.semi{ background:#eaf4fb; color:#1f6fa8; } .badge.aberta{ background:#fdf3e6; color:#bd7a1e; } .badge.asis{ background:#f1f3f5; color:#5f6b76; }
 .pname{ font-size:10.3pt; font-weight:800; color:var(--ink); line-height:1.2; padding-right:82px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .pmodel{ font-size:7.7pt; color:#8693a0; letter-spacing:.4px; text-transform:uppercase; margin:3px 0 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pspec{ font-size:8.2pt; color:#5f6e7a; line-height:1.35; min-height:21px; }

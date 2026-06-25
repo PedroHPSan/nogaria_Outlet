@@ -25,8 +25,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Testes (motor de precificação)
-        run: npm run test:pricing
+      - name: Testes (precificação, categoria, preflight, precoView, catálogo)
+        run: npm test
 
       - name: Build
         run: npm run build

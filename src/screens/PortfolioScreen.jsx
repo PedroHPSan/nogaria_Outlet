@@ -10,10 +10,17 @@ import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel, fotosComoDataURI } fr
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
 import { listarCaixas } from "../lib/caixas";
-import { fmtBRL, statusMeta, ALL_STATUS, DESTINOS, LOTE_SEM } from "../lib/model";
+import { fmtBRL, ALL_STATUS, DESTINOS, LOTE_SEM } from "../lib/model";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const CLASSES = ["A+", "A", "B", "C", "D", "E"];
+// Cor do selo de condição (rótulo de cliente) na galeria.
+const BADGE_CLS = {
+  novo: "bg-emerald-100 text-emerald-700",
+  aberta: "bg-amber-100 text-amber-700",
+  semi: "bg-sky-100 text-sky-700",
+  asis: "bg-gray-200 text-gray-700",
+};
 const AGRUPAR_OPCOES = [
   { id: "categoria", label: "Categoria" },
   { id: "tamanho", label: "Tamanho" },
@@ -49,7 +56,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
   // opções do catálogo
   const [agrupar, setAgrupar] = useState("categoria");
   const [parcial, setParcial] = useState(true);
-  const [comFoto, setComFoto] = useState(false);
+  const [comFoto, setComFoto] = useState(true);
   const [mostrarPreco, setMostrarPreco] = useState(true);
   const [titulo, setTitulo] = useState("Catálogo de Produtos");
   const [edicao, setEdicao] = useState(edicaoAtual);
@@ -253,12 +260,18 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
       ) : !total ? (
         <div className="text-center py-16 text-gray-400">
           <Boxes className="w-10 h-10 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">Nenhum produto com esses filtros.</p>
-          <p className="text-xs mt-1">O catálogo mostra itens precificados (com preço e condição definidos).</p>
+          <p className="text-sm">Nenhum produto pronto com esses filtros.</p>
+          <p className="text-xs mt-1">O catálogo mostra produtos prontos: com <b>preço de venda</b> e <b>condição</b> definidos.</p>
         </div>
       ) : (
         <div className="px-4 pt-3 space-y-5">
-          <p className="text-xs text-gray-400">{total} {total === 1 ? "produto" : "produtos"} · {grupos.length} {grupos.length === 1 ? "grupo" : "grupos"}</p>
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2">
+            <Boxes className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <p className="text-xs text-emerald-800">
+              <b>{total}</b> {total === 1 ? "produto pronto" : "produtos prontos"} para catálogo
+              <span className="text-emerald-600"> · {grupos.length} {grupos.length === 1 ? "grupo" : "grupos"}</span>
+            </p>
+          </div>
           {grupos.map((g) => (
             <section key={g.chave}>
               <div className="flex items-center gap-2 mb-2">
@@ -267,7 +280,6 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {g.itens.map((it) => {
-                  const sm = statusMeta(it.status);
                   const preco = precoVenda(it);
                   const badge = CATALOGO_ESTADO_BADGE[(it.estado || "").trim()];
                   return (
@@ -279,8 +291,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">sem foto</div>
                         )}
-                        <span className={`absolute top-1.5 left-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${sm.color}`}>{sm.short}</span>
-                        {badge && <span className="absolute top-1.5 right-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/90 text-gray-700">{badge.txt}</span>}
+                        {badge && <span className={`absolute top-1.5 left-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${BADGE_CLS[badge.cls] || "bg-white/90 text-gray-700"}`}>{badge.txt}</span>}
                       </div>
                       <div className="p-2 flex-1 flex flex-col">
                         <p className="text-xs font-bold text-gray-900 leading-tight line-clamp-2">{it.produto || it.sku}</p>

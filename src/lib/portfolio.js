@@ -3,9 +3,9 @@
 // uma galeria visual (com foto + preço opcional) que pode ser impressa ou salva
 // como PDF pelo próprio diálogo do navegador (mesma técnica de iframe isolado
 // das etiquetas — sem o CSS do app, layout próprio em A4).
-import { supabase } from "./supabase";
-import { precoVenda } from "./export";
-import { fmtBRL } from "./model";
+import { supabase } from "./supabase.js";
+import { precoVenda } from "./export.js";
+import { fmtBRL } from "./model.js";
 
 // Categoria canônica de calçados (definida no motor de precificação / categorizar).
 export const GRUPO_CALCADOS = "Calçados";
