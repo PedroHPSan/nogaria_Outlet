@@ -6,7 +6,7 @@ import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles } from "lucide-react";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles, ShoppingCart } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -28,6 +28,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [fSemClasse, setFSemClasse] = useState(!!initialFilter?.semClasse);
   const [fSemFoto, setFSemFoto] = useState(!!initialFilter?.semFoto);
   const [fIaPreco, setFIaPreco] = useState(!!initialFilter?.iaPreco); // precificados pela IA (preco_ref_fonte=IA:claude)
+  const [fAptoAmazon, setFAptoAmazon] = useState(!!initialFilter?.aptoAmazon); // aptos a publicar na Amazon (checks bloqueantes do preflight)
   const [showFilters, setShowFilters] = useState(!!initialFilter);
   const [itens, setItens] = useState([]);
   const [count, setCount] = useState(0);
@@ -125,6 +126,16 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fSemFoto) query = query.neq("status", "A_CATALOGAR").eq("foto_feita", false);
     // Precificados pela IA (lote enriquecer_precos.mjs grava preco_ref_fonte=IA:claude).
     if (fIaPreco) query = query.eq("preco_ref_fonte", "IA:claude");
+    // Aptos a publicar na Amazon: espelha os checks BLOQUEANTES do preflight (preco + GTIN),
+    // + foto exigida. A banda de sanidade de preço fica para o publish (PublishPanel).
+    // GTIN válido = EAN-13 / UPC-12 / GTIN-14 ou ASIN (10 alfanuméricos com ≥1 letra),
+    // via regex POSIX no Postgres (imatch ~*), idêntico a gtinValido() em preflight.js.
+    if (fAptoAmazon) {
+      query = query
+        .gt("preco_ideal", 0)
+        .eq("foto_feita", true)
+        .filter("gtin", "imatch", "^(\\d{12}|\\d{13}|\\d{14}|(?=[a-z0-9]*[a-z])[a-z0-9]{10})$");
+    }
     if (q.trim()) {
       const t = q.trim();
       query = query.or(`sku.ilike.%${t}%,produto.ilike.%${t}%,marca.ilike.%${t}%,modelo.ilike.%${t}%`);
@@ -134,7 +145,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -142,7 +153,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -196,7 +207,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -270,6 +281,13 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                 className="w-4 h-4 rounded accent-violet-500" />
               <span className="inline-flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-violet-500" /> Só precificados pela IA
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={fAptoAmazon} onChange={(e) => setFAptoAmazon(e.target.checked)}
+                className="w-4 h-4 rounded accent-amber-500" />
+              <span className="inline-flex items-center gap-1">
+                <ShoppingCart className="w-3.5 h-3.5 text-amber-500" /> Só aptos p/ Amazon (preço + GTIN + foto)
               </span>
             </label>
           </div>
