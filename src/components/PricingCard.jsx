@@ -279,6 +279,36 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
           <textarea className={inputCls} rows={2} value={item.descricao_anuncio ?? ""}
             onChange={(e) => onChange?.({ descricao_anuncio: e.target.value })} />
         </Campo>
+
+        {/* Conteúdo de listagem gerado pela IA (bullets/keywords/ficha) — usado no flat file Amazon. */}
+        {((Array.isArray(item.bullet_points) && item.bullet_points.length > 0) ||
+          item.palavras_chave ||
+          (Array.isArray(item.ficha_tecnica) && item.ficha_tecnica.length > 0)) && (
+          <div className="rounded-xl border border-gray-200 p-2.5 space-y-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-gray-500">
+              <Sparkles className="w-3.5 h-3.5 text-orange-500" /> Conteúdo do anúncio (IA)
+            </div>
+            {Array.isArray(item.bullet_points) && item.bullet_points.length > 0 && (
+              <ul className="list-disc list-inside space-y-0.5 text-sm text-gray-700">
+                {item.bullet_points.map((b, i) => <li key={i}>{b}</li>)}
+              </ul>
+            )}
+            {item.palavras_chave && (
+              <p className="text-xs text-gray-500"><span className="font-semibold">Palavras-chave:</span> {item.palavras_chave}</p>
+            )}
+            {Array.isArray(item.ficha_tecnica) && item.ficha_tecnica.length > 0 && (
+              <div className="grid grid-cols-2 gap-x-3 text-xs">
+                {item.ficha_tecnica.map((f, i) => (
+                  <div key={i} className="flex justify-between gap-2 border-b border-gray-100 py-0.5">
+                    <span className="text-gray-500 truncate">{f.atributo}</span>
+                    <span className="text-gray-800 font-medium text-right">{f.valor}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <Campo label="Local físico">
             <input className={inputCls} value={item.local_fisico ?? ""}
