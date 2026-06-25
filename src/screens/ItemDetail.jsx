@@ -65,6 +65,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
   const [refreshing, setRefreshing] = useState(false);
   const [iaLoading, setIaLoading] = useState(false); // "texto" | "foto" | false
+  const [iaProgresso, setIaProgresso] = useState(0); // 0-100, barra durante a run
+  const iaProgRef = useRef(null);
+  const [forcarIA, setForcarIA] = useState(false); // override p/ refazer item já completado
   const [ia, setIa] = useState(null); // sugestões da IA (enriquecer-produto)
   const [iaErro, setIaErro] = useState(null);
   const [qrCelular, setQrCelular] = useState(null); // { url, data } — QR p/ abrir no celular
@@ -149,6 +152,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, fotos.length]);
 
+  // Limpa o timer da barra de progresso da IA ao desmontar.
+  useEffect(() => () => clearInterval(iaProgRef.current), []);
+
   // custo proporcional do item (rateio do lote) — usado pelo PricingCard p/ o piso de custo.
   // A view pode não existir ainda (migration não aplicada); nesse caso o card mostra aviso.
   const carregarCusto = useCallback(async () => {
@@ -199,6 +205,13 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const enriquecer = async (comFoto) => {
     setIaLoading(comFoto ? "foto" : "texto");
     setIaErro(null);
+    // Barra de progresso: a chamada à IA é única (sem % real), então avançamos até
+    // ~90% num timer e completamos ao retornar. Dá ao operador o status da run.
+    setIaProgresso(8);
+    clearInterval(iaProgRef.current);
+    iaProgRef.current = setInterval(() => {
+      setIaProgresso((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) / 14)) : p));
+    }, 600);
     try {
       const body = {
         produto: it.produto, marca: it.marca, modelo: it.modelo, grupo: it.grupo,
@@ -218,10 +231,13 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       }
       if (data?.error) throw new Error(data.error);
       setIa(data);
+      setIaProgresso(100);
     } catch (e) {
       setIaErro(e?.message || String(e));
     } finally {
+      clearInterval(iaProgRef.current);
       setIaLoading(false);
+      setTimeout(() => setIaProgresso(0), 800);
     }
   };
 
@@ -270,11 +286,36 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           preco_ref_confianca: ia.preco_ref_confianca, preco_ref_fonte: "IA:claude",
         }),
       },
+      Array.isArray(ia.pontos) && ia.pontos.length > 0 && {
+        k: "bullet_points", label: "Bullets (anúncio)", val: ia.pontos.join(" · "),
+        apply: () => set({ bullet_points: ia.pontos }),
+      },
+      ia.palavras_chave && {
+        k: "palavras_chave", label: "Palavras-chave", val: ia.palavras_chave,
+        apply: () => set({ palavras_chave: ia.palavras_chave }),
+      },
+      Array.isArray(ia.ficha_tecnica) && ia.ficha_tecnica.length > 0 && {
+        k: "ficha_tecnica", label: "Ficha técnica",
+        val: ia.ficha_tecnica.map((f) => `${f.atributo}: ${f.valor}`).join(" · "),
+        apply: () => set({ ficha_tecnica: ia.ficha_tecnica }),
+      },
     ];
     return lista.filter((s) => s && s.val != null && s.val !== "");
   })();
 
-  const aplicarTodasIA = () => sugestoesIA.forEach((s) => s.apply());
+  // "Aplicar tudo" também sinaliza que o item foi completado via IA (marcador durável
+  // = mesmo do selo/filtro na tela de Itens), o que desabilita o botão depois.
+  const aplicarTodasIA = () => {
+    sugestoesIA.forEach((s) => s.apply());
+    set({ preco_ref_fonte: "IA:claude" });
+  };
+
+  // Item já completado via IA (marcador durável). Desabilita os botões salvo "refazer".
+  const jaIA = it.preco_ref_fonte === "IA:claude";
+  const iaBloqueado = (jaIA && !forcarIA) || !!iaLoading;
+  const statusIA = iaProgresso < 30 ? "Enviando dados do produto…"
+    : iaProgresso < 65 ? "IA analisando o produto…"
+    : iaProgresso < 100 ? "Gerando título, ficha técnica e preço…" : "Pronto!";
 
   // Item de baixo risco/valor sem teste obrigatório: oferecer marcar como
   // "Usado sem teste" (preço conservador) em vez de exigir teste físico.
@@ -389,6 +430,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       // Referência de preço (da IA) — durável p/ o PricingCard após reload.
       preco_ref_novo: it.preco_ref_novo ?? null, preco_ref_usado: it.preco_ref_usado ?? null,
       preco_ref_fonte: it.preco_ref_fonte || null, preco_ref_confianca: it.preco_ref_confianca || null,
+      // Conteúdo de listagem da IA (jsonb) — bullets/palavras-chave/ficha (flat file Amazon).
+      bullet_points: it.bullet_points ?? null, palavras_chave: it.palavras_chave ?? null,
+      ficha_tecnica: it.ficha_tecnica ?? null,
       upd_by: user.email,
       ...(novoStatus ? { status: novoStatus } : {}),
       // Carimbos de pós-venda na transição (vendido_em só se ainda vazio).
@@ -493,20 +537,45 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pb-2 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-violet-500" /> Assistente de IA
+            {jaIA && (
+              <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 normal-case tracking-normal">
+                <CheckCircle2 className="w-3 h-3" /> Completado via IA
+              </span>
+            )}
           </h3>
           <div className="flex gap-2">
-            <button onClick={() => enriquecer(false)} disabled={!!iaLoading}
+            <button onClick={() => enriquecer(false)} disabled={iaBloqueado}
               className="flex-1 inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-violet-600 rounded-lg px-3 py-2.5 active:bg-violet-700 disabled:opacity-50">
               {iaLoading === "texto" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               Completar com IA
             </button>
-            <button onClick={() => enriquecer(true)} disabled={!!iaLoading || fotos.length === 0}
+            <button onClick={() => enriquecer(true)} disabled={iaBloqueado || fotos.length === 0}
               title={fotos.length === 0 ? "Adicione uma foto primeiro" : "Usa as fotos (custo maior)"}
               className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-violet-700 border border-violet-300 bg-violet-50 rounded-lg px-3 py-2.5 disabled:opacity-40">
               {iaLoading === "foto" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
               Com foto
             </button>
           </div>
+
+          {/* Já completado: explica e oferece refazer (gasta crédito Claude de novo). */}
+          {jaIA && !forcarIA && !iaLoading && (
+            <p className="text-[11px] text-gray-500 mt-1.5">
+              Este item já foi completado pela IA.{" "}
+              <button type="button" onClick={() => setForcarIA(true)} className="font-semibold text-violet-700">Refazer com IA</button>
+            </p>
+          )}
+
+          {/* Barra de progresso da run (chamada única → progresso animado + status). */}
+          {iaLoading && (
+            <div className="mt-2">
+              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full bg-violet-500 transition-all duration-500" style={{ width: `${iaProgresso}%` }} />
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" /> {statusIA}
+              </p>
+            </div>
+          )}
           <button
             onClick={buscarNoML}
             disabled={!termoBuscaML()}
