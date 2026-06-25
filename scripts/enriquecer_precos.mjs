@@ -37,6 +37,7 @@ const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const TRIADOS = args.includes("--triados");   // só status != A_CATALOGAR (melhor input)
 const COMFOTO = args.includes("--com-foto");  // só itens com foto_feita
+const FOTOS = args.includes("--fotos");        // envia as fotos do item à IA (mais preciso, ~3-4x custo)
 const limIdx = args.indexOf("--limit");
 const LIMIT = limIdx >= 0 ? Number(args[limIdx + 1]) : null;
 const concIdx = args.indexOf("--conc");
@@ -45,8 +46,20 @@ const CONC = concIdx >= 0 ? Number(args[concIdx + 1]) : 4; // chamadas Claude si
 const supabase = createClient(URL_, SECRET, { auth: { persistSession: false } });
 const brl = (v) => v == null ? "—" : `R$${Number(v).toFixed(0)}`;
 
+// Signed URLs das fotos do item (até 3, por ordem) para enviar à IA. Bucket fotos-produtos.
+async function fotosDoItem(sku) {
+  const { data } = await supabase.from("fotos").select("storage_path, ordem").eq("sku", sku).order("ordem").limit(3);
+  const urls = [];
+  for (const f of (data || [])) {
+    if (!f.storage_path) continue;
+    const { data: s } = await supabase.storage.from("fotos-produtos").createSignedUrl(f.storage_path, 600);
+    if (s?.signedUrl) urls.push(s.signedUrl);
+  }
+  return urls;
+}
+
 async function main() {
-  const filtros = [TRIADOS && "triados", COMFOTO && "com-foto", LIMIT && `limite ${LIMIT}`, `conc ${CONC}`].filter(Boolean).join(" · ");
+  const filtros = [TRIADOS && "triados", COMFOTO && "com-foto", FOTOS && "envia fotos", LIMIT && `limite ${LIMIT}`, `conc ${CONC}`].filter(Boolean).join(" · ");
   console.log(`Modo: ${APPLY ? "APLICAR (grava)" : "DRY-RUN (não grava)"}${filtros ? ` · ${filtros}` : ""}\n`);
 
   const { data: grupos } = await supabase.from("pricing_grupo").select("grupo");
@@ -76,8 +89,12 @@ async function main() {
         comprimento_cm: it.comprimento_cm, largura_cm: it.largura_cm,
         altura_cm: it.altura_cm, peso_kg: it.peso_real_kg ?? it.peso_kg,
       },
-      categorias, // texto-primeiro: SEM fotos (controla custo)
+      categorias,
     };
+    if (FOTOS) {
+      const furls = await fotosDoItem(it.sku);
+      if (furls.length) body.fotos_urls = furls;
+    }
     let data;
     try {
       const r = await supabase.functions.invoke("enriquecer-produto", { body });
@@ -123,6 +140,7 @@ async function main() {
       patch.ficha_tecnica ? `+ficha(${patch.ficha_tecnica.length})` : null,
       patch.titulo_anuncio ? "+título" : null,
       patch.comprimento_cm ? "+dims~" : null,
+      data.usou_foto ? "📷" : null,
     ].filter(Boolean).join(" ");
     console.log(`  ${novo == null ? "~" : "✓"} ${it.sku}  ${(it.produto || "").slice(0, 32).padEnd(32)}  ${novo == null ? "sem preço" : `novo ${brl(novo)}·usado ${brl(data.preco_ref_usado)} (${data.preco_ref_confianca})`}  ${extras}`);
 
