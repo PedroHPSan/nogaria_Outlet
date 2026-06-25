@@ -7,10 +7,12 @@
 // em itens (bypassa RLS via service-role).
 //
 // Uso:
-//   node scripts/enriquecer_precos.mjs               # DRY-RUN (não grava), todos os elegíveis
-//   node scripts/enriquecer_precos.mjs --limit 5     # amostra de 5 (dry-run)
-//   node scripts/enriquecer_precos.mjs --limit 5 --apply   # grava a amostra
-//   node scripts/enriquecer_precos.mjs --apply       # grava todos
+//   node scripts/enriquecer_precos.mjs                     # DRY-RUN, todos os elegíveis
+//   node scripts/enriquecer_precos.mjs --limit 5           # amostra de 5 (dry-run)
+//   node scripts/enriquecer_precos.mjs --triados --apply   # só itens triados (status != A_CATALOGAR)
+//   node scripts/enriquecer_precos.mjs --com-foto --apply  # só itens com foto
+//   node scripts/enriquecer_precos.mjs --apply --conc 8    # grava todos, 8 simultâneos
+// Flags: --apply (grava) · --triados · --com-foto · --limit N · --conc N
 //
 // Resume-safe: filtra preco_ref_novo IS NULL, então re-rodar continua de onde parou.
 import { readFileSync } from "node:fs";
@@ -33,15 +35,19 @@ if (!URL_ || !SECRET || !SERVICE) { console.error("Faltam VITE_SUPABASE_URL / SU
 
 const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
+const TRIADOS = args.includes("--triados");   // só status != A_CATALOGAR (melhor input)
+const COMFOTO = args.includes("--com-foto");  // só itens com foto_feita
 const limIdx = args.indexOf("--limit");
 const LIMIT = limIdx >= 0 ? Number(args[limIdx + 1]) : null;
-const CONC = 4; // chamadas Claude simultâneas
+const concIdx = args.indexOf("--conc");
+const CONC = concIdx >= 0 ? Number(args[concIdx + 1]) : 4; // chamadas Claude simultâneas
 
 const supabase = createClient(URL_, SECRET, { auth: { persistSession: false } });
 const brl = (v) => v == null ? "—" : `R$${Number(v).toFixed(0)}`;
 
 async function main() {
-  console.log(`Modo: ${APPLY ? "APLICAR (grava preco_ref_*)" : "DRY-RUN (não grava)"}${LIMIT ? ` · limite ${LIMIT}` : ""}\n`);
+  const filtros = [TRIADOS && "triados", COMFOTO && "com-foto", LIMIT && `limite ${LIMIT}`, `conc ${CONC}`].filter(Boolean).join(" · ");
+  console.log(`Modo: ${APPLY ? "APLICAR (grava)" : "DRY-RUN (não grava)"}${filtros ? ` · ${filtros}` : ""}\n`);
 
   const { data: grupos } = await supabase.from("pricing_grupo").select("grupo");
   const categorias = (grupos || []).map((g) => g.grupo);
@@ -51,6 +57,8 @@ async function main() {
     .in("classe", ["A+", "A", "B"])
     .is("preco_ref_novo", null)
     .order("sku");
+  if (TRIADOS) q = q.neq("status", "A_CATALOGAR");
+  if (COMFOTO) q = q.eq("foto_feita", true);
   if (LIMIT) q = q.limit(LIMIT);
   const { data: itens, error } = await q;
   if (error) { console.error("Erro ao buscar itens:", error.message); process.exit(1); }
