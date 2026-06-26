@@ -181,6 +181,14 @@ Deno.serve(async (req) => {
     }
     const external = j.sku || sku;
     await salvarEstado(sku, { estado: "publicado", external_listing_id: external, ultimo_erro: null, payload });
+    // Reflete no próprio item que o anúncio foi feito — evita a divergência itens × listing_state
+    // (a app lê status/anuncio_feito na lista e filtros). Guarda p/ não rebaixar item já vendido.
+    try {
+      await admin.from("itens").update({
+        anuncio_feito: true,
+        status: ["VENDIDO", "ENTREGUE", "DESCARTE"].includes(item.status) ? item.status : "ANUNCIADO",
+      }).eq("sku", sku);
+    } catch { /* best-effort: o listing_state já é a autoridade da publicação */ }
     return json({ ok: true, estado: "publicado", external_listing_id: external, modo: "oferta" });
   } catch (e: any) {
     return json({ error: String(e?.message ?? e) }, 500);
