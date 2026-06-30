@@ -15,6 +15,7 @@ import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { sugerirCategoria } from "../lib/categorizar";
 import { DEFAULT_PARAMS } from "../lib/pricing";
+import { derivarPreco } from "../lib/precoView";
 import { classificarItem } from "../lib/classificacao";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
@@ -292,7 +293,17 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       // (Continua editável; só persiste ao Salvar/Avançar.) A lista de sugestões abaixo
       // permanece para revisão e reaplicação campo a campo.
       const sugeridas = construirSugestoes(data, it);
-      if (sugeridas.length) set(patchTodasIA(sugeridas));
+      if (sugeridas.length) {
+        const patch = patchTodasIA(sugeridas);
+        // Preço ideal: a IA entrega só REFERÊNCIAS (preco_ref_novo/usado). Derivamos o
+        // recomendado (mesmo motor do PricingCard) a partir das novas refs e gravamos em
+        // preco_ideal — assim a pesquisa altera o valor de venda, não só os dados do anúncio.
+        // (titulo_anuncio já vem sobrescrito no patch; só o anúncio muda, não o nome interno.)
+        const grupo = params.grupos?.[(patch.grupo ?? it.grupo)] || {};
+        const d = derivarPreco({ ...it, ...patch }, grupo, params, custoItem);
+        if (d.recomendado > 0) patch.preco_ideal = d.recomendado;
+        set(patch);
+      }
     } catch (e) {
       setIaErro(e?.message || String(e));
     } finally {
