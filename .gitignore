@@ -5,3 +5,6 @@ dist
 .DS_Store
 TASK_deploy_precos.md
 supabase/.temp/
+
+# Fotos exportadas para assessoria (não versionar)
+fotos_assessoria/
