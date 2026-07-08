@@ -70,7 +70,7 @@ async function lerTudo(build) {
   return out;
 }
 
-const sanitizar = (s) => String(s).replace(/[\/\\:*?"<>|]/g, "_");
+const sanitizar = (s) => String(s).replace(/[/\\:*?"<>|]/g, "_");
 
 // ── main ─────────────────────────────────────────────────────────────────────
 console.log(`Origem: ${sbUrl} (${usandoServiceRole ? "service_role" : "anon"}) · bucket ${BUCKET}`);
