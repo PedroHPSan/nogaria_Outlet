@@ -7,6 +7,7 @@ import { supabase } from "./supabase.js";
 import { precoVenda } from "./export.js";
 import { fmtBRL } from "./model.js";
 import { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
+import { escapeHtml } from "./html.js";
 
 // Reexporta os helpers de tamanho (agora em tamanhos.js) para manter a API antiga.
 export { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
@@ -56,8 +57,9 @@ export function agruparPorTamanho(itens) {
 
 // ───────────────────────── Impressão / PDF ─────────────────────────
 
-export const escapeHtml = (s) =>
-  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// escapeHtml vem de html.js (puro, sem supabase). Reexportado p/ os consumidores
+// antigos que importam `escapeHtml` de "./portfolio" (ex.: catalogoTemplate.js).
+export { escapeHtml };
 
 // Monta o HTML do catálogo (documento A4 autônomo), agrupado por tamanho.
 // `fotos` = { [sku]: url }. `mostrarPreco` controla a exibição de preços.
