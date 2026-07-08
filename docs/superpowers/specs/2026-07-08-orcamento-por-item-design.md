@@ -38,6 +38,16 @@ p/ "condição de pagamento" mas sem cálculo.)
 - **CTA:** WhatsApp + QR Code.
 - **Contato:** `Nogária Outlet` · WhatsApp `+55 91 98392-9085` → `wa.me/5591983929085`.
 
+## 3.1 Textos padrão (aprovados)
+
+- **Nome do produto:** `it.titulo_anuncio || it.produto` (mesmo padrão do `export.js`).
+- **Descrição de venda:** se houver `it.descricao_anuncio`, entra como parágrafo curto
+  logo abaixo do nome (bloco novo 4b no layout). Omitido se vazio.
+- **Condição de pagamento (faixa de preço):** _"À vista no PIX ou combine o parcelamento no WhatsApp"_.
+- **Entrega/retirada:** _"Retirada em Belém ou envio combinado (frete por conta do comprador)"_.
+
+Ficam como constantes em `empresa.js`/`anuncioTemplate.js` (fáceis de editar).
+
 ## 4. Arquitetura
 
 Módulos pequenos, com uma responsabilidade cada, seguindo o padrão já usado
@@ -104,7 +114,8 @@ Orquestra a geração:
 1. **Cabeçalho:** "N" gradiente + wordmark NOGÁRIA à esquerda; selo de condição à direita.
 2. **Foto principal** grande.
 3. **Tira de miniaturas** (demais fotos; some se só houver 1).
-4. **Nome do produto** + linha "MARCA · MODELO · COR" em caps.
+4. **Nome do produto** (`titulo_anuncio || produto`) + linha "MARCA · MODELO · COR" em caps.
+4b. **Descrição de venda** (`descricao_anuncio`), parágrafo curto — omitido se vazio.
 5. **Faixa de preço** com gradiente ciano→verde: "PREÇO À VISTA" + valor grande.
    Linha fina abaixo p/ condição de pagamento (texto livre; default "Consulte condições").
 6. **Ficha técnica** (grid 2 col): marca, modelo, cor, tamanho, voltagem, medidas/peso, GTIN,
