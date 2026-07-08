@@ -1,21 +1,12 @@
 // Anúncio/orçamento de UM item → HTML A4 autônomo (layout "Conversão/Marketplace").
 // PURO (sem rede): recebe as fotos já como dataURI e o QR já como dataURL — testável
 // em Node. Reaproveita helpers de escape/preço/formatos e os selos de condição.
+import { escapeHtml } from "./html.js";
 import { precoVenda } from "./export.js";
 import { fmtBRL, fmtKg, embalagemLabel } from "./model.js";
 import { CATALOGO_ESTADO_BADGE } from "./catalogoCore.js";
 import { LOGO_HORIZONTAL } from "./catalogoLogos.js";
 import { EMPRESA } from "./empresa.js";
-
-// escapeHtml definido localmente para manter este módulo PURO em Node (portfolio.js
-// importa o cliente supabase que usa import.meta.env, quebrando testes Node).
-const escapeHtml = (s) =>
-  String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 
 export const PAGAMENTO_PADRAO = "À vista no PIX ou combine o parcelamento no WhatsApp";
 export const ENTREGA_PADRAO = "Retirada em Belém ou envio combinado (frete por conta do comprador)";
