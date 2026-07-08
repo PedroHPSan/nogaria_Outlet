@@ -35,7 +35,7 @@ export default function AnuncioModal({ item, onClose }) {
       setTimeout(() => setCopiado(false), 1800);
     } catch { /* clipboard indisponível */ }
   };
-  const abrirWhats = () => { try { window.open(dados.link, "_blank"); } catch { /* noop */ } };
+  const abrirWhats = () => { if (!dados) return; try { window.open(dados.link, "_blank"); } catch { /* noop */ } };
 
   return (
     <div className="fixed inset-0 z-[75] bg-gray-100 flex flex-col">
