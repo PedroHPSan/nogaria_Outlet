@@ -8,3 +8,4 @@ supabase/.temp/
 
 # Fotos exportadas para assessoria (não versionar)
 fotos_assessoria/
+.superpowers/
