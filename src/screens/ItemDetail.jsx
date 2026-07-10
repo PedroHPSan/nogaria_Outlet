@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
-  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt
+  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
@@ -10,6 +10,7 @@ import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste, propag
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
+import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -66,6 +67,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [anuncio, setAnuncio] = useState(false);
   const [custoItem, setCustoItem] = useState(null); // custo_proporcional do rateio do lote (vw_precificacao)
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
+  const [caixaInfo, setCaixaInfo] = useState(null); // dados da caixa em que o item está
   const [refreshing, setRefreshing] = useState(false);
   const [iaLoading, setIaLoading] = useState(false); // "texto" | "foto" | false
   const [iaProgresso, setIaProgresso] = useState(0); // 0-100, barra durante a run
@@ -96,6 +98,14 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     setViaInfo(m[it.sku] || { vias: 0, ultima: null });
   }, [it.sku]);
   useEffect(() => { carregarVias(); }, [carregarVias]);
+
+  // Carrega os dados da caixa do item (para o cartão informativo). Best-effort.
+  useEffect(() => {
+    let cancel = false;
+    if (!it.caixa_id) { setCaixaInfo(null); return; }
+    buscarCaixa(it.caixa_id).then((c) => { if (!cancel) setCaixaInfo(c); }).catch(() => {});
+    return () => { cancel = true; };
+  }, [it.caixa_id]);
 
   const gtinValido = !it.gtin || validarEAN(it.gtin);
 
@@ -566,6 +576,26 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
+        {it.caixa_id && (
+          <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 mb-4 shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pb-1.5 flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 text-indigo-500" /> Caixa
+            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-sm font-bold text-gray-900">{it.caixa_id}</span>
+              {caixaInfo && (
+                <span className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${caixaInfo.status === CAIXA_STATUS.FECHADA ? "bg-gray-200 text-gray-600" : "bg-emerald-100 text-emerald-700"}`}>
+                  {caixaInfo.status === CAIXA_STATUS.FECHADA ? "Fechada" : "Aberta"}
+                </span>
+              )}
+              {caixaInfo?.tipo && <span className="text-xs text-gray-500">{caixaInfo.tipo === "MALA" ? "Mala" : "Caixa"}</span>}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {(caixaInfo?.destino || it.destino) || "sem destino"}
+              {(caixaInfo?.local_fisico || it.local_fisico) ? ` · ${caixaInfo?.local_fisico || it.local_fisico}` : ""}
+            </p>
+          </div>
+        )}
         {/* Assistente de IA — completa dados, sugere preço e diagnostica */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pb-2 flex items-center gap-1.5">

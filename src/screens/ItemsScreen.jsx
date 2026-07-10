@@ -6,7 +6,8 @@ import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles, ShoppingCart } from "lucide-react";
+import { contarACatalogarPorLote } from "../lib/conferencia";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles, ShoppingCart, ClipboardList } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -52,6 +53,18 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [selected, setSelected] = useState(() => new Set());
   const [printLabels, setPrintLabels] = useState(null);
   const [boxPicker, setBoxPicker] = useState(false);
+  const [catalogarPicker, setCatalogarPicker] = useState(false);
+  const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
+  const [caixasList, setCaixasList] = useState([]);
+  useEffect(() => { listarCaixas().then(setCaixasList).catch(() => {}); }, []);
+
+  // Aplica o filtro status=A_CATALOGAR + lote escolhido no picker de catalogação.
+  const escolherCatalogar = (loteValue) => {
+    setFStatus("A_CATALOGAR");
+    setFLote(loteValue);
+    setShowFilters(true);
+    setCatalogarPicker(false);
+  };
 
   const toggleSel = (sku) =>
     setSelected((prev) => {
@@ -119,6 +132,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
     if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
     if (fSemCaixa) query = query.is("caixa_id", null);
+    if (fCaixa) query = query.eq("caixa_id", fCaixa);
     // Triados (já passaram da catalogação) cuja etiqueta ainda não foi impressa.
     if (fSemEtiq) query = query.neq("status", "A_CATALOGAR").eq("etiqueta_impressa", false);
     if (fSemClasse) query = query.is("classe", null);
@@ -145,7 +159,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -153,7 +167,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -207,7 +221,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -250,6 +264,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <option value="">Todos os destinos</option>
               {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
               <option value={DESTINO_SEM}>Sem destino definido</option>
+            </select>
+            <select value={fCaixa} onChange={(e) => setFCaixa(e.target.value)} className={inputCls}>
+              <option value="">Todas as caixas</option>
+              {caixasList.map((c) => (
+                <option key={c.codigo} value={c.codigo}>
+                  {c.codigo}{c.local_fisico ? ` · ${c.local_fisico}` : c.destino ? ` — ${c.destino}` : ""}
+                </option>
+              ))}
             </select>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 pt-0.5">
               <input type="checkbox" checked={fPendMedida} onChange={(e) => setFPendMedida(e.target.checked)}
@@ -298,6 +320,10 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             {selectMode && ` · ${selected.size} selecionado(s)`}
           </p>
           <div className="flex items-center gap-1.5">
+            <button onClick={() => setCatalogarPicker(true)}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg px-2 py-1">
+              <ClipboardList className="w-3.5 h-3.5" /> Catalogar
+            </button>
             <button onClick={() => setBoxPicker(true)}
               className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg px-2 py-1">
               <Boxes className="w-3.5 h-3.5" /> Caixa/Mala
@@ -371,12 +397,6 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                         <Ruler className="w-3 h-3" />
                       </span>
                     )}
-                    {it.caixa_id && (
-                      <span title={`Na caixa ${it.caixa_id}`}
-                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex-shrink-0">
-                        <Package className="w-3 h-3" />{it.caixa_id}
-                      </span>
-                    )}
                     {it.preco_ref_fonte === "IA:claude" && (
                       <span title="Precificado e enriquecido pela IA"
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 flex-shrink-0">
@@ -389,6 +409,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                     {it.grupo && <span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{it.grupo}</span>}
                     {(it.marca || it.modelo) && <span className="truncate">{[it.marca, it.modelo].filter(Boolean).join(" ")}</span>}
                     <span>{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)}</span>
+                    {it.caixa_id && (
+                      <span className="inline-flex items-center gap-0.5 bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5">
+                        <Package className="w-3 h-3" />{it.caixa_id}{it.local_fisico ? ` · ${it.local_fisico}` : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>
@@ -427,6 +452,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             </button>
           </div>
         </div>
+      )}
+
+      {catalogarPicker && (
+        <CatalogarPorLote
+          lotes={lotes}
+          onClose={() => setCatalogarPicker(false)}
+          onPick={escolherCatalogar}
+        />
       )}
 
       {boxPicker && (
@@ -516,6 +549,66 @@ function BoxPicker({ onClose, onPick, params }) {
             {busy === c.codigo ? <Loader2 className="w-4 h-4 animate-spin text-gray-400 flex-shrink-0" /> : <Printer className="w-4 h-4 text-gray-300 flex-shrink-0" />}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Atalho "A catalogar por lote": conta itens A_CATALOGAR por lote (contarACatalogarPorLote)
+// e, ao escolher, aplica status=A_CATALOGAR + lote na tela de itens. Espelha o BoxPicker.
+function CatalogarPorLote({ lotes, onClose, onPick }) {
+  const [loading, setLoading] = useState(true);
+  const [linhas, setLinhas] = useState([]);
+  const refDe = (lote) => lotes.find((l) => l.lote === lote)?.referencia || "";
+
+  useEffect(() => {
+    (async () => {
+      try { setLinhas(await contarACatalogarPorLote()); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const total = linhas.reduce((s, r) => s + r.count, 0);
+
+  return (
+    <div className="fixed inset-0 z-[65] bg-gray-100 flex flex-col">
+      <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between shadow-md">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-5 h-5 text-orange-400" />
+          <span className="font-bold">A catalogar por lote</span>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg bg-gray-800" aria-label="Fechar">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-auto px-3 py-3 space-y-1.5">
+        {loading ? (
+          <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" /></div>
+        ) : !linhas.length ? (
+          <p className="text-sm text-gray-400 text-center py-10">Nada a catalogar. 🎉</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 px-1 pb-1">
+              {total.toLocaleString("pt-BR")} itens a catalogar em {linhas.length} lote(s)
+            </p>
+            {linhas.map((r) => {
+              const value = r.lote == null ? LOTE_SEM : String(r.lote);
+              const titulo = r.lote == null ? "Sem lote" : `Lote ${r.lote}`;
+              const ref = r.lote == null ? "" : refDe(r.lote);
+              return (
+                <button key={value} onClick={() => onPick(value)}
+                  className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-sm text-gray-900">{titulo}</span>
+                    {ref && <span className="text-xs text-gray-500"> — {ref}</span>}
+                  </div>
+                  <span className="text-sm font-bold text-orange-600">{r.count}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                </button>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );

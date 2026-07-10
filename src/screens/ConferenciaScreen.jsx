@@ -6,7 +6,7 @@ import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definir
 import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
 import {
   CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
-  fecharCaixa, listarCaixas, itensDaCaixa,
+  fecharCaixa, reabrirCaixa, listarCaixas, itensDaCaixa,
 } from "../lib/caixas";
 import { buildBoxLabel } from "../lib/labels";
 import { buscarViasImpressaoCaixa } from "../lib/printLog";
@@ -596,6 +596,20 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
     } finally { setBusy(false); }
   };
 
+  // Reabre uma caixa fechada e já entra na caixa ativa para incluir itens.
+  const reabrir = async (c) => {
+    if (!window.confirm(`Reabrir a caixa ${c.codigo} para incluir itens?`)) return;
+    setBusy(true);
+    try {
+      await reabrirCaixa(c.codigo, user);
+      onChanged?.();
+      await loadAbertas();
+      await abrirCaixa({ ...c, status: CAIXA_STATUS.ABERTA });
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e.message || String(e) });
+    } finally { setBusy(false); }
+  };
+
   const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens, params)]);
   const baixarLista = () => {
     if (!itens.length) return;
@@ -778,7 +792,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
         <>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-2">Caixas fechadas ({fechadas.length})</p>
           <div className="space-y-1.5">
-            {fechadas.map((c) => <CaixaFechadaItem key={c.codigo} caixa={c} params={params} user={user} />)}
+            {fechadas.map((c) => <CaixaFechadaItem key={c.codigo} caixa={c} params={params} user={user} onReabrir={reabrir} />)}
           </div>
         </>
       )}
@@ -789,7 +803,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
 // Linha de caixa FECHADA: expande para mostrar o conteúdo (carregado sob demanda),
 // com peso/valor estimados, a lista de itens e a impressão da etiqueta (mesmo
 // controle de vias dos demais tíquetes). Destino/local já ficam visíveis na linha.
-function CaixaFechadaItem({ caixa, params, user }) {
+function CaixaFechadaItem({ caixa, params, user, onReabrir }) {
   const [aberta, setAberta] = useState(false);
   const [itens, setItens] = useState(null);
   const [printLabels, setPrintLabels] = useState(null);
@@ -832,24 +846,30 @@ function CaixaFechadaItem({ caixa, params, user }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <button onClick={toggle} className="w-full text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
-        <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center flex-shrink-0">
-          {caixa.tipo === CAIXA_TIPO.MALA ? <Inbox className="w-4 h-4" /> : <Package className="w-4 h-4" />}
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-bold text-gray-900">{caixa.codigo}</span>
-            <span className="text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Fechada</span>
-            {vias?.vias > 0 && (
-              <span className="flex items-center gap-0.5 text-[10px] font-bold text-gray-500" title={`Etiqueta impressa · ${vias.vias} via(s)`}>
-                <Printer className="w-3 h-3" /> {vias.vias}
-              </span>
-            )}
+      <div className="flex items-center">
+        <button onClick={toggle} className="flex-1 min-w-0 text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+          <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center flex-shrink-0">
+            {caixa.tipo === CAIXA_TIPO.MALA ? <Inbox className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm font-bold text-gray-900">{caixa.codigo}</span>
+              <span className="text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Fechada</span>
+              {vias?.vias > 0 && (
+                <span className="flex items-center gap-0.5 text-[10px] font-bold text-gray-500" title={`Etiqueta impressa · ${vias.vias} via(s)`}>
+                  <Printer className="w-3 h-3" /> {vias.vias}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 truncate">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
           </div>
-          <p className="text-xs text-gray-500 truncate">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
-        </div>
-        <ChevronDown className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`} />
-      </button>
+          <ChevronDown className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`} />
+        </button>
+        <button onClick={() => onReabrir?.(caixa)} title="Reabrir caixa"
+          className="flex-shrink-0 mr-2 flex items-center gap-1 text-xs font-semibold text-orange-600 border border-orange-200 bg-orange-50 rounded-lg px-2 py-1.5 active:bg-orange-100">
+          <RotateCcw className="w-3.5 h-3.5" /> Reabrir
+        </button>
+      </div>
       {aberta && (
         <div className="border-t border-gray-100 px-3 py-2.5 bg-gray-50 space-y-2.5">
           {itens === null ? (
