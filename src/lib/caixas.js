@@ -6,6 +6,7 @@
 // (retry em colisão de código + eventos best-effort).
 import { supabase } from "./supabase";
 import { pad3 } from "./model";
+import { chegadaDetalhe } from "./caixasFormat";
 
 export const CAIXA_STATUS = { ABERTA: "ABERTA", FECHADA: "FECHADA" };
 export const CAIXA_TIPO = { CAIXA: "CAIXA", MALA: "MALA" };
@@ -117,5 +118,70 @@ export async function buscarCaixa(codigo) {
 // Itens encaixotados numa caixa.
 export async function itensDaCaixa(codigo) {
   const { data } = await supabase.from("itens").select("*").eq("caixa_id", codigo).order("sku");
+  return data || [];
+}
+
+// ───────────────────────── Chegada / armazenamento / conferência ─────────────────────────
+
+// Define o local de armazenamento da caixa e PROPAGA para os itens dela. Grava
+// evento `caixa:local`. Usado para "indicar onde a caixa está armazenada".
+export async function definirLocalCaixa(codigo, local, user) {
+  const l = local?.trim() || null;
+  const { data, error } = await supabase.from("caixas")
+    .update({ local_fisico: l }).eq("codigo", codigo).select().single();
+  if (error) throw error;
+  await supabase.from("itens").update({ local_fisico: l, upd_by: user?.email }).eq("caixa_id", codigo);
+  await supabase.from("eventos").insert({
+    sku: codigo, acao: "caixa:local", detalhe: l || "sem local", usuario: user?.email,
+  });
+  return data;
+}
+
+// Registra a chegada (ex.: em Belém): grava `chegou_em` + local (propagado aos itens)
+// e evento `caixa:chegada` com detalhe "Belém · dd/mm/aaaa · <local>". `chegou_em`
+// aceita data retroativa (default: agora).
+export async function registrarChegada(codigo, { chegou_em, local }, user) {
+  const l = local?.trim() || null;
+  const quando = chegou_em || new Date().toISOString();
+  const { data, error } = await supabase.from("caixas")
+    .update({ chegou_em: quando, local_fisico: l }).eq("codigo", codigo).select().single();
+  if (error) throw error;
+  await supabase.from("itens").update({ local_fisico: l, upd_by: user?.email }).eq("caixa_id", codigo);
+  await supabase.from("eventos").insert({
+    sku: codigo, acao: "caixa:chegada", detalhe: chegadaDetalhe(quando, l), usuario: user?.email,
+  });
+  return data;
+}
+
+// Marca a caixa como reconferida (carimbo quem/quando) + evento `caixa:conferida`.
+export async function conferirCaixa(codigo, user) {
+  const { data, error } = await supabase.from("caixas")
+    .update({ conferida_em: new Date().toISOString(), conferida_por: user?.email })
+    .eq("codigo", codigo).select().single();
+  if (error) throw error;
+  await supabase.from("eventos").insert({ sku: codigo, acao: "caixa:conferida", usuario: user?.email });
+  return data;
+}
+
+// Item danificado na conferência: estado='Avariado', permanece na caixa. Evento `caixa:item_avaria`.
+export async function marcarItemAvariado(sku, user) {
+  const { error } = await supabase.from("itens")
+    .update({ estado: "Avariado", upd_by: user?.email }).eq("sku", sku);
+  if (error) throw error;
+  await supabase.from("eventos").insert({ sku, acao: "caixa:item_avaria", usuario: user?.email });
+}
+
+// Item ausente na conferência: sai da caixa (caixa_id=null). Evento `caixa:item_faltando`.
+export async function marcarItemFaltando(sku, user) {
+  const { error } = await supabase.from("itens")
+    .update({ caixa_id: null, upd_by: user?.email }).eq("sku", sku);
+  if (error) throw error;
+  await supabase.from("eventos").insert({ sku, acao: "caixa:item_faltando", usuario: user?.email });
+}
+
+// Histórico de uma caixa (eventos cuja `sku` é o código da caixa), recentes primeiro.
+export async function historicoCaixa(codigo) {
+  const { data } = await supabase.from("eventos")
+    .select("*").eq("sku", codigo).order("ts", { ascending: false });
   return data || [];
 }
