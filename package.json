@@ -14,7 +14,8 @@
     "test:precoview": "node scripts/test_precoview.mjs",
     "test:catalogo": "node scripts/test_catalogo.mjs",
     "test:anuncio": "node scripts/test_anuncio.mjs",
-    "test": "npm run test:pricing && npm run test:categoria && npm run test:preflight && npm run test:precoview && npm run test:catalogo && npm run test:anuncio"
+    "test:caixas": "node scripts/test_caixas.mjs",
+    "test": "npm run test:pricing && npm run test:categoria && npm run test:preflight && npm run test:precoview && npm run test:catalogo && npm run test:anuncio && npm run test:caixas"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
