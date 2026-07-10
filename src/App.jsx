@@ -14,7 +14,7 @@ import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
 import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
-import CaixaQrScreen from "./screens/CaixaQrScreen";
+import CaixasScreen from "./screens/CaixasScreen";
 
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
 const eventoLabel = (e) => {
@@ -33,6 +33,11 @@ const eventoLabel = (e) => {
   if (a === "caixa:item_remove") return "removido da caixa";
   if (a === "caixa:fechada") return "caixa fechada";
   if (a === "caixa:reaberta") return "caixa reaberta";
+  if (a === "caixa:chegada") return "chegada registrada" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "caixa:local") return "armazenamento" + (e.detalhe ? ` → ${e.detalhe}` : "");
+  if (a === "caixa:conferida") return "caixa conferida ✓";
+  if (a === "caixa:item_avaria") return "item avariado na conferência";
+  if (a === "caixa:item_faltando") return "item faltando na conferência";
   return a;
 };
 
@@ -206,8 +211,8 @@ export default function App() {
         />
       )}
       {showCaixaQr && (
-        <CaixaQrScreen
-          params={params}
+        <CaixasScreen
+          params={params} user={user}
           onClose={() => setShowCaixaQr(false)}
           onOpenItem={(it) => { setShowCaixaQr(false); setOpenItem(it); }}
         />
