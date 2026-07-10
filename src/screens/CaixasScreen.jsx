@@ -4,17 +4,26 @@ import {
   registrarChegada, conferirCaixa,
   marcarItemAvariado, marcarItemFaltando, historicoCaixa,
 } from "../lib/caixas";
+import { marcarConferido, limparConferencia } from "../lib/conferencia";
 import { estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
 import { CLASSE_STYLE, fmtBRL, fmtKg } from "../lib/model";
 import {
   X, Loader2, ScanLine, ArrowRight, AlertTriangle, Boxes, Package, ChevronRight,
-  ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History,
+  ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode,
 } from "lucide-react";
 
 const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
 
 // data de hoje em "YYYY-MM-DD" (para o <input type=date>).
 const hojeISO = () => new Date().toISOString().slice(0, 10);
+
+// Extrai o SKU do texto lido do QR da etiqueta do item. A etiqueta codifica o
+// SKU puro (ex.: "NOG-126-001"), mas toleramos também um deep-link "?item=SKU".
+const skuDoQR = (texto) => {
+  const t = String(texto || "").trim();
+  const m = t.match(/[?&]item=([^&]+)/i);
+  return (m ? decodeURIComponent(m[1]) : t).trim().toUpperCase();
+};
 
 const eventoCaixaLabel = (a) => ({
   "caixa:criada": "caixa criada", "caixa:item_add": "item encaixotado",
@@ -181,8 +190,12 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   const [local, setLocal] = useState(caixa.local_fisico || "");
   const [dataChegada, setDataChegada] = useState(caixa.chegou_em ? String(caixa.chegou_em).slice(0, 10) : hojeISO());
   const [salvando, setSalvando] = useState(null); // "chegada" | "conferir" | "local"
-  const [busy, setBusy] = useState({}); // { [sku]: "avaria" | "faltando" }
+  const [busy, setBusy] = useState({}); // { [sku]: "avaria" | "faltando" | "conf" }
   const [erro, setErro] = useState(null);
+  const [scanOpen, setScanOpen] = useState(false); // scanner contínuo de conferência por QR
+  const [scanMsg, setScanMsg] = useState(null); // { tom: "ok"|"dup"|"warn"|"err", texto }
+
+  const conferidos = itens.filter((i) => i.conferido_em).length;
 
   const doChegada = async () => {
     setSalvando("chegada"); setErro(null);
@@ -207,6 +220,34 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
     try { await marcarItemFaltando(sku, user); await onChanged(); }
     catch (e) { setErro(e.message || String(e)); }
     finally { setBusy((b) => { const n = { ...b }; delete n[sku]; return n; }); }
+  };
+
+  // Alterna a marcação de conferido de um item (checkbox). Reusa a conferência
+  // de inventário já existente (itens.conferido_em/por).
+  const doToggleConf = async (it) => {
+    setBusy((b) => ({ ...b, [it.sku]: "conf" })); setErro(null);
+    try {
+      if (it.conferido_em) await limparConferencia(it.sku);
+      else await marcarConferido(it.sku, user);
+      await onChanged();
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setBusy((b) => { const n = { ...b }; delete n[it.sku]; return n; }); }
+  };
+
+  // Conferência por QR (leitura contínua): marca conferido na hora o item lido,
+  // desde que ele pertença a esta caixa. Dá feedback e segue lendo o próximo.
+  const handleScanItem = async (texto) => {
+    const sku = skuDoQR(texto);
+    const it = itens.find((i) => String(i.sku).toUpperCase() === sku);
+    if (!it) { setScanMsg({ tom: "warn", texto: `${sku} não é desta caixa` }); return; }
+    if (it.conferido_em) { setScanMsg({ tom: "dup", texto: `${sku} já estava conferido` }); return; }
+    try {
+      await marcarConferido(it.sku, user);
+      await onChanged();
+      setScanMsg({ tom: "ok", texto: `${it.sku} conferido ✓` });
+    } catch (e) {
+      setScanMsg({ tom: "err", texto: e.message || String(e) });
+    }
   };
 
   return (
@@ -264,7 +305,17 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
 
         {/* Itens */}
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Itens da caixa</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              Itens da caixa · <span className="text-emerald-600">{conferidos}/{itens.length} conferidos</span>
+            </p>
+            {itens.length > 0 && (
+              <button onClick={() => { setScanMsg(null); setScanOpen(true); }}
+                className="flex items-center gap-1.5 rounded-lg bg-gray-900 text-white px-3 py-1.5 text-xs font-bold active:bg-gray-800">
+                <QrCode className="w-3.5 h-3.5" /> Ler QR
+              </button>
+            )}
+          </div>
           {!itens.length ? (
             <p className="text-sm text-gray-400 text-center py-6">Caixa vazia.</p>
           ) : (
@@ -273,19 +324,24 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
                 const v = estimarValorVenda(it, params);
                 const b = busy[it.sku];
                 return (
-                  <div key={it.sku} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5">
-                    <button onClick={() => onOpenItem?.(it)} className="w-full text-left flex items-center gap-3 active:opacity-70">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
-                          {it.classe && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-400 text-white"}`}>{it.classe}</span>}
-                          {it.estado === "Avariado" && <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">avariado</span>}
-                          {v != null && <span className="ml-auto text-xs font-semibold text-emerald-600">~{fmtBRL(v)}</span>}
+                  <div key={it.sku} className={`rounded-xl border px-3 py-2.5 ${it.conferido_em ? "border-emerald-300 bg-emerald-50/50" : "border-gray-200 bg-white"}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={!!it.conferido_em} disabled={b === "conf"}
+                        onChange={() => doToggleConf(it)} aria-label={`Conferido ${it.sku}`}
+                        className="w-5 h-5 flex-shrink-0 accent-emerald-600 disabled:opacity-50" />
+                      <button onClick={() => onOpenItem?.(it)} className="flex-1 min-w-0 text-left flex items-center gap-3 active:opacity-70">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                            {it.classe && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-400 text-white"}`}>{it.classe}</span>}
+                            {it.estado === "Avariado" && <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">avariado</span>}
+                            {v != null && <span className="ml-auto text-xs font-semibold text-emerald-600">~{fmtBRL(v)}</span>}
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">{it.produto}</p>
                         </div>
-                        <p className="text-sm text-gray-600 truncate">{it.produto}</p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                    </button>
+                        <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                      </button>
+                    </div>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => doAvaria(it.sku)} disabled={!!b || it.estado === "Avariado"}
                         className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-amber-300 text-amber-700 py-1.5 text-xs font-semibold active:bg-amber-50 disabled:opacity-50">
@@ -330,6 +386,34 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
           {caixa.conferida_em && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
         </button>
       </div>
+
+      {/* Scanner contínuo: lê o QR do item e marca conferido na hora, seguindo p/ o próximo. */}
+      {scanOpen && (
+        <>
+          <Suspense fallback={<div className="fixed inset-0 z-[60] bg-black flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+            <BarcodeScanner qr continuous onClose={() => setScanOpen(false)} onDetected={handleScanItem}
+              title="Conferir itens por QR" hint="Aponte para o QR da etiqueta do item — marca conferido na hora." />
+          </Suspense>
+          <div className="fixed inset-x-0 bottom-0 z-[70] px-4 pb-4 pt-3 bg-gradient-to-t from-black/90 to-transparent">
+            <div className="max-w-lg mx-auto space-y-2">
+              <p className="text-center text-sm font-semibold text-white">{conferidos}/{itens.length} conferidos</p>
+              {scanMsg && (
+                <p className={`text-center text-sm font-bold rounded-lg py-2 ${
+                  scanMsg.tom === "ok" ? "bg-emerald-500 text-white"
+                    : scanMsg.tom === "dup" ? "bg-sky-500 text-white"
+                    : scanMsg.tom === "warn" ? "bg-amber-500 text-white"
+                    : "bg-red-500 text-white"}`}>
+                  {scanMsg.texto}
+                </p>
+              )}
+              <button onClick={() => setScanOpen(false)}
+                className="w-full bg-white text-gray-900 rounded-xl py-3 font-bold active:bg-gray-100">
+                Concluir
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
