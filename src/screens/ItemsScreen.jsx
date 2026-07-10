@@ -54,6 +54,9 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [printLabels, setPrintLabels] = useState(null);
   const [boxPicker, setBoxPicker] = useState(false);
   const [catalogarPicker, setCatalogarPicker] = useState(false);
+  const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
+  const [caixasList, setCaixasList] = useState([]);
+  useEffect(() => { listarCaixas().then(setCaixasList).catch(() => {}); }, []);
 
   // Aplica o filtro status=A_CATALOGAR + lote escolhido no picker de catalogação.
   const escolherCatalogar = (loteValue) => {
@@ -129,6 +132,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
     if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
     if (fSemCaixa) query = query.is("caixa_id", null);
+    if (fCaixa) query = query.eq("caixa_id", fCaixa);
     // Triados (já passaram da catalogação) cuja etiqueta ainda não foi impressa.
     if (fSemEtiq) query = query.neq("status", "A_CATALOGAR").eq("etiqueta_impressa", false);
     if (fSemClasse) query = query.is("classe", null);
@@ -155,7 +159,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setCount(c || 0);
     setItens((prev) => (reset ? data || [] : [...prev, ...(data || [])]));
     setLoading(false);
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, page]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa, page]);
 
   // busca com debounce ao mudar filtros/texto
   useEffect(() => {
@@ -163,7 +167,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     debounce.current = setTimeout(() => { setPage(0); buscar(true); }, 250);
     return () => clearTimeout(debounce.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, refreshKey]);
+  }, [q, fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa, refreshKey]);
 
   const carregarMais = () => { setPage((p) => p + 1); };
   useEffect(() => { if (page > 0) buscar(false); /* eslint-disable-next-line */ }, [page]);
@@ -217,7 +221,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
-  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon].filter(Boolean).length;
+  const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa].filter(Boolean).length;
 
   return (
     <div className="pb-24">
@@ -260,6 +264,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <option value="">Todos os destinos</option>
               {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
               <option value={DESTINO_SEM}>Sem destino definido</option>
+            </select>
+            <select value={fCaixa} onChange={(e) => setFCaixa(e.target.value)} className={inputCls}>
+              <option value="">Todas as caixas</option>
+              {caixasList.map((c) => (
+                <option key={c.codigo} value={c.codigo}>
+                  {c.codigo}{c.local_fisico ? ` · ${c.local_fisico}` : c.destino ? ` — ${c.destino}` : ""}
+                </option>
+              ))}
             </select>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 pt-0.5">
               <input type="checkbox" checked={fPendMedida} onChange={(e) => setFPendMedida(e.target.checked)}
@@ -385,12 +397,6 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                         <Ruler className="w-3 h-3" />
                       </span>
                     )}
-                    {it.caixa_id && (
-                      <span title={`Na caixa ${it.caixa_id}`}
-                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 flex-shrink-0">
-                        <Package className="w-3 h-3" />{it.caixa_id}
-                      </span>
-                    )}
                     {it.preco_ref_fonte === "IA:claude" && (
                       <span title="Precificado e enriquecido pela IA"
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 flex-shrink-0">
@@ -403,6 +409,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                     {it.grupo && <span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{it.grupo}</span>}
                     {(it.marca || it.modelo) && <span className="truncate">{[it.marca, it.modelo].filter(Boolean).join(" ")}</span>}
                     <span>{it.lote ? `Lote ${it.lote}` : "Sem lote"} · {fmtBRL(it.preco_ideal || it.preco_sugerido)}</span>
+                    {it.caixa_id && (
+                      <span className="inline-flex items-center gap-0.5 bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5">
+                        <Package className="w-3 h-3" />{it.caixa_id}{it.local_fisico ? ` · ${it.local_fisico}` : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>
