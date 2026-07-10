@@ -30,6 +30,16 @@ const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
 const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white";
 
+// Marquinha "IA" para rotular um campo preenchido pela IA (usa iaFez(k) do ItemDetail).
+function IaTag({ on }) {
+  if (!on) return null;
+  return (
+    <span title="Preenchido pela IA" className="ml-1 inline-flex items-center gap-0.5 align-middle px-1 py-0.5 rounded text-[9px] font-bold bg-violet-100 text-violet-700">
+      <Sparkles className="w-2.5 h-2.5" /> IA
+    </span>
+  );
+}
+
 function TriToggle({ label, value, onChange }) {
   const opts = [
     { v: true, t: "Sim", on: "bg-emerald-600 text-white" },
@@ -850,13 +860,13 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               : <p className="text-xs text-gray-400 mt-1">Opcional — nem todo item de leilão tem código.</p>}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Marca"><input className={inputCls} value={it.marca ?? ""} onChange={(e) => set({ marca: e.target.value })} placeholder="ex.: Britânia" /></Field>
-            <Field label="Modelo"><input className={inputCls} value={it.modelo ?? ""} onChange={(e) => set({ modelo: e.target.value })} placeholder="ex.: BFR-2000" /></Field>
+            <Field label={<>Marca<IaTag on={iaFez("marca")} /></>}><input className={inputCls} value={it.marca ?? ""} onChange={(e) => set({ marca: e.target.value })} placeholder="ex.: Britânia" /></Field>
+            <Field label={<>Modelo<IaTag on={iaFez("modelo")} /></>}><input className={inputCls} value={it.modelo ?? ""} onChange={(e) => set({ modelo: e.target.value })} placeholder="ex.: BFR-2000" /></Field>
           </div>
-          <Field label="Categoria">
+          <Field label={<>Categoria<IaTag on={iaFez("grupo")} /></>}>
             <CategoriaPicker value={it.grupo || ""} onChange={(g) => set({ grupo: g })} grupos={catList} sugestao={sugCat} />
           </Field>
-          <Field label="Voltagem">
+          <Field label={<>Voltagem<IaTag on={iaFez("voltagem")} /></>}>
             <div className="flex flex-wrap gap-1.5">
               {VOLTAGENS.map((v) => (
                 <button key={v} onClick={() => set({ voltagem: it.voltagem === v ? null : v })}
@@ -864,7 +874,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               ))}
             </div>
           </Field>
-          <Field label="Cor"><input className={inputCls} value={it.cor ?? ""} onChange={(e) => set({ cor: e.target.value })} placeholder="ex.: Preto" /></Field>
+          <Field label={<>Cor<IaTag on={iaFez("cor")} /></>}><input className={inputCls} value={it.cor ?? ""} onChange={(e) => set({ cor: e.target.value })} placeholder="ex.: Preto" /></Field>
           {/cal[çc]ado/i.test(it.grupo || "") && (
             <Field label="Tamanho / numeração (opcional)">
               <input className={inputCls} value={it.tamanho ?? ""} onChange={(e) => set({ tamanho: e.target.value })} placeholder="ex.: 42, 38 BR, M" />
@@ -875,7 +885,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         {/* Dimensões & peso — pré-carregados, confirmar. Rastreia se foi medido ou só estimado. */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
           <div className="flex items-center justify-between pt-2 pb-1">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Dimensões & peso</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Dimensões & peso<IaTag on={iaFez("dimensoes")} /></h3>
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${fonteLabel(it).cls}`}>{fonteLabel(it).texto}</span>
           </div>
           <p className="text-xs text-gray-400 mb-1">Digitar = medido. Sem balança/trena? Use a estimativa e deixe p/ medir depois (afeta o frete).</p>
