@@ -6,7 +6,8 @@ import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles, ShoppingCart } from "lucide-react";
+import { contarACatalogarPorLote } from "../lib/conferencia";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles, ShoppingCart, ClipboardList } from "lucide-react";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -52,6 +53,15 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [selected, setSelected] = useState(() => new Set());
   const [printLabels, setPrintLabels] = useState(null);
   const [boxPicker, setBoxPicker] = useState(false);
+  const [catalogarPicker, setCatalogarPicker] = useState(false);
+
+  // Aplica o filtro status=A_CATALOGAR + lote escolhido no picker de catalogação.
+  const escolherCatalogar = (loteValue) => {
+    setFStatus("A_CATALOGAR");
+    setFLote(loteValue);
+    setShowFilters(true);
+    setCatalogarPicker(false);
+  };
 
   const toggleSel = (sku) =>
     setSelected((prev) => {
@@ -298,6 +308,10 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             {selectMode && ` · ${selected.size} selecionado(s)`}
           </p>
           <div className="flex items-center gap-1.5">
+            <button onClick={() => setCatalogarPicker(true)}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg px-2 py-1">
+              <ClipboardList className="w-3.5 h-3.5" /> Catalogar
+            </button>
             <button onClick={() => setBoxPicker(true)}
               className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg px-2 py-1">
               <Boxes className="w-3.5 h-3.5" /> Caixa/Mala
@@ -429,6 +443,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </div>
       )}
 
+      {catalogarPicker && (
+        <CatalogarPorLote
+          lotes={lotes}
+          onClose={() => setCatalogarPicker(false)}
+          onPick={escolherCatalogar}
+        />
+      )}
+
       {boxPicker && (
         <BoxPicker
           params={params}
@@ -516,6 +538,66 @@ function BoxPicker({ onClose, onPick, params }) {
             {busy === c.codigo ? <Loader2 className="w-4 h-4 animate-spin text-gray-400 flex-shrink-0" /> : <Printer className="w-4 h-4 text-gray-300 flex-shrink-0" />}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Atalho "A catalogar por lote": conta itens A_CATALOGAR por lote (contarACatalogarPorLote)
+// e, ao escolher, aplica status=A_CATALOGAR + lote na tela de itens. Espelha o BoxPicker.
+function CatalogarPorLote({ lotes, onClose, onPick }) {
+  const [loading, setLoading] = useState(true);
+  const [linhas, setLinhas] = useState([]);
+  const refDe = (lote) => lotes.find((l) => l.lote === lote)?.referencia || "";
+
+  useEffect(() => {
+    (async () => {
+      try { setLinhas(await contarACatalogarPorLote()); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const total = linhas.reduce((s, r) => s + r.count, 0);
+
+  return (
+    <div className="fixed inset-0 z-[65] bg-gray-100 flex flex-col">
+      <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between shadow-md">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-5 h-5 text-orange-400" />
+          <span className="font-bold">A catalogar por lote</span>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg bg-gray-800" aria-label="Fechar">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-auto px-3 py-3 space-y-1.5">
+        {loading ? (
+          <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" /></div>
+        ) : !linhas.length ? (
+          <p className="text-sm text-gray-400 text-center py-10">Nada a catalogar. 🎉</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 px-1 pb-1">
+              {total.toLocaleString("pt-BR")} itens a catalogar em {linhas.length} lote(s)
+            </p>
+            {linhas.map((r) => {
+              const value = r.lote == null ? LOTE_SEM : String(r.lote);
+              const titulo = r.lote == null ? "Sem lote" : `Lote ${r.lote}`;
+              const ref = r.lote == null ? "" : refDe(r.lote);
+              return (
+                <button key={value} onClick={() => onPick(value)}
+                  className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-sm text-gray-900">{titulo}</span>
+                    {ref && <span className="text-xs text-gray-500"> — {ref}</span>}
+                  </div>
+                  <span className="text-sm font-bold text-orange-600">{r.count}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                </button>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );
