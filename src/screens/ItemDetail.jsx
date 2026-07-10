@@ -17,6 +17,8 @@ import CategoriaPicker from "../components/CategoriaPicker";
 import { sugerirCategoria } from "../lib/categorizar";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import { derivarPreco } from "../lib/precoView";
+import { construirSugestoes, separarSugestoes, patchVazios, montarAnalise } from "../lib/iaAnalise";
+import { salvarAnaliseIA } from "../lib/ia";
 import { classificarItem } from "../lib/classificacao";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
@@ -73,7 +75,6 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [iaProgresso, setIaProgresso] = useState(0); // 0-100, barra durante a run
   const iaProgRef = useRef(null);
   const [forcarIA, setForcarIA] = useState(false); // override p/ refazer item já completado
-  const [ia, setIa] = useState(null); // sugestões da IA (enriquecer-produto)
   const [iaErro, setIaErro] = useState(null);
   const [qrCelular, setQrCelular] = useState(null); // { url, data } — QR p/ abrir no celular
   const dirty = useRef(false);
@@ -213,61 +214,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     }
   };
 
-  // Constrói as sugestões aplicáveis a partir do retorno da IA (campo a campo).
-  // Função pura (não usa estado/`set`): cada item já carrega o `patch` pronto, o que
-  // permite reusá-la tanto no fill automático (assim que a IA retorna) quanto nos
-  // botões de revisão. `item` entra só p/ os fallbacks de dimensão.
-  const construirSugestoes = (iaData, item) => {
-    if (!iaData) return [];
-    const d = iaData.dimensoes_estimadas || {};
-    const temDim = [d.comprimento_cm, d.largura_cm, d.altura_cm, d.peso_kg].some((v) => v != null);
-    const lista = [
-      { k: "titulo_anuncio", label: "Título", val: iaData.titulo_anuncio, patch: { titulo_anuncio: iaData.titulo_anuncio } },
-      { k: "descricao_anuncio", label: "Descrição", val: iaData.descricao_anuncio, patch: { descricao_anuncio: iaData.descricao_anuncio } },
-      { k: "marca", label: "Marca", val: iaData.marca, patch: { marca: iaData.marca } },
-      { k: "modelo", label: "Modelo", val: iaData.modelo, patch: { modelo: iaData.modelo } },
-      { k: "grupo", label: "Categoria", val: iaData.grupo, patch: { grupo: iaData.grupo } },
-      { k: "ncm", label: "NCM", val: iaData.ncm, patch: { ncm: iaData.ncm } },
-      { k: "voltagem", label: "Voltagem", val: iaData.voltagem, patch: { voltagem: iaData.voltagem } },
-      { k: "cor", label: "Cor", val: iaData.cor, patch: { cor: iaData.cor } },
-      temDim && {
-        k: "dimensoes", label: "Dimensões (C×L×A, peso)",
-        val: `${d.comprimento_cm ?? "–"}×${d.largura_cm ?? "–"}×${d.altura_cm ?? "–"} cm · ${d.peso_kg ?? "–"} kg`,
-        patch: {
-          comprimento_cm: d.comprimento_cm ?? item.comprimento_cm, largura_cm: d.largura_cm ?? item.largura_cm,
-          altura_cm: d.altura_cm ?? item.altura_cm, peso_real_kg: d.peso_kg ?? item.peso_real_kg,
-          medidas_fonte: MEDIDAS_FONTE.ESTIMADO,
-        },
-      },
-      (iaData.preco_ref_novo != null || iaData.preco_ref_usado != null) && {
-        k: "preco", label: `Preço ref. (IA · ${iaData.preco_ref_confianca || "—"})`,
-        val: `Novo ${fmtBRL(iaData.preco_ref_novo)} · Usado ${fmtBRL(iaData.preco_ref_usado)}`,
-        patch: {
-          preco_ref_novo: iaData.preco_ref_novo, preco_ref_usado: iaData.preco_ref_usado,
-          preco_ref_confianca: iaData.preco_ref_confianca, preco_ref_fonte: "IA:claude",
-        },
-      },
-      Array.isArray(iaData.pontos) && iaData.pontos.length > 0 && {
-        k: "bullet_points", label: "Bullets (anúncio)", val: iaData.pontos.join(" · "),
-        patch: { bullet_points: iaData.pontos },
-      },
-      iaData.palavras_chave && {
-        k: "palavras_chave", label: "Palavras-chave", val: iaData.palavras_chave,
-        patch: { palavras_chave: iaData.palavras_chave },
-      },
-      Array.isArray(iaData.ficha_tecnica) && iaData.ficha_tecnica.length > 0 && {
-        k: "ficha_tecnica", label: "Ficha técnica",
-        val: iaData.ficha_tecnica.map((f) => `${f.atributo}: ${f.valor}`).join(" · "),
-        patch: { ficha_tecnica: iaData.ficha_tecnica },
-      },
-    ];
-    return lista.filter((s) => s && s.val != null && s.val !== "");
-  };
-
-  // Junta os patches de todas as sugestões num único patch e sinaliza "completado via IA"
-  // (marcador durável = mesmo do selo/filtro na tela de Itens).
-  const patchTodasIA = (sugestoes) =>
-    Object.assign({}, ...sugestoes.map((s) => s.patch), { preco_ref_fonte: "IA:claude" });
+  // As sugestões da IA (construção, separação vazio/preenchido e snapshot durável) vivem
+  // em lib/iaAnalise.js; a persistência (backfill + snapshot) em lib/ia.js.
 
   // Enriquecimento por IA (edge function enriquecer-produto). Texto-primeiro;
   // comFoto=true reenvia as URLs assinadas das fotos (custo ~2x).
@@ -299,23 +247,27 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         throw new Error(msg);
       }
       if (data?.error) throw new Error(data.error);
-      setIa(data);
       setIaProgresso(100);
-      // Fill automático: aplica todas as sugestões aos campos assim que a IA retorna.
-      // (Continua editável; só persiste ao Salvar/Avançar.) A lista de sugestões abaixo
-      // permanece para revisão e reaplicação campo a campo.
+      // Sugestões campo a campo + preço ideal derivado das novas referências.
       const sugeridas = construirSugestoes(data, it);
-      if (sugeridas.length) {
-        const patch = patchTodasIA(sugeridas);
-        // Preço ideal: a IA entrega só REFERÊNCIAS (preco_ref_novo/usado). Derivamos o
-        // recomendado (mesmo motor do PricingCard) a partir das novas refs e gravamos em
-        // preco_ideal — assim a pesquisa altera o valor de venda, não só os dados do anúncio.
-        // (titulo_anuncio já vem sobrescrito no patch; só o anúncio muda, não o nome interno.)
-        const grupo = params.grupos?.[(patch.grupo ?? it.grupo)] || {};
-        const d = derivarPreco({ ...it, ...patch }, grupo, params, custoItem);
-        if (d.recomendado > 0) patch.preco_ideal = d.recomendado;
-        set(patch);
+      const grupoBase = params.grupos?.[(data.grupo ?? it.grupo)] || {};
+      const dp = derivarPreco(
+        { ...it, preco_ref_novo: data.preco_ref_novo ?? it.preco_ref_novo, preco_ref_usado: data.preco_ref_usado ?? it.preco_ref_usado },
+        grupoBase, params, custoItem
+      );
+      if (dp.recomendado > 0) {
+        sugeridas.push({ k: "preco_ideal", label: "Preço ideal (recomendado)", val: fmtBRL(dp.recomendado), patch: { preco_ideal: dp.recomendado } });
       }
+      // Não-destrutivo: auto-aplica só os campos vazios; o resto fica como sugestão.
+      const { vazias } = separarSugestoes(sugeridas, it);
+      const patch = patchVazios(vazias);
+      const aplicados = vazias.map((s) => s.k);
+      const iaAnalise = montarAnalise(data, sugeridas, aplicados, { em: new Date().toISOString(), por: user.email });
+      // Persiste o backfill dos vazios + o quadro durável numa escrita; atualiza a ficha.
+      const linha = await salvarAnaliseIA(it.sku, patch, iaAnalise, user);
+      setIt(linha);
+      dirty.current = false;
+      onSaved(linha);
     } catch (e) {
       setIaErro(e?.message || String(e));
     } finally {
@@ -339,12 +291,15 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // Sugestões do retorno atual (revisão/reaplicação). O fill já aconteceu em `enriquecer`.
-  const sugestoesIA = construirSugestoes(ia, it);
-  const aplicarTodasIA = () => { if (sugestoesIA.length) set(patchTodasIA(sugestoesIA)); };
-
-  // Item já completado via IA (marcador durável). Desabilita os botões salvo "refazer".
-  const jaIA = it.preco_ref_fonte === "IA:claude";
+  // Item já analisado pela IA (snapshot durável). Desabilita os botões salvo "refazer".
+  const jaIA = !!it.ia_analise;
+  const iaFez = (k) => !!it.ia_analise?.aplicados?.includes(k);
+  const aplicarSugestao = (s) => {
+    set(s.patch);
+    setIt((p) => (p.ia_analise
+      ? { ...p, ia_analise: { ...p.ia_analise, aplicados: [...new Set([...(p.ia_analise.aplicados || []), s.k])] } }
+      : p));
+  };
   const iaBloqueado = (jaIA && !forcarIA) || !!iaLoading;
   const statusIA = iaProgresso < 30 ? "Enviando dados do produto…"
     : iaProgresso < 65 ? "IA analisando o produto…"
@@ -466,6 +421,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       // Conteúdo de listagem da IA (jsonb) — bullets/palavras-chave/ficha (flat file Amazon).
       bullet_points: it.bullet_points ?? null, palavras_chave: it.palavras_chave ?? null,
       ficha_tecnica: it.ficha_tecnica ?? null,
+      // Snapshot durável da análise da IA (inclui `aplicados` atualizado por aplicações manuais).
+      ia_analise: it.ia_analise ?? null,
       upd_by: user.email,
       ...(novoStatus ? { status: novoStatus } : {}),
       // Carimbos de pós-venda na transição (vendido_em só se ainda vazio).
@@ -653,31 +610,71 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <p className="text-xs text-red-600 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {iaErro}</p>
           )}
 
-          {ia && sugestoesIA.length > 0 && (
-            <div className="mt-3 border-t border-gray-100 pt-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Campos preenchidos {ia.usou_foto ? "(com foto)" : ""}
-                </span>
-                <button onClick={aplicarTodasIA} className="text-xs font-semibold text-violet-700">Reaplicar tudo</button>
-              </div>
-              <div className="space-y-1.5">
-                {sugestoesIA.map((s) => (
-                  <div key={s.k} className="flex items-start gap-2 text-sm">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[11px] uppercase tracking-wide text-gray-400">{s.label}</span>
-                      <p className="text-gray-800 leading-snug break-words">{s.val}</p>
+          {it.ia_analise && (() => {
+            const a = it.ia_analise;
+            const aplicados = a.aplicados || [];
+            const sugestoes = a.sugestoes || [];
+            const preenchidos = sugestoes.filter((s) => aplicados.includes(s.k));
+            const pendentes = sugestoes.filter((s) => !aplicados.includes(s.k));
+            return (
+              <div className="mt-3 border-t border-gray-100 pt-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700">
+                    <Sparkles className="w-3.5 h-3.5" /> Análise da IA{a.usou_foto ? " (com foto)" : ""}
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    {a.em ? new Date(a.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""}
+                    {a.confianca ? ` · ${a.confianca}` : ""}
+                  </span>
+                </div>
+
+                {preenchidos.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 mb-1 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Preenchidos pela IA
+                    </p>
+                    <div className="space-y-1">
+                      {preenchidos.map((s) => (
+                        <div key={s.k} className="text-sm">
+                          <span className="text-[11px] uppercase tracking-wide text-gray-400">{s.label}</span>
+                          <p className="text-gray-800 leading-snug break-words">{s.val}</p>
+                        </div>
+                      ))}
                     </div>
-                    <button onClick={() => set(s.patch)}
-                      className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg px-2 py-1 active:bg-violet-50">
-                      <Check className="w-3 h-3" /> Reaplicar
-                    </button>
                   </div>
-                ))}
+                )}
+
+                {pendentes.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">Sugestões (revisar — você já tinha valor)</p>
+                    <div className="space-y-1.5">
+                      {pendentes.map((s) => (
+                        <div key={s.k} className="flex items-start gap-2 text-sm">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[11px] uppercase tracking-wide text-gray-400">{s.label}</span>
+                            <p className="text-gray-800 leading-snug break-words">{s.val}</p>
+                          </div>
+                          {s.patch && (
+                            <button onClick={() => aplicarSugestao(s)}
+                              className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg px-2 py-1 active:bg-violet-50">
+                              <Check className="w-3 h-3" /> Aplicar
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {a.campos_faltantes?.length > 0 && (
+                  <p className="text-xs text-gray-600 leading-snug">
+                    <b className="text-gray-700">A IA não conseguiu:</b> {a.campos_faltantes.join(", ")}
+                  </p>
+                )}
+                {a.observacoes && <p className="text-xs text-gray-500 leading-snug"><b>Dica:</b> {a.observacoes}</p>}
               </div>
-              {ia.observacoes && <p className="text-xs text-gray-500 mt-2 leading-snug"><b>Diagnóstico:</b> {ia.observacoes}</p>}
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Fotos */}
