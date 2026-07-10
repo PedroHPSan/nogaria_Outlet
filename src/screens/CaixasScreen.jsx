@@ -175,7 +175,6 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
 
 // Detalhe/conferência de uma caixa: avaliação, chegada+armazenamento, itens e histórico.
 function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpenItem, onChanged }) {
-  const isMala = caixa.tipo === "MALA";
   const { total, semPreco } = estimarValorCaixa(itens, params);
   const { pesoKg, semPeso } = estimarPesoCaixa(itens, params);
 

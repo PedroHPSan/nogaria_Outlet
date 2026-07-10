@@ -134,7 +134,7 @@ export function chegadaDetalhe(chegouEm, local) {
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `node scripts/test_caixas.mjs`
-Esperado: `11 asserções OK`.
+Esperado: `8 asserções OK`.
 
 - [ ] **Step 5: Commit**
 
@@ -707,7 +707,7 @@ e incluir no encadeamento do script `test`, ao final:
 - [ ] **Step 2: Rodar a suíte completa**
 
 Run: `npm test`
-Esperado: todos os testes passam, incluindo `11 asserções OK` do `test:caixas`.
+Esperado: todos os testes passam, incluindo `8 asserções OK` do `test:caixas`.
 
 - [ ] **Step 3: Commit**
 
