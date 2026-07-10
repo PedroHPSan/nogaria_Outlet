@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import { buildSku } from "./model";
 import { classeAutomatica } from "./classificacao";
 import { copiarFotos } from "./fotos";
+import { tallyPorLote } from "./catalogarStats";
 
 // Próximo sequencial dentro de um lote real (parseia o sufixo do maior SKU).
 async function proximoSeqLote(lote) {
@@ -306,4 +307,22 @@ export async function classificarSemClasse(params, user) {
   } catch { /* auditoria best-effort */ }
 
   return { total: itens.length, porClasse };
+}
+
+// Conta itens em "A catalogar" agrupados por lote (para o atalho de catalogação
+// por lote na tela de Itens). Pagina a coluna `lote` (leve) e agrupa via
+// tallyPorLote. Retorna [{lote, count}] (lote null = sem lote).
+export async function contarACatalogarPorLote() {
+  const PAGE = 1000;
+  let rows = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("itens").select("lote").eq("status", "A_CATALOGAR")
+      .order("sku").range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    rows = rows.concat(data);
+    if (data.length < PAGE) break;
+  }
+  return tallyPorLote(rows);
 }
