@@ -3,14 +3,21 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { X } from "lucide-react";
 
-// Leitor por câmera. Para na primeira leitura válida e devolve o texto via
-// onDetected. Modo padrão lê código de barras (GTIN); com qr=true também lê o
-// QR Code das etiquetas (que codifica o SKU). Sempre há um fallback manual no
-// fluxo chamador — se a câmera falhar, nada trava.
-export default function BarcodeScanner({ onDetected, onClose, qr = false, title, hint }) {
+// Leitor por câmera. Por padrão para na primeira leitura válida e devolve o
+// texto via onDetected. Com continuous=true fica lendo em sequência (para
+// conferir vários itens), disparando onDetected a cada código novo com um
+// debounce de ~1,5s para não repetir a mesma leitura. Modo padrão lê código de
+// barras (GTIN); com qr=true também lê o QR Code das etiquetas (que codifica o
+// SKU). Sempre há um fallback manual no fluxo chamador — se a câmera falhar,
+// nada trava. onDetected é guardado num ref para a câmera não reiniciar a cada
+// re-render do chamador (essencial no modo contínuo).
+export default function BarcodeScanner({ onDetected, onClose, qr = false, continuous = false, title, hint }) {
   const videoRef = useRef(null);
   const doneRef = useRef(false);
   const erroRef = useRef(null);
+  const onDetectedRef = useRef(onDetected);
+  const ultimaRef = useRef({ texto: null, em: 0 });
+  useEffect(() => { onDetectedRef.current = onDetected; }, [onDetected]);
 
   useEffect(() => {
     const hints = new Map();
@@ -22,10 +29,18 @@ export default function BarcodeScanner({ onDetected, onClose, qr = false, title,
 
     reader
       .decodeFromVideoDevice(undefined, videoRef.current, (result, _err, ctrl) => {
-        if (result && !doneRef.current) {
+        if (!result) return;
+        const texto = result.getText();
+        if (continuous) {
+          const agora = Date.now();
+          const ult = ultimaRef.current;
+          if (texto === ult.texto && agora - ult.em < 1500) return; // debounce da mesma leitura
+          ultimaRef.current = { texto, em: agora };
+          onDetectedRef.current(texto);
+        } else if (!doneRef.current) {
           doneRef.current = true;
           ctrl.stop();
-          onDetected(result.getText());
+          onDetectedRef.current(texto);
         }
       })
       .then((c) => { controls = c; })
@@ -35,7 +50,7 @@ export default function BarcodeScanner({ onDetected, onClose, qr = false, title,
       });
 
     return () => { try { controls?.stop(); } catch { /* noop */ } };
-  }, [onDetected, qr]);
+  }, [qr, continuous]);
 
   return (
     <div className="fixed inset-0 z-[60] bg-black flex flex-col">
