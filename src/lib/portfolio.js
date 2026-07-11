@@ -169,37 +169,40 @@ function waitImage(img) {
 // Imprime o HTML do catálogo num iframe isolado (sem o CSS do app) e chama o
 // diálogo de impressão do navegador — onde dá para "Salvar como PDF".
 export function imprimirPortfolio(html) {
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("aria-hidden", "true");
-  Object.assign(iframe.style, {
-    position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "0", visibility: "hidden",
-  });
-  document.body.appendChild(iframe);
+  return new Promise((resolve) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    Object.assign(iframe.style, {
+      position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "0", visibility: "hidden",
+    });
+    document.body.appendChild(iframe);
 
-  let done = false;
-  const cleanup = () => {
-    if (done) return;
-    done = true;
-    setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 500);
-  };
+    let done = false;
+    const cleanup = (resultado) => {
+      if (done) return;
+      done = true;
+      resolve(resultado);
+      setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 500);
+    };
 
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open();
-  doc.write(html);
-  doc.close();
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-  const imgs = Array.from(doc.images || []);
-  Promise.all(imgs.map(waitImage)).then(() => {
-    const win = iframe.contentWindow;
-    requestAnimationFrame(() => {
-      try {
-        win.focus();
-        win.onafterprint = cleanup;
-        win.print();
-      } catch {
-        /* se o print falhar, ainda limpamos o iframe */
-      }
-      setTimeout(cleanup, 60000);
+    const imgs = Array.from(doc.images || []);
+    Promise.all(imgs.map(waitImage)).then(() => {
+      const win = iframe.contentWindow;
+      requestAnimationFrame(() => {
+        try {
+          win.focus();
+          win.onafterprint = () => cleanup("impresso");
+          win.print();
+        } catch {
+          cleanup("erro");
+        }
+        setTimeout(() => cleanup("timeout"), 60000);
+      });
     });
   });
 }
