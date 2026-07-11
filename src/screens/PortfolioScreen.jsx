@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  Loader2, Search, Filter, Printer, Eye, EyeOff, Layers, Image as ImageIcon, FileText, Boxes,
+  Loader2, Search, Filter, Printer, Eye, EyeOff, Layers, Image as ImageIcon, FileText, Boxes, X, Link2, Check,
 } from "lucide-react";
 import {
   listarItensCatalogo, dedupCatalogo, agruparCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE,
 } from "../lib/catalogo";
 import { gerarCatalogoHTML } from "../lib/catalogoTemplate";
-import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel, fotosComoDataURI } from "../lib/portfolio";
+import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
+import { prepararFotos } from "../lib/catalogoImagens";
+import { publicarCatalogo } from "../lib/catalogoPublico";
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
 import { listarCaixas } from "../lib/caixas";
@@ -66,6 +68,10 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
   const [loading, setLoading] = useState(true);
   const [caixas, setCaixas] = useState([]);
   const [gerando, setGerando] = useState(false);
+  const [progresso, setProgresso] = useState(null); // { feitas, total } enquanto prepara fotos
+  const abortRef = useRef(null);
+  const [gerandoLink, setGerandoLink] = useState(false);
+  const [linkPronto, setLinkPronto] = useState(null); // { url, expira_em }
   const debounce = useRef();
 
   const catList = useMemo(
@@ -135,22 +141,61 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
       const cards = dedupCatalogo(itens);
       const secoes = agruparCatalogo(cards, agrupar);
       const cats = [...new Set(itens.map((i) => (i.grupo || "").trim()).filter(Boolean))];
-      // As fotos da galeria são signed URLs remotas; embutimos em base64 para a
-      // impressão/PDF (do contrário não aparecem no documento gerado).
       let fotosPdf = {};
       if (comFoto) {
-        const reps = {};
-        for (const c of cards) if (fotos[c.rep.sku]) reps[c.rep.sku] = fotos[c.rep.sku];
-        fotosPdf = await fotosComoDataURI(reps);
+        const entradas = cards
+          .map((c) => ({ sku: c.rep.sku, url: fotos[c.rep.sku] }))
+          .filter((e) => e.url);
+        if (entradas.length) {
+          const ctrl = new AbortController();
+          abortRef.current = ctrl;
+          setProgresso({ feitas: 0, total: entradas.length });
+          try {
+            fotosPdf = await prepararFotos(entradas, {
+              signal: ctrl.signal,
+              onProgress: (p) => setProgresso(p),
+            });
+          } catch (err) {
+            if (err?.message === "cancelado") return; // usuário cancelou: aborta silenciosamente
+            throw err;
+          } finally {
+            abortRef.current = null;
+            setProgresso(null);
+          }
+        }
       }
       const html = gerarCatalogoHTML(secoes, {
         titulo: titulo.trim() || "Catálogo de Produtos",
         subtitulo: cats.join(" · "),
         edicao, parcial, comFoto, mostrarPreco, fotos: fotosPdf,
       });
-      imprimirPortfolio(html);
+      // Aguarda a impressão (resolve em impresso/timeout/erro) para o botão só
+      // sair do estado "gerando" quando o diálogo de impressão for tratado.
+      await imprimirPortfolio(html);
     } finally {
       setGerando(false);
+    }
+  };
+
+  const gerarLink = async () => {
+    if (!total) return;
+    setGerandoLink(true);
+    setLinkPronto(null);
+    try {
+      const cards = dedupCatalogo(itens);
+      const secoes = agruparCatalogo(cards, agrupar);
+      const cats = [...new Set(itens.map((i) => (i.grupo || "").trim()).filter(Boolean))];
+      const res = await publicarCatalogo(secoes, {
+        titulo: titulo.trim() || "Catálogo de Produtos",
+        subtitulo: cats.join(" · "),
+        edicao, comFoto, mostrarPreco,
+      });
+      try { await navigator.clipboard.writeText(res.url); } catch { /* clipboard pode falhar */ }
+      setLinkPronto(res);
+    } catch {
+      alert("Falha ao gerar o link. Tente novamente.");
+    } finally {
+      setGerandoLink(false);
     }
   };
 
@@ -312,11 +357,40 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
       {/* Barra de geração (acima da navegação inferior) */}
       {total > 0 && (
         <div className="fixed bottom-14 inset-x-0 z-30 px-3">
-          <div className="max-w-lg mx-auto">
-            <button onClick={gerar} disabled={gerando}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-gray-800 disabled:opacity-60">
-              {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
-              Gerar catálogo PDF ({total})
+          <div className="max-w-lg mx-auto space-y-2">
+            {linkPronto && (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-2 text-xs font-semibold shadow-lg">
+                <Check className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate flex-1">Link copiado · válido até {new Date(linkPronto.expira_em).toLocaleDateString("pt-BR")}</span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={gerarLink} disabled={gerandoLink || gerando}
+                className="flex-1 flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-60">
+                {gerandoLink ? <Loader2 className="w-5 h-5 animate-spin" /> : <Link2 className="w-5 h-5" />}
+                Gerar link
+              </button>
+              <button onClick={gerar} disabled={gerando || gerandoLink}
+                className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-gray-800 disabled:opacity-60">
+                {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
+                PDF ({total})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {progresso && (
+        <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center px-8">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl">
+            <p className="text-sm font-bold text-gray-800 mb-1">Preparando o catálogo…</p>
+            <p className="text-xs text-gray-500 mb-3">Comprimindo {progresso.feitas} de {progresso.total} fotos</p>
+            <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-full bg-orange-500 transition-all"
+                style={{ width: `${progresso.total ? Math.round((progresso.feitas / progresso.total) * 100) : 0}%` }} />
+            </div>
+            <button onClick={() => abortRef.current?.abort()}
+              className="mt-4 w-full flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 rounded-xl py-2.5 text-sm font-semibold active:bg-gray-100">
+              <X className="w-4 h-4" /> Cancelar
             </button>
           </div>
         </div>

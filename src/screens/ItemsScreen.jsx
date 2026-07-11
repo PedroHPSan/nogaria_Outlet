@@ -7,7 +7,8 @@ import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
 import { contarACatalogarPorLote } from "../lib/conferencia";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Ruler, Package, Sparkles, ShoppingCart, ClipboardList } from "lucide-react";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList } from "lucide-react";
+import FotoInputs from "../components/FotoInputs";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
@@ -39,7 +40,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [viasMap, setViasMap] = useState({}); // sku -> { vias, ultima } (controle de impressão)
   const [fotos, setFotos] = useState({}); // sku -> url da 1ª foto (miniatura)
   const debounce = useRef();
-  const fileRef = useRef();
+  const fotoRef = useRef();
+  const [escolherFonte, setEscolherFonte] = useState(false);
   const captureSku = useRef(null);
   const [savingFoto, setSavingFoto] = useState(null);
 
@@ -94,11 +96,10 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   };
 
   // Foto rápida direto da lista (sem abrir o item).
-  const iniciarFoto = (sku) => { captureSku.current = sku; fileRef.current?.click(); };
-  const aoSelecionarFoto = async (e) => {
-    const files = Array.from(e.target.files || []);
+  const iniciarFoto = (sku) => { captureSku.current = sku; setEscolherFonte(true); };
+  const aoSelecionarFoto = async (fileList) => {
+    const files = Array.from(fileList || []);
     const sku = captureSku.current;
-    e.target.value = "";
     if (!files.length || !sku) return;
     setSavingFoto(sku);
     try {
@@ -349,8 +350,25 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </div>
       </div>
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
-        onChange={aoSelecionarFoto} />
+      <FotoInputs ref={fotoRef} onFiles={aoSelecionarFoto} />
+      {escolherFonte && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-end" onClick={() => setEscolherFonte(false)}>
+          <div className="w-full bg-white rounded-t-2xl p-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-bold text-gray-800">Adicionar foto</span>
+              <button onClick={() => setEscolherFonte(false)} aria-label="Fechar"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <button onClick={() => { setEscolherFonte(false); fotoRef.current?.abrirCamera(); }}
+              className="w-full flex items-center gap-3 bg-orange-500 text-white rounded-xl py-3.5 px-4 font-bold active:bg-orange-600">
+              <Camera className="w-5 h-5" /> Câmera
+            </button>
+            <button onClick={() => { setEscolherFonte(false); fotoRef.current?.abrirGaleria(); }}
+              className="w-full flex items-center gap-3 bg-gray-800 text-white rounded-xl py-3.5 px-4 font-bold active:bg-gray-900">
+              <Images className="w-5 h-5" /> Escolher da galeria
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-3 pt-2 space-y-1.5">
         {itens.map((it) => {
