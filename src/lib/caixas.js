@@ -5,7 +5,7 @@
 // Lógica de dados isolada da UI, espelhando o padrão de lib/conferencia.js
 // (retry em colisão de código + eventos best-effort).
 import { supabase } from "./supabase";
-import { pad3 } from "./model";
+import { pad3, STATUS_FORA_ESTOQUE_IN } from "./model";
 import { chegadaDetalhe } from "./caixasFormat";
 
 export const CAIXA_STATUS = { ABERTA: "ABERTA", FECHADA: "FECHADA" };
@@ -115,9 +115,12 @@ export async function buscarCaixa(codigo) {
   return data || null;
 }
 
-// Itens encaixotados numa caixa.
+// Itens encaixotados numa caixa. Esconde VENDIDO/ENTREGUE/DESCARTE: eles saíram
+// do estoque (foram pro cliente), mas mantêm caixa_id como histórico no banco.
 export async function itensDaCaixa(codigo) {
-  const { data } = await supabase.from("itens").select("*").eq("caixa_id", codigo).order("sku");
+  const { data } = await supabase
+    .from("itens").select("*").eq("caixa_id", codigo)
+    .not("status", "in", STATUS_FORA_ESTOQUE_IN).order("sku");
   return data || [];
 }
 

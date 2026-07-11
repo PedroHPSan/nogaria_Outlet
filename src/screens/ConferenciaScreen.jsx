@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg, CLASSE_STYLE } from "../lib/model";
+import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg, CLASSE_STYLE, STATUS_FORA_ESTOQUE_IN } from "../lib/model";
 import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa, contarSemClasse, classificarSemClasse } from "../lib/conferencia";
 import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
@@ -30,6 +30,9 @@ async function fetchItens(applyFilter) {
   let data = [];
   for (let from = 0; ; from += PAGE) {
     let q = supabase.from("itens").select("*");
+    // Conferência opera só sobre estoque ativo: item vendido/entregue/descartado
+    // não entra em nenhum fluxo (definir lote, encaixotar, etc.).
+    q = q.not("status", "in", STATUS_FORA_ESTOQUE_IN);
     q = applyFilter(q);
     const { data: chunk, error } = await q.order("sku").range(from, from + PAGE - 1);
     if (error || !chunk) break;

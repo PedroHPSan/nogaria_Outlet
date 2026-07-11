@@ -16,6 +16,14 @@ export const ALL_STATUS = [...STATUS_FLOW, STATUS_DESCARTE];
 export const statusIdx = (id) => STATUS_FLOW.findIndex((s) => s.id === id);
 export const statusMeta = (id) => ALL_STATUS.find((s) => s.id === id) || STATUS_FLOW[0];
 
+// Status que NÃO são estoque ativo: VENDIDO/ENTREGUE já foram para o cliente,
+// DESCARTE saiu por sucata. Fonte única — catálogo, portfólio, listagem geral,
+// conferência e conteúdo de caixas derivam daqui (evita listas duplicadas).
+export const STATUS_FORA_ESTOQUE = ["VENDIDO", "ENTREGUE", "DESCARTE"];
+export const foraDoEstoque = (status) => STATUS_FORA_ESTOQUE.includes(status);
+// Pronto para o filtro `in` do PostgREST: query.not("status", "in", <isto>).
+export const STATUS_FORA_ESTOQUE_IN = `(${STATUS_FORA_ESTOQUE.join(",")})`;
+
 export const CLASSE_STYLE = {
   "A+": "bg-purple-600 text-white",
   A: "bg-blue-600 text-white",

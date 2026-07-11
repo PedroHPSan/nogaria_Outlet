@@ -5,7 +5,7 @@
 // das etiquetas — sem o CSS do app, layout próprio em A4).
 import { supabase } from "./supabase.js";
 import { precoVenda } from "./export.js";
-import { fmtBRL } from "./model.js";
+import { fmtBRL, STATUS_FORA_ESTOQUE } from "./model.js";
 import { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
 import { escapeHtml } from "./html.js";
 
@@ -15,8 +15,8 @@ export { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
 // Categoria canônica de calçados (definida no motor de precificação / categorizar).
 export const GRUPO_CALCADOS = "Calçados";
 
-// Status que NÃO entram num portfólio de estoque disponível.
-const STATUS_FORA = ["VENDIDO", "ENTREGUE", "DESCARTE"];
+// Status que NÃO entram num portfólio de estoque disponível (fonte única).
+const STATUS_FORA = STATUS_FORA_ESTOQUE;
 
 // Busca todos os calçados disponíveis (PostgREST corta em 1.000 linhas).
 export async function listarCalcados({ incluirIndisponiveis = false } = {}) {

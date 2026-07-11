@@ -3,13 +3,14 @@
 // importável em testes Node sem puxar a cadeia do cliente. catalogo.js reexporta.
 import { precoVenda } from "./export.js";
 import { ordenarTamanhos, tamanhoLabel } from "./tamanhos.js";
+import { STATUS_FORA_ESTOQUE } from "./model.js";
 
 export const DESTINO_SEM = "__sem__"; // espelha o sentinela do ItemsScreen
 
 // Status que tiram o item do estoque vendável: por padrão o catálogo os exclui
 // (em vez de uma allowlist — os status mudam e o catálogo deve mostrar tudo que
-// está pronto, não uma lista fixa). ENTREGUE = já saiu do estoque.
-export const CATALOGO_STATUS_EXCLUIR = ["VENDIDO", "DESCARTE", "ENTREGUE"];
+// está pronto, não uma lista fixa). Fonte única em model.js (STATUS_FORA_ESTOQUE).
+export const CATALOGO_STATUS_EXCLUIR = STATUS_FORA_ESTOQUE;
 
 // estado do item → selo do card (rótulo de CLIENTE). Itens com estado fora deste
 // mapa (ou nulo) NÃO entram no catálogo (nunca anunciar sem condição definida).

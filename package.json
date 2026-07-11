@@ -20,7 +20,8 @@
     "test:catalogoimagens": "node scripts/test_catalogoimagens.mjs",
     "test:catalogopublico": "node scripts/test_catalogopublico.mjs",
     "test:fotoinput": "node scripts/test_fotoinput.mjs",
-    "test": "npm run test:pricing && npm run test:categoria && npm run test:preflight && npm run test:precoview && npm run test:catalogo && npm run test:anuncio && npm run test:caixas && npm run test:catalogar && npm run test:iaanalise && npm run test:catalogoimagens && npm run test:catalogopublico && npm run test:fotoinput"
+    "test:estoque": "node scripts/test_estoque.mjs",
+    "test": "npm run test:pricing && npm run test:categoria && npm run test:preflight && npm run test:precoview && npm run test:catalogo && npm run test:anuncio && npm run test:caixas && npm run test:catalogar && npm run test:iaanalise && npm run test:catalogoimagens && npm run test:catalogopublico && npm run test:fotoinput && npm run test:estoque"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

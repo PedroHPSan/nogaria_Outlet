@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM, DESTINOS } from "../lib/model";
+import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM, DESTINOS, STATUS_FORA_ESTOQUE_IN } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
 import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -126,7 +126,10 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fLote === LOTE_SEM) query = query.is("lote", null);
     else if (fLote) query = query.eq("lote", Number(fLote));
     if (fClasse) query = query.eq("classe", fClasse);
+    // Sem status escolhido, mostra só o estoque ativo (esconde VENDIDO/ENTREGUE/
+    // DESCARTE — já foram pro cliente/sucata). Escolher um desses no filtro ainda os revela.
     if (fStatus) query = query.eq("status", fStatus);
+    else query = query.not("status", "in", STATUS_FORA_ESTOQUE_IN);
     if (fGrupo) query = query.eq("grupo", fGrupo);
     if (fDestino === DESTINO_SEM) query = query.is("destino", null);
     else if (fDestino) query = query.eq("destino", fDestino);
