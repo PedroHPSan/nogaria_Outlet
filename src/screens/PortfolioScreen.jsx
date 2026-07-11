@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  Loader2, Search, Filter, Printer, Eye, EyeOff, Layers, Image as ImageIcon, FileText, Boxes,
+  Loader2, Search, Filter, Printer, Eye, EyeOff, Layers, Image as ImageIcon, FileText, Boxes, X,
 } from "lucide-react";
 import {
   listarItensCatalogo, dedupCatalogo, agruparCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE,
 } from "../lib/catalogo";
 import { gerarCatalogoHTML } from "../lib/catalogoTemplate";
-import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel, fotosComoDataURI } from "../lib/portfolio";
+import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
+import { prepararFotos } from "../lib/catalogoImagens";
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
 import { listarCaixas } from "../lib/caixas";
@@ -66,6 +67,8 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
   const [loading, setLoading] = useState(true);
   const [caixas, setCaixas] = useState([]);
   const [gerando, setGerando] = useState(false);
+  const [progresso, setProgresso] = useState(null); // { feitas, total } enquanto prepara fotos
+  const abortRef = useRef(null);
   const debounce = useRef();
 
   const catList = useMemo(
@@ -135,13 +138,28 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
       const cards = dedupCatalogo(itens);
       const secoes = agruparCatalogo(cards, agrupar);
       const cats = [...new Set(itens.map((i) => (i.grupo || "").trim()).filter(Boolean))];
-      // As fotos da galeria são signed URLs remotas; embutimos em base64 para a
-      // impressão/PDF (do contrário não aparecem no documento gerado).
       let fotosPdf = {};
       if (comFoto) {
-        const reps = {};
-        for (const c of cards) if (fotos[c.rep.sku]) reps[c.rep.sku] = fotos[c.rep.sku];
-        fotosPdf = await fotosComoDataURI(reps);
+        const entradas = cards
+          .map((c) => ({ sku: c.rep.sku, url: fotos[c.rep.sku] }))
+          .filter((e) => e.url);
+        if (entradas.length) {
+          const ctrl = new AbortController();
+          abortRef.current = ctrl;
+          setProgresso({ feitas: 0, total: entradas.length });
+          try {
+            fotosPdf = await prepararFotos(entradas, {
+              signal: ctrl.signal,
+              onProgress: (p) => setProgresso(p),
+            });
+          } catch (err) {
+            if (err?.message === "cancelado") return; // usuário cancelou: aborta silenciosamente
+            throw err;
+          } finally {
+            abortRef.current = null;
+            setProgresso(null);
+          }
+        }
       }
       const html = gerarCatalogoHTML(secoes, {
         titulo: titulo.trim() || "Catálogo de Produtos",
@@ -317,6 +335,22 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
               className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-gray-800 disabled:opacity-60">
               {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
               Gerar catálogo PDF ({total})
+            </button>
+          </div>
+        </div>
+      )}
+      {progresso && (
+        <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center px-8">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl">
+            <p className="text-sm font-bold text-gray-800 mb-1">Preparando o catálogo…</p>
+            <p className="text-xs text-gray-500 mb-3">Comprimindo {progresso.feitas} de {progresso.total} fotos</p>
+            <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-full bg-orange-500 transition-all"
+                style={{ width: `${progresso.total ? Math.round((progresso.feitas / progresso.total) * 100) : 0}%` }} />
+            </div>
+            <button onClick={() => abortRef.current?.abort()}
+              className="mt-4 w-full flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 rounded-xl py-2.5 text-sm font-semibold active:bg-gray-100">
+              <X className="w-4 h-4" /> Cancelar
             </button>
           </div>
         </div>
