@@ -142,14 +142,23 @@ export async function definirLocalCaixa(codigo, local, user) {
 
 // Registra a chegada (ex.: em Belém): grava `chegou_em` + local (propagado aos itens)
 // e evento `caixa:chegada` com detalhe "Belém · dd/mm/aaaa · <local>". `chegou_em`
-// aceita data retroativa (default: agora).
-export async function registrarChegada(codigo, { chegou_em, local }, user) {
+// aceita data retroativa (default: agora). Se `destino` for informado, também o
+// atualiza na caixa e propaga aos itens (as etiquetas leem o destino do item/caixa) —
+// usado p/ corrigir o destino quando a caixa chega (ex.: de "SP storage" p/ "Belém").
+export async function registrarChegada(codigo, { chegou_em, local, destino }, user) {
   const l = local?.trim() || null;
   const quando = chegou_em || new Date().toISOString();
+  const patchCaixa = { chegou_em: quando, local_fisico: l };
+  const patchItens = { local_fisico: l, upd_by: user?.email };
+  if (destino !== undefined) {
+    const d = destino?.trim() || null;
+    patchCaixa.destino = d;
+    patchItens.destino = d;
+  }
   const { data, error } = await supabase.from("caixas")
-    .update({ chegou_em: quando, local_fisico: l }).eq("codigo", codigo).select().single();
+    .update(patchCaixa).eq("codigo", codigo).select().single();
   if (error) throw error;
-  await supabase.from("itens").update({ local_fisico: l, upd_by: user?.email }).eq("caixa_id", codigo);
+  await supabase.from("itens").update(patchItens).eq("caixa_id", codigo);
   await supabase.from("eventos").insert({
     sku: codigo, acao: "caixa:chegada", detalhe: chegadaDetalhe(quando, l), usuario: user?.email,
   });

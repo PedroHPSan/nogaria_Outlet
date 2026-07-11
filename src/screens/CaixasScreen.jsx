@@ -6,13 +6,16 @@ import {
 } from "../lib/caixas";
 import { marcarConferido, limparConferencia } from "../lib/conferencia";
 import { estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
-import { CLASSE_STYLE, fmtBRL, fmtKg } from "../lib/model";
+import { buildBoxLabel, buildProductLabel } from "../lib/labels";
+import { buscarViasImpressaoCaixa } from "../lib/printLog";
+import { CLASSE_STYLE, DESTINOS, fmtBRL, fmtKg } from "../lib/model";
 import {
   X, Loader2, ScanLine, ArrowRight, AlertTriangle, Boxes, Package, ChevronRight,
-  ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode,
+  ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode, Printer,
 } from "lucide-react";
 
 const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
+const LazyLabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 
 // data de hoje em "YYYY-MM-DD" (para o <input type=date>).
 const hojeISO = () => new Date().toISOString().slice(0, 10);
@@ -188,18 +191,34 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   const { pesoKg, semPeso } = estimarPesoCaixa(itens, params);
 
   const [local, setLocal] = useState(caixa.local_fisico || "");
+  const [destino, setDestino] = useState(caixa.destino || DESTINOS[0]);
   const [dataChegada, setDataChegada] = useState(caixa.chegou_em ? String(caixa.chegou_em).slice(0, 10) : hojeISO());
+  // Inclui o destino atual da caixa nas opções mesmo se for um valor legado fora da lista.
+  const destinoOpcoes = caixa.destino && !DESTINOS.includes(caixa.destino) ? [caixa.destino, ...DESTINOS] : DESTINOS;
   const [salvando, setSalvando] = useState(null); // "chegada" | "conferir" | "local"
   const [busy, setBusy] = useState({}); // { [sku]: "avaria" | "faltando" | "conf" }
   const [erro, setErro] = useState(null);
   const [scanOpen, setScanOpen] = useState(false); // scanner contínuo de conferência por QR
   const [scanMsg, setScanMsg] = useState(null); // { tom: "ok"|"dup"|"warn"|"err", texto }
+  const [printLabels, setPrintLabels] = useState(null);
+  const [vias, setVias] = useState(null); // { vias, ultima } de impressão da etiqueta
 
   const conferidos = itens.filter((i) => i.conferido_em).length;
 
+  // Nº de vias já impressas da etiqueta desta caixa (mesmo controle da Conferência).
+  const carregarVias = useCallback(async () => {
+    const m = await buscarViasImpressaoCaixa([caixa.codigo]);
+    setVias(m[caixa.codigo] || { vias: 0, ultima: null });
+  }, [caixa.codigo]);
+  useEffect(() => { carregarVias(); }, [carregarVias]);
+
+  const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens, params)]);
+  const imprimirItens = () => { if (itens.length) setPrintLabels(itens.map(buildProductLabel)); };
+  const fecharImpressao = async () => { setPrintLabels(null); await carregarVias(); };
+
   const doChegada = async () => {
     setSalvando("chegada"); setErro(null);
-    try { await registrarChegada(caixa.codigo, { chegou_em: dataChegada, local }, user); await onChanged(); }
+    try { await registrarChegada(caixa.codigo, { chegou_em: dataChegada, local, destino }, user); await onChanged(); }
     catch (e) { setErro(e.message || String(e)); }
     finally { setSalvando(null); }
   };
@@ -286,6 +305,13 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2.5">
           <p className="text-xs font-bold uppercase tracking-wide text-gray-500 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Chegada e armazenamento</p>
           <label className="block">
+            <span className="text-xs text-gray-500">Destino</span>
+            <select value={destino} onChange={(e) => setDestino(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+              {destinoOpcoes.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </label>
+          <label className="block">
             <span className="text-xs text-gray-500">Local de armazenamento</span>
             <input value={local} onChange={(e) => setLocal(e.target.value)} placeholder="ex.: Belém · Galpão A"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
@@ -300,7 +326,17 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
             {salvando === "chegada" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck className="w-4 h-4" />}
             Registrar chegada + armazenamento
           </button>
-          <p className="text-[11px] text-gray-400">O local é aplicado à caixa e a todos os {itens.length} item(ns) dela.</p>
+          <p className="text-[11px] text-gray-400">O destino e o local são aplicados à caixa e a todos os {itens.length} item(ns) dela (as etiquetas passam a mostrar o novo destino).</p>
+          <div className="flex gap-2">
+            <button onClick={imprimir}
+              className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 bg-white rounded-xl py-2.5 text-sm font-semibold active:bg-gray-100">
+              <Printer className="w-4 h-4" /> Etiqueta da caixa{vias?.vias > 0 ? ` · ${vias.vias + 1}ª via` : ""}
+            </button>
+            <button onClick={imprimirItens} disabled={!itens.length}
+              className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 bg-white rounded-xl py-2.5 text-sm font-semibold active:bg-gray-100 disabled:opacity-40">
+              <Printer className="w-4 h-4" /> Etiquetas dos itens{itens.length ? ` (${itens.length})` : ""}
+            </button>
+          </div>
         </div>
 
         {/* Itens */}
@@ -386,6 +422,13 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
           {caixa.conferida_em && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
         </button>
       </div>
+
+      {/* Impressão da etiqueta da caixa (reimpressão após corrigir destino/local). */}
+      {printLabels && (
+        <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <LazyLabelPrint labels={printLabels} user={user} onClose={fecharImpressao} />
+        </Suspense>
+      )}
 
       {/* Scanner contínuo: lê o QR do item e marca conferido na hora, seguindo p/ o próximo. */}
       {scanOpen && (
