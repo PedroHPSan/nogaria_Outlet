@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
-  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package
+  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto } from "../lib/fotos";
@@ -14,6 +14,7 @@ import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
+import FotoInputs from "../components/FotoInputs";
 import { sugerirCategoria } from "../lib/categorizar";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import { derivarPreco } from "../lib/precoView";
@@ -88,7 +89,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [iaErro, setIaErro] = useState(null);
   const [qrCelular, setQrCelular] = useState(null); // { url, data } — QR p/ abrir no celular
   const dirty = useRef(false);
-  const fileRef = useRef();
+  const fotoRef = useRef();
 
   // Gera um QR que codifica o link direto desta ficha (?item=SKU). Lendo o QR na
   // tela do notebook, o celular abre exatamente este cadastro para adicionar fotos.
@@ -691,7 +692,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Fotos</h3>
-            <button onClick={() => fileRef.current.click()} disabled={uploading}
+            <button onClick={() => fotoRef.current?.abrirCamera()} disabled={uploading}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-orange-500 rounded-lg px-2.5 py-1.5 active:bg-orange-600 disabled:opacity-50">
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
               {uploading ? "Enviando…" : "Adicionar fotos"}
@@ -720,13 +721,22 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               </div>
             ))}
             <button
-              onClick={() => fileRef.current.click()} disabled={uploading}
-              className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400"
+              onClick={() => fotoRef.current?.abrirCamera()} disabled={uploading}
+              className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-0.5 text-gray-400"
+              title="Tirar foto"
             >
               {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
+              <span className="text-[10px] font-semibold">Câmera</span>
             </button>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
-              onChange={(e) => { subirFotos(e.target.files); e.target.value = ""; }} />
+            <button
+              onClick={() => fotoRef.current?.abrirGaleria()} disabled={uploading}
+              className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-0.5 text-gray-400"
+              title="Escolher da galeria"
+            >
+              {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Images className="w-6 h-6" />}
+              <span className="text-[10px] font-semibold">Galeria</span>
+            </button>
+            <FotoInputs ref={fotoRef} onFiles={subirFotos} />
           </div>
         </div>
 
