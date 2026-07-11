@@ -12,9 +12,10 @@ import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints, DoorOpen } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixasScreen from "./screens/CaixasScreen";
+import SalasScreen from "./screens/SalasScreen";
 
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
 const eventoLabel = (e) => {
@@ -49,6 +50,7 @@ export default function App() {
   const [showNew, setShowNew] = useState(false);
   const [showFotoQr, setShowFotoQr] = useState(false);
   const [showCaixaQr, setShowCaixaQr] = useState(false);
+  const [showSalas, setShowSalas] = useState(false);
   const [preFilter, setPreFilter] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [eventos, setEventos] = useState([]);
@@ -183,9 +185,13 @@ export default function App() {
       </div>
 
       {/* Botões flutuantes: caixa por QR + foto por QR + criar novo item (somem com modal aberto) */}
-      {!openItem && !showNew && !showFotoQr && !showCaixaQr && (
+      {!openItem && !showNew && !showFotoQr && !showCaixaQr && !showSalas && (
         <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none">
           <div className="max-w-lg mx-auto px-4 flex justify-end items-center gap-2.5">
+            <button onClick={() => setShowSalas(true)} aria-label="Salas"
+              className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">
+              <DoorOpen className="w-5 h-5" /> Salas
+            </button>
             <button onClick={() => setShowCaixaQr(true)} aria-label="Caixa por QR"
               className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">
               <Boxes className="w-5 h-5" /> Caixa QR
@@ -215,6 +221,13 @@ export default function App() {
           params={params} user={user}
           onClose={() => setShowCaixaQr(false)}
           onOpenItem={(it) => { setShowCaixaQr(false); setOpenItem(it); }}
+        />
+      )}
+      {showSalas && (
+        <SalasScreen
+          user={user}
+          onClose={() => setShowSalas(false)}
+          onOpenItem={(it) => { setShowSalas(false); setOpenItem(it); }}
         />
       )}
     </div>
