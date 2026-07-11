@@ -1,4 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import { pegarArquivos } from "../lib/fileInput";
 
 // Dois inputs de arquivo ocultos que compartilham o mesmo handler de fotos.
 // - "câmera": capture="environment" → abre a câmera direto (atalho no mobile).
@@ -14,9 +15,10 @@ const FotoInputs = forwardRef(function FotoInputs({ onFiles }, ref) {
   }));
 
   const handle = (e) => {
-    const files = e.target.files;
-    e.target.value = "";
-    if (files && files.length) onFiles(files);
+    // Copia os arquivos ANTES de limpar o input — no iOS o FileList é vivo e
+    // seria esvaziado por pegarArquivos ao resetar value (falha silenciosa).
+    const files = pegarArquivos(e.target);
+    if (files.length) onFiles(files);
   };
 
   return (
