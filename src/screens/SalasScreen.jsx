@@ -3,7 +3,7 @@ import {
   listarSalas, buscarSala, criarSala, atualizarSala, conteudoSala,
   alocarCaixaNaSala, alocarItemNaSala, removerCaixaDaSala, removerItemDaSala, historicoSala,
 } from "../lib/salas";
-import { parseCodigoLido, salaLabelTexto } from "../lib/salasFormat";
+import { parseCodigoLido } from "../lib/salasFormat";
 import { buildRoomLabel } from "../lib/labels";
 import { buscarViasImpressaoSala } from "../lib/printLog";
 import { CLASSE_STYLE } from "../lib/model";
@@ -21,7 +21,7 @@ const eventoSalaLabel = (a) => ({
   "etiqueta_sala:impressa": "etiqueta impressa",
 }[a] || a);
 
-export default function SalasScreen({ params, user, onClose, onOpenItem }) {
+export default function SalasScreen({ user, onClose, onOpenItem }) {
   const [fase, setFase] = useState("lista"); // "lista" | "scan" | "buscando" | "detalhe"
   const [salas, setSalas] = useState([]);
   const [sala, setSala] = useState(null);
@@ -70,7 +70,7 @@ export default function SalasScreen({ params, user, onClose, onOpenItem }) {
 
   if (fase === "detalhe" && sala) {
     return (
-      <SalaDetalhe sala={sala} conteudo={conteudo} hist={hist} params={params} user={user}
+      <SalaDetalhe sala={sala} conteudo={conteudo} hist={hist} user={user}
         onBack={voltarLista} onClose={onClose} onOpenItem={onOpenItem} onChanged={recarregar} />
     );
   }
@@ -157,7 +157,7 @@ export default function SalasScreen({ params, user, onClose, onOpenItem }) {
   );
 }
 
-function SalaDetalhe({ sala, conteudo, hist, params, user, onBack, onClose, onOpenItem, onChanged }) {
+function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, onChanged }) {
   const [printLabels, setPrintLabels] = useState(null);
   const [vias, setVias] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
@@ -202,6 +202,8 @@ function SalaDetalhe({ sala, conteudo, hist, params, user, onBack, onClose, onOp
         }
       } else if (tipo === "SALA") {
         setScanMsg({ tom: "dup", texto: `${codigo} é uma sala — escaneie caixas/itens` });
+      } else {
+        setScanMsg({ tom: "warn", texto: "Código não reconhecido" });
       }
     } catch (e) { setScanMsg({ tom: "err", texto: e.message || String(e) }); }
   };
