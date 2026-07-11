@@ -4,7 +4,6 @@ import { montarPayload, slugDeBytes } from "../src/lib/catalogoPublico.js";
 
 let passou = 0;
 const eq = (a, b, msg) => { assert.equal(a, b, msg); passou++; console.log(`  ok  ${msg}`); };
-const deep = (a, b, msg) => { assert.deepEqual(a, b, msg); passou++; console.log(`  ok  ${msg}`); };
 const ok = (c, msg) => { assert.ok(c, msg); passou++; console.log(`  ok  ${msg}`); };
 
 // Uma seção como a que agruparCatalogo produz (card = { rep, qtd, skus }).
