@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
-  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images
+  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images, Star
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
-import { enviarFoto } from "../lib/fotos";
+import { enviarFoto, definirFotoPrincipal } from "../lib/fotos";
 import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
@@ -395,6 +395,17 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     setFotos((f) => f.filter((x) => x.id !== foto.id));
   };
 
+  // Define a foto como principal (capa do catálogo/anúncio). Recarrega para que
+  // a escolhida — agora de menor ordem — suba para o topo da galeria.
+  const tornarPrincipal = async (foto) => {
+    try {
+      await definirFotoPrincipal(it.sku, foto.id);
+      await carregarFotos();
+    } catch {
+      alert("Não foi possível definir a foto principal. Tente novamente.");
+    }
+  };
+
   const salvar = async (novoStatus) => {
     const patch = {
       estado: it.estado, testado: it.testado, funciona: it.funciona, avaria: it.avaria,
@@ -702,6 +713,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           {fotos[0]?.url && (
             <button onClick={() => setLightbox(0)} className="block w-full mb-2 relative" title="Toque para ampliar">
               <img src={fotos[0].url} alt="" className="w-full h-48 object-cover rounded-xl bg-gray-100" />
+              <span className="absolute top-1.5 left-1.5 bg-amber-500 text-white rounded-lg px-2 py-1 text-[11px] font-semibold flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 fill-white" /> Principal
+              </span>
               <span className="absolute bottom-1.5 right-1.5 bg-black/55 text-white rounded-lg p-1.5">
                 <ZoomIn className="w-4 h-4" />
               </span>
@@ -715,9 +729,18 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
                     <img src={f.url} alt="" className="w-full h-full object-cover" />
                   </button>
                 )}
-                <button onClick={(e) => { e.stopPropagation(); apagarFoto(f); }} className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5">
+                <button onClick={(e) => { e.stopPropagation(); apagarFoto(f); }} className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5" title="Apagar foto">
                   <X className="w-3 h-3 text-white" />
                 </button>
+                {i === 0 ? (
+                  <span className="absolute top-0.5 left-0.5 bg-amber-500 rounded-full p-0.5" title="Foto principal">
+                    <Star className="w-3 h-3 text-white fill-white" />
+                  </span>
+                ) : (
+                  <button onClick={(e) => { e.stopPropagation(); tornarPrincipal(f); }} className="absolute top-0.5 left-0.5 bg-black/60 rounded-full p-0.5" title="Definir como principal">
+                    <Star className="w-3 h-3 text-white" />
+                  </button>
+                )}
               </div>
             ))}
             <button

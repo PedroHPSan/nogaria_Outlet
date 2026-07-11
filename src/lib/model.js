@@ -24,6 +24,13 @@ export const foraDoEstoque = (status) => STATUS_FORA_ESTOQUE.includes(status);
 // Pronto para o filtro `in` do PostgREST: query.not("status", "in", <isto>).
 export const STATUS_FORA_ESTOQUE_IN = `(${STATUS_FORA_ESTOQUE.join(",")})`;
 
+// Foto principal = foto de menor `ordem`. Para tornar uma foto a principal,
+// damos a ela uma ordem abaixo do mínimo atual do SKU (min − 1). Assim ela vira
+// a capa em todos os consumidores (catálogo, portfólio, miniatura, anúncio) sem
+// mexer neles. Lista vazia → 0 (base neutra); `ordem` ausente conta como 0.
+export const novaOrdemPrincipal = (fotos) =>
+  (fotos || []).length ? Math.min(...fotos.map((f) => f?.ordem || 0)) - 1 : 0;
+
 export const CLASSE_STYLE = {
   "A+": "bg-purple-600 text-white",
   A: "bg-blue-600 text-white",

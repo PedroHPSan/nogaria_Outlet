@@ -2,6 +2,7 @@
 // assinada do bucket fotos-produtos. Usado nas listas (Itens, Conferência) para
 // facilitar a identificação visual do produto.
 import { supabase } from "./supabase";
+import { novaOrdemPrincipal } from "./model";
 
 const BUCKET = "fotos-produtos";
 
@@ -46,6 +47,15 @@ export async function enviarFoto(sku, file, ordem = 0) {
   const { data: nova } = await supabase.from("fotos").insert({ sku, storage_path: path, ordem }).select().single();
   const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
   return { ...nova, url: signed?.signedUrl };
+}
+
+// Define a foto principal (capa) do item: dá a ela a menor `ordem` do SKU, então
+// ela passa a ser a 1ª em todos os consumidores. Não reordena as demais.
+export async function definirFotoPrincipal(sku, fotoId) {
+  const { data: fotos } = await supabase.from("fotos").select("ordem").eq("sku", sku);
+  const ordem = novaOrdemPrincipal(fotos || []);
+  const { error } = await supabase.from("fotos").update({ ordem }).eq("id", fotoId);
+  if (error) throw error;
 }
 
 // Marca o item como fotografado (foto_feita = true) sem mexer no status.
