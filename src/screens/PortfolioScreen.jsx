@@ -169,7 +169,9 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
         subtitulo: cats.join(" · "),
         edicao, parcial, comFoto, mostrarPreco, fotos: fotosPdf,
       });
-      imprimirPortfolio(html);
+      // Aguarda a impressão (resolve em impresso/timeout/erro) para o botão só
+      // sair do estado "gerando" quando o diálogo de impressão for tratado.
+      await imprimirPortfolio(html);
     } finally {
       setGerando(false);
     }
