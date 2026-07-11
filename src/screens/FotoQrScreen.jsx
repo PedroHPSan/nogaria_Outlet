@@ -1,6 +1,8 @@
 import React, { useState, useRef, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { enviarFoto, marcarFotoFeita } from "../lib/fotos";
+import FotoInputs from "../components/FotoInputs";
+import { Images } from "lucide-react";
 import { CLASSE_STYLE } from "../lib/model";
 import { X, Camera, Loader2, ScanLine, ArrowRight, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
 
@@ -17,7 +19,7 @@ export default function FotoQrScreen({ onClose, onOpenItem }) {
   const [manual, setManual] = useState("");
   const [fotosSessao, setFotosSessao] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const fileRef = useRef();
+  const fotoRef = useRef();
 
   const buscarSku = async (texto) => {
     const sku = String(texto || "").trim();
@@ -80,13 +82,19 @@ export default function FotoQrScreen({ onClose, onOpenItem }) {
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {erro && <p className="text-sm text-red-600 mb-3 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {erro}</p>}
 
-          <button onClick={() => fileRef.current.click()} disabled={uploading}
-            className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-5 text-lg font-bold shadow-sm active:bg-orange-600 disabled:opacity-50">
-            {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
-            {uploading ? "Enviando…" : "Tirar / enviar foto"}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
-            onChange={(e) => { subirFotos(e.target.files); e.target.value = ""; }} />
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => fotoRef.current?.abrirCamera()} disabled={uploading}
+              className="flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-5 text-base font-bold shadow-sm active:bg-orange-600 disabled:opacity-50">
+              {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
+              Câmera
+            </button>
+            <button onClick={() => fotoRef.current?.abrirGaleria()} disabled={uploading}
+              className="flex items-center justify-center gap-2 bg-gray-800 text-white rounded-2xl py-5 text-base font-bold shadow-sm active:bg-gray-900 disabled:opacity-50">
+              {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Images className="w-6 h-6" />}
+              Galeria
+            </button>
+          </div>
+          <FotoInputs ref={fotoRef} onFiles={subirFotos} />
 
           {fotosSessao.length > 0 && (
             <div className="mt-4">
