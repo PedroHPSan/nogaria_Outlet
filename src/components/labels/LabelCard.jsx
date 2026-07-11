@@ -122,7 +122,7 @@ function CompactProduct({ label }) {
         {label.produto}
       </div>
       <div style={{ fontSize: "7.5pt", marginTop: mm(1.4), lineHeight: 1.45 }}>
-        <div style={nowrap}>Caixa <b>{label.caixa_num}</b> · Local <b>{label.local_fisico}</b></div>
+        <div style={nowrap}>Caixa <b>{label.caixa_num}</b> · Sala <b>{label.sala}</b></div>
         <div style={nowrap}>Destino <b>{label.destino}</b></div>
       </div>
       {label.aviso && (
@@ -165,7 +165,7 @@ function CompactBox({ label }) {
         {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens{label.pesoTxt ? ` · ${label.pesoTxt}` : ""}
       </div>
       <div style={{ fontSize: "6.5pt" }}>
-        <div>Local: <b>{label.local_fisico}</b></div>
+        <div>Sala: <b>{label.sala}</b></div>
         <div>Destino: <b>{label.destino}</b></div>
         {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
@@ -187,7 +187,7 @@ function FullProduct({ label, tall = false }) {
           </div>
           <div style={{ fontSize: tall ? "8pt" : "7.5pt", marginBottom: mm(0.8) }}>
             Lote {label.lote}
-            {label.classe ? ` · Classe ${label.classe}` : ""} · Caixa/Mala: {label.caixa_num} · Local: {label.local_fisico}
+            {label.classe ? ` · Classe ${label.classe}` : ""} · Caixa/Mala: {label.caixa_num} · Sala: {label.sala}
           </div>
         </div>
         <Qr data={label.qrData} size={tall ? 26 : 20} />
@@ -240,7 +240,7 @@ function FullBox({ label, tall = false }) {
         <Qr data={label.qrData} size={tall ? 28 : 20} />
       </div>
       <div style={{ fontSize: tall ? "9pt" : "8pt", marginTop: mm(1) }}>
-        <div>Local: <b>{label.local_fisico}</b> · Destino: <b>{label.destino}</b></div>
+        <div>Sala: <b>{label.sala}</b> · Destino: <b>{label.destino}</b></div>
         {!tall && label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
       {tall && (label.classeResumo || label.loteResumo) && (
@@ -257,12 +257,60 @@ function FullBox({ label, tall = false }) {
   );
 }
 
+function CompactRoom({ label }) {
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <Qr data={label.qrData} size={22} />
+      </div>
+      <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: "11pt", textAlign: "center", marginTop: mm(1), whiteSpace: "nowrap" }}>
+        {label.sku}
+      </div>
+      <div style={{ fontSize: "9pt", fontWeight: 700, textAlign: "center", marginTop: mm(0.6), lineHeight: 1.2 }}>
+        {label.nome}
+      </div>
+      {label.observacao && (
+        <div style={{ fontSize: "7pt", textAlign: "center", marginTop: mm(0.8) }}>{label.observacao}</div>
+      )}
+      <div style={{ fontSize: "6pt", marginTop: mm(1.2), textAlign: "center", fontWeight: 700 }}>
+        Escaneie o QR para ver o conteúdo da sala
+      </div>
+    </>
+  );
+}
+
+function FullRoom({ label, tall = false }) {
+  return (
+    <>
+      <div style={{ display: "flex", gap: mm(2) }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: tall ? "16pt" : "13pt", whiteSpace: "nowrap" }}>
+            {label.sku}
+          </div>
+          <div style={{ fontSize: tall ? "12pt" : "10pt", fontWeight: 700, marginTop: mm(0.6) }}>
+            {label.nome}
+          </div>
+        </div>
+        <Qr data={label.qrData} size={tall ? 30 : 22} />
+      </div>
+      {label.observacao && (
+        <div style={{ fontSize: tall ? "9pt" : "8pt", marginTop: mm(1.2) }}>{label.observacao}</div>
+      )}
+      {tall && <div style={{ flexGrow: 1, minHeight: mm(2) }} />}
+      <div style={{ fontSize: tall ? "8.5pt" : "7.5pt", marginTop: mm(1.4), fontWeight: 700 }}>
+        Escaneie o QR para ver o conteúdo da sala.
+      </div>
+    </>
+  );
+}
+
 export default function LabelCard({ label, preset, preview = false }) {
   const compact = preset.compact;
   // Etiqueta "alta" (DK-11202, 62×100): aproveita o espaço extra com QR/fontes
   // maiores e campos adicionais. Não afeta os formatos completos curtos (62×50, 100×50).
   const tall = !compact && preset.height >= 80;
   const isBox = label.tipo === "CAIXA" || label.tipo === "MALA";
+  const isRoom = label.tipo === "SALA";
   return (
     <div
       className={`label-card label-page${preview ? " label-preview" : ""}`}
@@ -314,13 +362,15 @@ export default function LabelCard({ label, preset, preview = false }) {
           {label.titulo}
         </span>
       </div>
-      {compact
-        ? isBox
-          ? <CompactBox label={label} />
-          : <CompactProduct label={label} />
-        : isBox
-          ? <FullBox label={label} tall={tall} />
-          : <FullProduct label={label} tall={tall} />}
+      {isRoom
+        ? (compact ? <CompactRoom label={label} /> : <FullRoom label={label} tall={tall} />)
+        : compact
+          ? isBox
+            ? <CompactBox label={label} />
+            : <CompactProduct label={label} />
+          : isBox
+            ? <FullBox label={label} tall={tall} />
+            : <FullProduct label={label} tall={tall} />}
     </div>
   );
 }
