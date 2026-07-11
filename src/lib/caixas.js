@@ -54,7 +54,7 @@ export async function criarCaixa({ tipo, destino, local_fisico, referencia }, us
 export async function adicionarItemCaixa(sku, caixa, user) {
   const { data, error } = await supabase.from("itens").update({
     caixa_id: caixa.codigo, destino: caixa.destino || null,
-    local_fisico: caixa.local_fisico || null, upd_by: user?.email,
+    sala_id: caixa.sala_id || null, upd_by: user?.email,
   }).eq("sku", sku).select().single();
   if (error) throw error;
   await supabase.from("eventos").insert({
@@ -89,10 +89,10 @@ export async function reabrirCaixa(codigo, user) {
 export async function atualizarCaixa(codigo, patch, user) {
   const { data, error } = await supabase.from("caixas").update(patch).eq("codigo", codigo).select().single();
   if (error) throw error;
-  if ("destino" in patch || "local_fisico" in patch) {
+  if ("destino" in patch || "sala_id" in patch) {
     const prop = {};
     if ("destino" in patch) prop.destino = patch.destino || null;
-    if ("local_fisico" in patch) prop.local_fisico = patch.local_fisico || null;
+    if ("sala_id" in patch) prop.sala_id = patch.sala_id || null;
     prop.upd_by = user?.email;
     await supabase.from("itens").update(prop).eq("caixa_id", codigo);
   }
@@ -126,41 +126,21 @@ export async function itensDaCaixa(codigo) {
 
 // ───────────────────────── Chegada / armazenamento / conferência ─────────────────────────
 
-// Define o local de armazenamento da caixa e PROPAGA para os itens dela. Grava
-// evento `caixa:local`. Usado para "indicar onde a caixa está armazenada".
-export async function definirLocalCaixa(codigo, local, user) {
-  const l = local?.trim() || null;
-  const { data, error } = await supabase.from("caixas")
-    .update({ local_fisico: l }).eq("codigo", codigo).select().single();
-  if (error) throw error;
-  await supabase.from("itens").update({ local_fisico: l, upd_by: user?.email }).eq("caixa_id", codigo);
-  await supabase.from("eventos").insert({
-    sku: codigo, acao: "caixa:local", detalhe: l || "sem local", usuario: user?.email,
-  });
-  return data;
-}
-
-// Registra a chegada (ex.: em Belém): grava `chegou_em` + local (propagado aos itens)
-// e evento `caixa:chegada` com detalhe "Belém · dd/mm/aaaa · <local>". `chegou_em`
-// aceita data retroativa (default: agora). Se `destino` for informado, também o
-// atualiza na caixa e propaga aos itens (as etiquetas leem o destino do item/caixa) —
-// usado p/ corrigir o destino quando a caixa chega (ex.: de "SP storage" p/ "Belém").
-export async function registrarChegada(codigo, { chegou_em, local, destino }, user) {
-  const l = local?.trim() || null;
+// Registra a chegada (ex.: em Belém): grava `chegou_em`, opcionalmente `destino` e
+// `sala_id` (propagados aos itens da caixa) e evento `caixa:chegada`. `chegou_em`
+// aceita data retroativa (default: agora). A sala substitui o antigo local livre.
+export async function registrarChegada(codigo, { chegou_em, destino, sala_id }, user) {
   const quando = chegou_em || new Date().toISOString();
-  const patchCaixa = { chegou_em: quando, local_fisico: l };
-  const patchItens = { local_fisico: l, upd_by: user?.email };
-  if (destino !== undefined) {
-    const d = destino?.trim() || null;
-    patchCaixa.destino = d;
-    patchItens.destino = d;
-  }
+  const patchCaixa = { chegou_em: quando };
+  const patchItens = { upd_by: user?.email };
+  if (destino !== undefined) { const d = destino?.trim?.() || destino || null; patchCaixa.destino = d; patchItens.destino = d; }
+  if (sala_id !== undefined) { const s = sala_id || null; patchCaixa.sala_id = s; patchItens.sala_id = s; }
   const { data, error } = await supabase.from("caixas")
     .update(patchCaixa).eq("codigo", codigo).select().single();
   if (error) throw error;
   await supabase.from("itens").update(patchItens).eq("caixa_id", codigo);
   await supabase.from("eventos").insert({
-    sku: codigo, acao: "caixa:chegada", detalhe: chegadaDetalhe(quando, l), usuario: user?.email,
+    sku: codigo, acao: "caixa:chegada", detalhe: chegadaDetalhe(quando, sala_id || null), usuario: user?.email,
   });
   return data;
 }
