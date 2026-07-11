@@ -5,7 +5,7 @@ import { pendenteMedida } from "../lib/medidas";
 import { carregarResultadoLotes } from "../lib/vendas";
 import {
   Loader2, Ruler, ChevronRight, Package, TrendingUp, Gauge, ListChecks,
-  Users, MapPin, Boxes, Coins, Tag, Camera, Sparkles,
+  Users, MapPin, Boxes, Coins, Tag, Camera, Sparkles, DoorOpen,
 } from "lucide-react";
 
 const DEST_ORDER = ["Belém", "SP storage", "Venda local SP", "A definir"];
@@ -28,13 +28,14 @@ function QueueRow({ icon: Icon, color, label, hint, n, onClick }) {
   );
 }
 
-export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
+export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas }) {
   const [stats, setStats] = useState(null);
   const [resultado, setResultado] = useState(null); // vw_lote_resultado (lucro realizado por lote)
   const [throughput, setThroughput] = useState(null); // vw_throughput_dia (ritmo)
   const [prod, setProd] = useState(null);             // vw_produtividade_dia (equipe)
   const [fin, setFin] = useState(null);               // vw_precificacao_resumo (financeiro)
   const [caixas, setCaixas] = useState(null);         // vw_caixas_abertas
+  const [semSala, setSemSala] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -99,18 +100,20 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [t, p, f, c] = await Promise.all([
+      const [t, p, f, c, ss] = await Promise.all([
         supabase.from("vw_throughput_dia").select("*").order("dia"),
         supabase.from("vw_produtividade_dia").select("*"),
         supabase.from("vw_precificacao_resumo").select("*").maybeSingle(),
         supabase.from("vw_caixas_abertas").select("*").order("criado_em"),
+        supabase.from("caixas").select("codigo", { count: "exact", head: true }).is("sala_id", null),
       ]);
       if (cancel) return;
       setThroughput(t.data || []);
       setProd(p.data || []);
       setFin(f.data || null);
       setCaixas(c.data || []);
-    })().catch(() => { if (!cancel) { setThroughput([]); setProd([]); setFin(null); setCaixas([]); } });
+      setSemSala(ss.count || 0);
+    })().catch(() => { if (!cancel) { setThroughput([]); setProd([]); setFin(null); setCaixas([]); setSemSala(0); } });
     return () => { cancel = true; };
   }, [refreshKey]);
 
@@ -229,6 +232,14 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey }) {
               label="triados sem etiqueta" hint="Imprimir etiqueta" onClick={() => onGoFiltered({ semEtiqueta: true })} />
             <QueueRow icon={Camera} color="bg-indigo-100 text-indigo-700" n={stats.triSemFoto}
               label="triados sem foto" hint="Fotografar" onClick={() => onGoFiltered({ semFoto: true })} />
+          </div>
+        </div>
+      )}
+      {semSala > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <div className="divide-y divide-gray-100">
+            <QueueRow icon={DoorOpen} color="bg-indigo-100 text-indigo-700" n={semSala}
+              label="caixas sem sala" hint="Alocar as caixas numa sala" onClick={() => onOpenSalas?.()} />
           </div>
         </div>
       )}

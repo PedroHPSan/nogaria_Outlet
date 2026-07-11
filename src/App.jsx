@@ -129,7 +129,7 @@ export default function App() {
         </button>
       </div>
 
-      {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} />}
+      {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} onOpenSalas={() => setShowSalas(true)} />}
       {tab === "itens" && (
         <ItemsScreen
           key={preFilter ? JSON.stringify(preFilter) : "all"}
