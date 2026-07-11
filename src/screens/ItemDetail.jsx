@@ -234,7 +234,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const escolherSala = async (salaId) => {
     setSalaMsg(null);
     try {
-      await alocarItemNaSala(it.sku, salaId || null, user);
+      const r = await alocarItemNaSala(it.sku, salaId || null, user);
+      if (r?.item) setIt((p) => ({ ...p, sala_id: r.item.sala_id })); // reflete a seleção no select controlado
       setSalaMsg("Sala atualizada.");
       onSaved?.();
     } catch (e) { setSalaMsg(e.message || String(e)); }

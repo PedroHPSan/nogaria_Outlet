@@ -12,6 +12,7 @@ function drawLabel(doc, label, preset) {
   // Etiqueta "alta" (DK-11202 62×100): QR/fontes maiores e campos extras.
   const tall = !compact && H >= 80;
   const isBox = label.tipo === "CAIXA" || label.tipo === "MALA";
+  const isRoom = label.tipo === "SALA";
   const m = compact ? 1.6 : 2.4;
   // Margem superior maior no compacto: evita o cabeçalho ser cortado pela zona
   // morta de topo da impressora térmica (espelha o paddingTop do LabelCard).
@@ -69,7 +70,9 @@ function drawLabel(doc, label, preset) {
   const idPt = compact ? 6.5 : (tall ? 8.5 : 7.5);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(idPt);
-  const idLine = isBox
+  const idLine = isRoom
+    ? (label.nome || "")
+    : isBox
     ? `${label.tipo} · ${label.qtd} itens${label.pesoTxt ? ` · ${label.pesoTxt}` : ""}`
     : `Lote ${label.lote}${label.classe ? ` · Classe ${label.classe}` : ""}`;
   doc.text(doc.splitTextToSize(idLine, leftW), m, y + ptToMm(idPt));
@@ -87,7 +90,10 @@ function drawLabel(doc, label, preset) {
     }
   };
 
-  if (!isBox) {
+  if (isRoom) {
+    if (label.observacao) line(label.observacao);
+    line("Escaneie o QR para ver o conteúdo da sala.", { bold: true });
+  } else if (!isBox) {
     // Faixa de estado — só no layout completo (62 mm). No compacto é omitida.
     if (!compact) {
       const ePt = tall ? 9 : 8;
@@ -104,11 +110,11 @@ function drawLabel(doc, label, preset) {
 
     line(label.produto, { size: compact ? 7.5 : (tall ? 11 : 9), bold: true });
     if (tall && label.medidas) line(`Medidas: ${label.medidas}`, { bold: true });
-    line(`Caixa/Mala: ${label.caixa_num}  ·  Local: ${label.local_fisico}`);
+    line(`Caixa/Mala: ${label.caixa_num}  ·  Sala: ${label.sala}`);
     line(`Destino: ${label.destino}`, { bold: true });
     if (label.aviso) line(label.aviso, { bold: true });
   } else {
-    line(`Local: ${label.local_fisico}  ·  Destino: ${label.destino}`);
+    line(`Sala: ${label.sala}  ·  Destino: ${label.destino}`);
     if (!tall && label.lotes?.length) line(`Lotes: ${label.lotes.join(", ")}`);
     if (tall && label.classeResumo) line(`Classes: ${label.classeResumo}`, { bold: true });
     if (tall && label.loteResumo) line(`Por lote: ${label.loteResumo}`, { bold: true });
@@ -118,7 +124,7 @@ function drawLabel(doc, label, preset) {
 
   // Checkboxes (produto/quarentena) — perto do rodapé.
   // No layout compacto (29 mm) são omitidos: o ticket prioriza espaço/identificação.
-  if (!isBox && !compact) {
+  if (!isBox && !isRoom && !compact) {
     const cbY = Math.min(y + 0.5, H - m - 3);
     let cbX = m;
     const sq = 2.4;

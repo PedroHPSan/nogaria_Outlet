@@ -175,7 +175,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
                       ? <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">conferida</span>
                       : <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">a conferir</span>}
                   </div>
-                  <p className="text-xs text-gray-500 truncate">{c.local_fisico || "sem local"}{c.chegou_em ? ` · chegou ${new Date(c.chegou_em).toLocaleDateString("pt-BR")}` : ""}</p>
+                  <p className="text-xs text-gray-500 truncate">{c.sala_id || "sem sala"}{c.chegou_em ? ` · chegou ${new Date(c.chegou_em).toLocaleDateString("pt-BR")}` : ""}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
               </button>

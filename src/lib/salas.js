@@ -84,9 +84,11 @@ export async function alocarCaixaNaSala(codigoCaixa, salaCodigo, user) {
     .update({ sala_id: s }).eq("codigo", codigoCaixa).select().single();
   if (error) throw error;
   await supabase.from("itens").update({ sala_id: s, upd_by: user?.email }).eq("caixa_id", codigoCaixa);
-  await supabase.from("eventos").insert({
-    sku: codigoCaixa, acao: "caixa:sala", detalhe: s || "sem sala", usuario: user?.email,
-  });
+  // Dois eventos: um no histórico da caixa (para onde foi) e, quando entra numa sala,
+  // outro no histórico da sala (o que chegou) — ambos com o usuário que movimentou.
+  const eventos = [{ sku: codigoCaixa, acao: "caixa:sala", detalhe: s || "sem sala", usuario: user?.email }];
+  if (s) eventos.push({ sku: s, acao: "caixa:sala", detalhe: codigoCaixa, usuario: user?.email });
+  await supabase.from("eventos").insert(eventos);
   return data;
 }
 
@@ -110,9 +112,14 @@ export async function alocarItemNaSala(sku, salaCodigo, user, { forcarRetirarDaC
   }
   const { data, error } = await supabase.from("itens").update(patch).eq("sku", sku).select().single();
   if (error) throw error;
-  await supabase.from("eventos").insert({
-    sku, acao: "item:sala", detalhe, usuario: user?.email,
-  });
+  // Evento no histórico do item (para onde foi) e, quando entra numa sala, outro no
+  // histórico da sala (o que chegou, com a origem se veio de uma caixa).
+  const eventos = [{ sku, acao: "item:sala", detalhe, usuario: user?.email }];
+  if (s) {
+    const origem = atual.caixa_id && forcarRetirarDaCaixa ? ` · retirado de ${atual.caixa_id}` : "";
+    eventos.push({ sku: s, acao: "item:sala", detalhe: `${sku}${origem}`, usuario: user?.email });
+  }
+  await supabase.from("eventos").insert(eventos);
   return { item: data };
 }
 
