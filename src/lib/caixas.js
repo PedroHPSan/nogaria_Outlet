@@ -22,14 +22,14 @@ export async function proximoCodigoCaixa(tipo) {
 }
 
 // Cria uma caixa (status ABERTA) com código auto-gerado; resolve colisão por retry.
-export async function criarCaixa({ tipo, destino, local_fisico, referencia }, user) {
+export async function criarCaixa({ tipo, destino, sala_id, referencia }, user) {
   const t = tipo === CAIXA_TIPO.MALA ? CAIXA_TIPO.MALA : CAIXA_TIPO.CAIXA;
   let codigo = await proximoCodigoCaixa(t);
   let criada = null, lastErr = null;
   for (let i = 0; i < 6; i++) {
     const { data, error } = await supabase.from("caixas").insert({
       codigo, tipo: t,
-      destino: destino || null, local_fisico: local_fisico?.trim() || null,
+      destino: destino || null, sala_id: sala_id || null,
       referencia: referencia?.trim() || null,
       status: CAIXA_STATUS.ABERTA, criado_por: user?.email,
     }).select().single();

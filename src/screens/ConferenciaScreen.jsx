@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg, CLASSE_STYLE, STATUS_FORA_ESTOQUE_IN } from "../lib/model";
+import { listarSalas } from "../lib/salas";
+import { salaLabelTexto } from "../lib/salasFormat";
 import { checarCompletude, toCSV, baixarArquivo, COLUNAS_CAIXA } from "../lib/export";
 import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definirCategoria, moverEtapa, contarSemClasse, classificarSemClasse } from "../lib/conferencia";
 import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
@@ -523,7 +525,8 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
   const [nova, setNova] = useState(false);         // form "nova caixa"
   const [tipo, setTipo] = useState(CAIXA_TIPO.CAIXA);
   const [destino, setDestino] = useState(DESTINOS[0]);
-  const [local, setLocal] = useState("");
+  const [salaId, setSalaId] = useState("");
+  const [salas, setSalas] = useState([]);
   const [scanInput, setScanInput] = useState("");
   const [scanning, setScanning] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -539,6 +542,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
     setFechadas(fe);
   }, []);
   useEffect(() => { loadAbertas(); }, [loadAbertas, refreshKey]);
+  useEffect(() => { listarSalas().then(setSalas).catch(() => setSalas([])); }, []);
 
   const abrirCaixa = useCallback(async (c) => {
     setCaixa(c); setMsg(null); setItens(await itensDaCaixa(c.codigo));
@@ -549,8 +553,8 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
   const criar = async () => {
     setBusy(true); setMsg(null);
     try {
-      const c = await criarCaixa({ tipo, destino, local_fisico: local }, user);
-      setNova(false); setLocal("");
+      const c = await criarCaixa({ tipo, destino, sala_id: salaId || null }, user);
+      setNova(false); setSalaId("");
       onChanged?.(); await loadAbertas(); await abrirCaixa(c);
     } catch (e) {
       setMsg({ tipo: "erro", texto: e.message || String(e) });
@@ -751,7 +755,10 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
           <select value={destino} onChange={(e) => setDestino(e.target.value)} className={inputCls}>
             {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
-          <input value={local} onChange={(e) => setLocal(e.target.value)} className={inputCls} placeholder="Local físico (ex.: estante 2)" />
+          <select value={salaId} onChange={(e) => setSalaId(e.target.value)} className={inputCls}>
+            <option value="">— sem sala —</option>
+            {salas.map((s) => <option key={s.codigo} value={s.codigo}>{salaLabelTexto(s)}</option>)}
+          </select>
           {msg?.tipo === "erro" && <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {msg.texto}</p>}
           <div className="flex gap-2">
             <button onClick={() => { setNova(false); setMsg(null); }} className="flex-1 rounded-lg border border-gray-300 text-gray-600 py-2.5 text-sm font-semibold">Cancelar</button>
