@@ -4,6 +4,7 @@
 import QRCode from "qrcode";
 import { fmtKg } from "./model";
 import { estimarPesoCaixa } from "./classificacao";
+import { salaLabelTexto } from "./salasFormat";
 
 // Rolos DK compatíveis com a Brother QL-800. Dimensões em milímetros.
 // width = largura visual da etiqueta; height = comprimento (sentido de avanço do papel).
@@ -114,7 +115,7 @@ export async function genQrDataUrl(text) {
 
 // Etiqueta de PRODUTO (ou Quarentena/Avaria, conforme o estado).
 // Sem preços: a etiqueta só apoia triagem e anúncio; a precificação é outra fase.
-export function buildProductLabel(item) {
+export function buildProductLabel(item, sala) {
   const estado = estadoEtiqueta(item);
   const atencao = TIPO_ATENCAO.has(estado.codigo);
   return {
@@ -126,7 +127,7 @@ export function buildProductLabel(item) {
     lote: item?.lote ?? "",
     classe: item?.classe || "",
     caixa_num: item?.caixa_num || "—",
-    local_fisico: item?.local_fisico || "—",
+    sala: sala ? salaLabelTexto(sala) : (item?.sala_id || "—"),
     produto: [item?.produto, item?.marca, item?.modelo]
       .filter(Boolean)
       .join(" · "),
@@ -146,7 +147,7 @@ const norm = (s) => String(s || "").trim().toUpperCase();
 // Etiqueta de CAIXA ou MALA. Recebe a linha da caixa (tabela `caixas`: codigo,
 // tipo, destino, local_fisico) e os itens encaixotados. Destino/local vêm da
 // própria caixa (uma caixa = um destino); lotes/SKUs são agregados dos itens.
-export function buildBoxLabel(caixa, itens, params) {
+export function buildBoxLabel(caixa, itens, params, sala) {
   const lista = itens || [];
   const isMala = (caixa?.tipo
     ? norm(caixa.tipo) === "MALA"
@@ -185,10 +186,23 @@ export function buildBoxLabel(caixa, itens, params) {
     classeResumo,
     loteResumo,
     skus: lista.map((i) => i.sku),
-    local_fisico: caixa?.local_fisico || "—",
+    sala: sala ? salaLabelTexto(sala) : (caixa?.sala_id || "—"),
     destino: caixa?.destino || "—",
     checkboxes: CHECKBOXES,
     qrText: caixa?.codigo || "",
+    qrData: null,
+  };
+}
+
+// Etiqueta de SALA (para colar na porta). QR = código da sala; mostra o nome.
+export function buildRoomLabel(sala) {
+  return {
+    tipo: "SALA",
+    titulo: "NOGÁRIA OUTLET · ETIQUETA DE SALA",
+    sku: sala?.codigo || "",
+    nome: sala?.nome || "",
+    observacao: sala?.observacao || "",
+    qrText: sala?.codigo || "",
     qrData: null,
   };
 }

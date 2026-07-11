@@ -11,6 +11,8 @@ import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from 
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
 import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
+import { listarSalas, alocarItemNaSala } from "../lib/salas";
+import { salaLabelTexto } from "../lib/salasFormat";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -82,6 +84,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
   const [caixaInfo, setCaixaInfo] = useState(null); // dados da caixa em que o item está
   const [refreshing, setRefreshing] = useState(false);
+  const [salas, setSalas] = useState([]);
+  const [salaMsg, setSalaMsg] = useState(null);
   const [iaLoading, setIaLoading] = useState(false); // "texto" | "foto" | false
   const [iaProgresso, setIaProgresso] = useState(0); // 0-100, barra durante a run
   const iaProgRef = useRef(null);
@@ -110,6 +114,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     setViaInfo(m[it.sku] || { vias: 0, ultima: null });
   }, [it.sku]);
   useEffect(() => { carregarVias(); }, [carregarVias]);
+
+  useEffect(() => { listarSalas().then(setSalas).catch(() => setSalas([])); }, []);
 
   // Carrega os dados da caixa do item (para o cartão informativo). Best-effort.
   useEffect(() => {
@@ -223,6 +229,16 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     } catch (e) {
       alert("Falha ao voltar etapa: " + (e.message || e));
     }
+  };
+
+  const escolherSala = async (salaId) => {
+    setSalaMsg(null);
+    try {
+      const r = await alocarItemNaSala(it.sku, salaId || null, user);
+      if (r?.item) setIt((p) => ({ ...p, sala_id: r.item.sala_id })); // reflete a seleção no select controlado
+      setSalaMsg("Sala atualizada.");
+      onSaved?.();
+    } catch (e) { setSalaMsg(e.message || String(e)); }
   };
 
   // As sugestões da IA (construção, separação vazio/preenchido e snapshot durável) vivem
@@ -574,6 +590,24 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               {(caixaInfo?.local_fisico || it.local_fisico) ? ` · ${caixaInfo?.local_fisico || it.local_fisico}` : ""}
             </p>
           </div>
+        )}
+        {!it.caixa_id ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2 mb-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Sala (item solto)</p>
+            <select value={it.sala_id || ""} onChange={(e) => escolherSala(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <option value="">— sem sala —</option>
+              {salas.map((s) => <option key={s.codigo} value={s.codigo}>{salaLabelTexto(s)}</option>)}
+              {it.sala_id && !salas.some((s) => s.codigo === it.sala_id) && (
+                <option value={it.sala_id}>{it.sala_id} (inativa)</option>
+              )}
+            </select>
+            {salaMsg && <p className="text-xs text-gray-500">{salaMsg}</p>}
+          </div>
+        ) : (
+          it.sala_id && (
+            <p className="text-xs text-gray-500 mb-4">Sala: <b>{it.sala_id}</b> <span className="text-gray-400">(via caixa {it.caixa_id})</span></p>
+          )
         )}
         {/* Assistente de IA — completa dados, sugere preço e diagnostica */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 mb-4 shadow-sm">
@@ -1082,7 +1116,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       {printing && (
         <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <LabelPrint
-            labels={[buildProductLabel(it)]}
+            labels={[buildProductLabel(it, salas.find((s) => s.codigo === it.sala_id) || null)]}
             user={user}
             onPrinted={carregarVias}
             onClose={() => setPrinting(false)}

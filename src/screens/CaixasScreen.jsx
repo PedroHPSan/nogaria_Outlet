@@ -9,6 +9,8 @@ import { estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/c
 import { buildBoxLabel, buildProductLabel } from "../lib/labels";
 import { buscarViasImpressaoCaixa } from "../lib/printLog";
 import { CLASSE_STYLE, DESTINOS, fmtBRL, fmtKg } from "../lib/model";
+import { listarSalas } from "../lib/salas";
+import { salaLabelTexto } from "../lib/salasFormat";
 import {
   X, Loader2, ScanLine, ArrowRight, AlertTriangle, Boxes, Package, ChevronRight,
   ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode, Printer,
@@ -173,7 +175,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
                       ? <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">conferida</span>
                       : <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">a conferir</span>}
                   </div>
-                  <p className="text-xs text-gray-500 truncate">{c.local_fisico || "sem local"}{c.chegou_em ? ` · chegou ${new Date(c.chegou_em).toLocaleDateString("pt-BR")}` : ""}</p>
+                  <p className="text-xs text-gray-500 truncate">{c.sala_id || "sem sala"}{c.chegou_em ? ` · chegou ${new Date(c.chegou_em).toLocaleDateString("pt-BR")}` : ""}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
               </button>
@@ -190,7 +192,8 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   const { total, semPreco } = estimarValorCaixa(itens, params);
   const { pesoKg, semPeso } = estimarPesoCaixa(itens, params);
 
-  const [local, setLocal] = useState(caixa.local_fisico || "");
+  const [salas, setSalas] = useState([]);
+  const [salaId, setSalaId] = useState(caixa.sala_id || "");
   const [destino, setDestino] = useState(caixa.destino || DESTINOS[0]);
   const [dataChegada, setDataChegada] = useState(caixa.chegou_em ? String(caixa.chegou_em).slice(0, 10) : hojeISO());
   // Inclui o destino atual da caixa nas opções mesmo se for um valor legado fora da lista.
@@ -203,6 +206,9 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   const [printLabels, setPrintLabels] = useState(null);
   const [vias, setVias] = useState(null); // { vias, ultima } de impressão da etiqueta
 
+  useEffect(() => { listarSalas().then(setSalas).catch(() => setSalas([])); }, []);
+  const salaAtual = salas.find((s) => s.codigo === salaId) || (caixa.sala_id ? { codigo: caixa.sala_id } : null);
+
   const conferidos = itens.filter((i) => i.conferido_em).length;
 
   // Nº de vias já impressas da etiqueta desta caixa (mesmo controle da Conferência).
@@ -212,13 +218,13 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   }, [caixa.codigo]);
   useEffect(() => { carregarVias(); }, [carregarVias]);
 
-  const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens, params)]);
-  const imprimirItens = () => { if (itens.length) setPrintLabels(itens.map(buildProductLabel)); };
+  const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens, params, salaAtual)]);
+  const imprimirItens = () => { if (itens.length) setPrintLabels(itens.map((it) => buildProductLabel(it, salaAtual))); };
   const fecharImpressao = async () => { setPrintLabels(null); await carregarVias(); };
 
   const doChegada = async () => {
     setSalvando("chegada"); setErro(null);
-    try { await registrarChegada(caixa.codigo, { chegou_em: dataChegada, local, destino }, user); await onChanged(); }
+    try { await registrarChegada(caixa.codigo, { chegou_em: dataChegada, destino, sala_id: salaId || null }, user); await onChanged(); }
     catch (e) { setErro(e.message || String(e)); }
     finally { setSalvando(null); }
   };
@@ -312,9 +318,15 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
             </select>
           </label>
           <label className="block">
-            <span className="text-xs text-gray-500">Local de armazenamento</span>
-            <input value={local} onChange={(e) => setLocal(e.target.value)} placeholder="ex.: Belém · Galpão A"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            <span className="text-xs text-gray-500">Sala (armazenamento)</span>
+            <select value={salaId} onChange={(e) => setSalaId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <option value="">— sem sala —</option>
+              {salas.map((s) => <option key={s.codigo} value={s.codigo}>{salaLabelTexto(s)}</option>)}
+              {caixa.sala_id && !salas.some((s) => s.codigo === caixa.sala_id) && (
+                <option value={caixa.sala_id}>{caixa.sala_id} (inativa)</option>
+              )}
+            </select>
           </label>
           <label className="block">
             <span className="text-xs text-gray-500">Data de chegada</span>
@@ -326,7 +338,7 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
             {salvando === "chegada" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck className="w-4 h-4" />}
             Registrar chegada + armazenamento
           </button>
-          <p className="text-[11px] text-gray-400">O destino e o local são aplicados à caixa e a todos os {itens.length} item(ns) dela (as etiquetas passam a mostrar o novo destino).</p>
+          <p className="text-[11px] text-gray-400">O destino e a sala são aplicados à caixa e a todos os {itens.length} item(ns) dela (as etiquetas passam a mostrar o novo destino/sala).</p>
           <div className="flex gap-2">
             <button onClick={imprimir}
               className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 bg-white rounded-xl py-2.5 text-sm font-semibold active:bg-gray-100">
