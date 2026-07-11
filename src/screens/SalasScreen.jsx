@@ -167,6 +167,7 @@ function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, 
   const [editando, setEditando] = useState(false);
   const [nome, setNome] = useState(sala.nome || "");
   const [obs, setObs] = useState(sala.observacao || "");
+  const [manualCodigo, setManualCodigo] = useState(""); // alocar por código digitado
 
   const carregarVias = useCallback(async () => {
     const m = await buscarViasImpressaoSala([sala.codigo]);
@@ -266,6 +267,27 @@ function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, 
             className="w-full flex items-center justify-center gap-1.5 bg-gray-900 text-white rounded-xl py-2.5 text-sm font-bold active:bg-gray-800">
             <QrCode className="w-4 h-4" /> Encher sala (escanear caixas/itens)
           </button>
+          {/* Alternativa ao scan: digitar o código da caixa (CX/MALA) ou o SKU do item. */}
+          <form onSubmit={(e) => { e.preventDefault(); const c = manualCodigo.trim(); if (c) { handleScan(c); setManualCodigo(""); } }} className="flex gap-2">
+            <input value={manualCodigo} onChange={(e) => setManualCodigo(e.target.value)}
+              placeholder="ou digite o código (CX-001, MALA-002, SKU)"
+              autoCapitalize="characters" autoComplete="off"
+              className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            <button type="submit" className="px-4 rounded-lg bg-orange-500 text-white text-sm font-semibold active:bg-orange-600">Adicionar</button>
+          </form>
+          {!scanOpen && scanMsg && (
+            <p className={`text-center text-sm font-bold rounded-lg py-2 ${
+              scanMsg.tom === "ok" ? "bg-emerald-100 text-emerald-700"
+                : scanMsg.tom === "dup" ? "bg-sky-100 text-sky-700"
+                : scanMsg.tom === "warn" ? "bg-amber-100 text-amber-700"
+                : "bg-red-100 text-red-700"}`}>{scanMsg.texto}</p>
+          )}
+          {!scanOpen && pendente && (
+            <button onClick={confirmarRetirada}
+              className="w-full bg-orange-500 text-white rounded-xl py-2.5 text-sm font-bold active:bg-orange-600">
+              Retirar {pendente.sku} da caixa {pendente.caixa_id} e dar entrada nesta sala
+            </button>
+          )}
         </div>
 
         {/* Caixas na sala */}
