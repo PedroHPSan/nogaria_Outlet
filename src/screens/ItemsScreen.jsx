@@ -8,6 +8,7 @@ import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
 import { contarACatalogarPorLote } from "../lib/conferencia";
 import { LIMITE_ORCAMENTO } from "../lib/anuncio";
+import { alternarSelecao, marcarTodos, desmarcarTodos, todosSelecionados, selecionados } from "../lib/selecao";
 import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList, FileText } from "lucide-react";
 import FotoInputs from "../components/FotoInputs";
 
@@ -54,7 +55,9 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
   // Seleção em massa + impressão de etiquetas
   const [selectMode, setSelectMode] = useState(false);
-  const [selected, setSelected] = useState(() => new Set());
+  // Map<sku, item>: guarda o item inteiro para a seleção sobreviver à troca de
+  // filtro/busca/página (ver src/lib/selecao.js).
+  const [selected, setSelected] = useState(() => new Map());
   const [printLabels, setPrintLabels] = useState(null);
   const [orcamento, setOrcamento] = useState(null); // itens do orçamento em prévia
   const [boxPicker, setBoxPicker] = useState(false);
@@ -79,37 +82,28 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     return () => onBarraAcao?.(false);
   }, [barraSelecao, onBarraAcao]);
 
-  const toggleSel = (sku) =>
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.has(sku) ? n.delete(sku) : n.add(sku);
-      return n;
-    });
-  const allOnPageSelected = itens.length > 0 && itens.every((i) => selected.has(i.sku));
+  const toggleSel = (it) => setSelected((prev) => alternarSelecao(prev, it));
+  const allOnPageSelected = todosSelecionados(selected, itens);
   const toggleAllOnPage = () =>
-    setSelected((prev) => {
-      const n = new Set(prev);
-      if (allOnPageSelected) itens.forEach((i) => n.delete(i.sku));
-      else itens.forEach((i) => n.add(i.sku));
-      return n;
-    });
-  const sairSelecao = () => { setSelectMode(false); setSelected(new Set()); };
+    setSelected((prev) => (allOnPageSelected ? desmarcarTodos(prev, itens) : marcarTodos(prev, itens)));
+  const sairSelecao = () => { setSelectMode(false); setSelected(new Map()); };
 
   const imprimirSelecionados = () => {
-    const escolhidos = itens.filter((i) => selected.has(i.sku));
+    const escolhidos = selecionados(selected, itens);
     if (!escolhidos.length) return;
     setPrintLabels(escolhidos.map(buildProductLabel));
   };
 
-  // Orçamento dos selecionados desta página (mesmo critério das etiquetas).
+  // Orçamento de TODOS os selecionados — inclusive os que saíram da tela depois
+  // de mudar o filtro/busca ou paginar.
   const orcarSelecionados = () => {
-    const escolhidos = itens.filter((i) => selected.has(i.sku));
+    const escolhidos = selecionados(selected, itens);
     if (!escolhidos.length || escolhidos.length > LIMITE_ORCAMENTO) return;
     setOrcamento(escolhidos);
   };
 
   const abrirItem = (it) => {
-    if (selectMode) toggleSel(it.sku);
+    if (selectMode) toggleSel(it);
     else onOpen(it);
   };
 
