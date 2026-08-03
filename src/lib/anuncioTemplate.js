@@ -41,20 +41,38 @@ function specRows(it) {
 
 const badgeEstado = (estado) => CATALOGO_ESTADO_BADGE[(estado || "").trim()] || null;
 
-// Mensagem que o CLIENTE envia ao tocar no WhatsApp/QR (perspectiva do comprador).
-export function mensagemWhatsApp(it, empresa = EMPRESA) {
-  const nome = nomeAnuncio(it);
+// Linha de orçamento de um item, como aparece no texto enviado ao cliente:
+// "Furadeira de Impacto 750W — R$ 289". Sem preço ideal → "sob consulta".
+export function linhaOrcamento(it) {
   const preco = precoVenda(it);
-  return [
-    `Olá! Tenho interesse neste produto do ${empresa.nome}:`,
-    "",
-    `*${nome}*`,
-    it.sku ? `Cód: ${it.sku}` : null,
-    preco != null ? `Valor: ${fmtBRL(preco)}` : "Valor: sob consulta",
-    "",
-    "Está disponível?",
-  ].filter((l) => l != null).join("\n");
+  return `${nomeAnuncio(it)} — ${preco != null ? fmtBRL(preco) : "sob consulta"}`;
 }
+
+// Soma do orçamento + quem está incompleto. Itens sem preço ficam FORA do total.
+export function totaisOrcamento(itens = []) {
+  const lista = itens || [];
+  return {
+    total: lista.reduce((s, it) => s + (precoVenda(it) || 0), 0),
+    semPreco: lista.filter((it) => precoVenda(it) == null).map((it) => it.sku),
+    semFoto: lista.filter((it) => !it.foto_feita).map((it) => it.sku),
+  };
+}
+
+// Texto compartilhado com o cliente: SÓ as linhas do orçamento. Com 2+ itens
+// entra o total (somando apenas quem tem preço); com 1 item, nenhum total.
+export function mensagemOrcamento(itens = []) {
+  const lista = itens || [];
+  const linhas = lista.map(linhaOrcamento);
+  if (lista.length < 2) return linhas.join("\n");
+
+  const { total, semPreco } = totaisOrcamento(lista);
+  if (total <= 0) return linhas.join("\n");
+  const sufixo = semPreco.length ? " (+ itens sob consulta)" : "";
+  return [...linhas, "", `Total: ${fmtBRL(total)}${sufixo}`].join("\n");
+}
+
+// Mensagem do item único (usada no botão/QR do anúncio de um produto só).
+export const mensagemWhatsApp = (it) => linhaOrcamento(it);
 
 const CSS = `
 @page { size:A4; margin:0; }
