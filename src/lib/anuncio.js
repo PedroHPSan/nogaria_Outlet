@@ -1,11 +1,13 @@
-// Orquestra a geração do anúncio/orçamento de um item: busca TODAS as fotos do SKU,
-// gera o QR do link de WhatsApp e monta o HTML A4 (anuncioTemplate). A impressão reusa
-// o iframe isolado do portfólio (imprimirPortfolio → diálogo "Salvar como PDF").
+// Orquestra a geração do orçamento (1..10 itens): busca TODAS as fotos de cada
+// SKU, gera o QR do WhatsApp de cada produto e monta o HTML A4 — uma página por
+// item. A impressão reusa o iframe isolado do portfólio (imprimirPortfolio → diálogo "Salvar como PDF").
 import { supabase } from "./supabase.js";
 import { fotosComoDataURI, imprimirPortfolio } from "./portfolio.js";
 import { genQrDataUrl } from "./labels.js";
 import { EMPRESA, waLink } from "./empresa.js";
-import { gerarAnuncioHTML, mensagemWhatsApp } from "./anuncioTemplate.js";
+import {
+  gerarOrcamentoHTML, mensagemOrcamento, mensagemWhatsApp, totaisOrcamento,
+} from "./anuncioTemplate.js";
 
 const BUCKET = "fotos-produtos";
 
@@ -27,17 +29,48 @@ export async function fotosDoItem(sku) {
   return { principal: ordenadas[0] || null, galeria: ordenadas.slice(1) };
 }
 
-// Monta o anúncio completo (NÃO imprime). Retorna { html, mensagem, link }.
-export async function montarAnuncio(item, empresa = EMPRESA) {
-  const mensagem = mensagemWhatsApp(item, empresa);
-  const link = waLink(mensagem);
-  const [fotos, qrDataUrl] = await Promise.all([
-    fotosDoItem(item.sku),
-    genQrDataUrl(link),
-  ]);
-  const html = gerarAnuncioHTML(item, { fotos, qrDataUrl, empresa });
-  return { html, mensagem, link };
+// Teto de produtos por orçamento: acima disso a geração fica lenta (uma foto
+// em dataURI por item) e o PDF pesa demais no celular.
+export const LIMITE_ORCAMENTO = 10;
+
+// Monta o orçamento de 1..LIMITE_ORCAMENTO itens (NÃO imprime). Cada página
+// leva o QR do seu próprio produto; o `link` devolvido é o do orçamento todo.
+// onProgress(feitas, total) roda a cada item concluído.
+export async function montarOrcamento(itens, { empresa = EMPRESA, onProgress } = {}) {
+  const lista = itens || [];
+  if (!lista.length) throw new Error("Selecione ao menos um produto.");
+  if (lista.length > LIMITE_ORCAMENTO) {
+    throw new Error(`Máximo de ${LIMITE_ORCAMENTO} produtos por orçamento.`);
+  }
+
+  let feitas = 0;
+  const partes = await Promise.all(
+    lista.map(async (it) => {
+      const [fotos, qrDataUrl] = await Promise.all([
+        fotosDoItem(it.sku),
+        genQrDataUrl(waLink(mensagemWhatsApp(it))),
+      ]);
+      feitas += 1;
+      onProgress?.(feitas, lista.length);
+      return [it.sku, { fotos, qrDataUrl }];
+    })
+  );
+
+  const porSku = Object.fromEntries(partes);
+  const mensagem = mensagemOrcamento(lista);
+  const { total, semPreco, semFoto } = totaisOrcamento(lista);
+  return {
+    html: gerarOrcamentoHTML(lista, { porSku, empresa }),
+    mensagem,
+    link: waLink(mensagem),
+    total,
+    semPreco,
+    semFoto,
+  };
 }
+
+// Compat: orçamento de um item só.
+export const montarAnuncio = (item, empresa = EMPRESA) => montarOrcamento([item], { empresa });
 
 // Impressão (iframe isolado → diálogo do navegador com "Salvar como PDF").
 export const imprimirAnuncio = imprimirPortfolio;
