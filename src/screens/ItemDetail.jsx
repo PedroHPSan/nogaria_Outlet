@@ -345,6 +345,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   // Classificação automática (tabela de negócio): condição + faixa de valor + volume.
   // Sugestão (não sobrescreve sozinha); aplicada com 1 clique. Recalcula ao vivo de `it`.
   const sugestaoClasse = useMemo(() => classificarItem(it, params), [it, params]);
+  // Identidade estável: sem isso o useEffect do modal de orçamento refaria a busca de fotos a cada render.
+  const itensAnuncio = useMemo(() => [it], [it]);
   const aplicarClasse = async () => {
     const s = sugestaoClasse;
     if (!s?.classe) return;
@@ -1125,7 +1127,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       )}
       {anuncio && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <AnuncioModal item={it} onClose={() => setAnuncio(false)} />
+          <AnuncioModal itens={itensAnuncio} onClose={() => setAnuncio(false)} />
         </Suspense>
       )}
 
