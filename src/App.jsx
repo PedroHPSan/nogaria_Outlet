@@ -52,6 +52,10 @@ export default function App() {
   const [showCaixaQr, setShowCaixaQr] = useState(false);
   const [showSalas, setShowSalas] = useState(false);
   const [preFilter, setPreFilter] = useState(null);
+  // Alguma tela está mostrando a própria barra de ação inferior (etiquetas /
+  // orçamento / PDF do catálogo)? Se sim, os botões flutuantes somem: os dois
+  // ocupam o mesmo canto e os flutuantes ficavam por cima dos botões da barra.
+  const [barraAcao, setBarraAcao] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [eventos, setEventos] = useState([]);
   const [params, setParams] = useState(DEFAULT_PARAMS); // parâmetros do motor de precificação
@@ -134,6 +138,7 @@ export default function App() {
         <ItemsScreen
           key={preFilter ? JSON.stringify(preFilter) : "all"}
           lotes={lotes} initialFilter={preFilter} onOpen={setOpenItem} refreshKey={refreshKey} params={params} user={user}
+          onBarraAcao={setBarraAcao}
         />
       )}
       {tab === "conferencia" && (
@@ -145,7 +150,7 @@ export default function App() {
       {tab === "vendas" && (
         <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} />
       )}
-      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} params={params} lotes={lotes} />}
+      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} params={params} lotes={lotes} onBarraAcao={setBarraAcao} />}
       {tab === "exportar" && <ExportScreen lotes={lotes} refreshKey={refreshKey} />}
       {tab === "registro" && (
         <div className="px-4 pt-4 pb-24">
@@ -184,8 +189,9 @@ export default function App() {
         </div>
       </div>
 
-      {/* Botões flutuantes: caixa por QR + foto por QR + criar novo item (somem com modal aberto) */}
-      {!openItem && !showNew && !showFotoQr && !showCaixaQr && !showSalas && (
+      {/* Botões flutuantes: caixa por QR + foto por QR + criar novo item
+          (somem com modal aberto ou com a barra de ação da tela ativa) */}
+      {!openItem && !showNew && !showFotoQr && !showCaixaQr && !showSalas && !barraAcao && (
         <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none">
           <div className="max-w-lg mx-auto px-4 flex justify-end items-center gap-2.5">
             <button onClick={() => setShowSalas(true)} aria-label="Salas"

@@ -39,7 +39,7 @@ const edicaoAtual = () => {
 // Catálogo de produtos: filtra com os mesmos filtros da aba Itens + filtro por
 // caixa, mostra a galeria por item (tocável → abre a ficha) e gera o catálogo
 // PDF de marca da Nogária (capa, seções por categoria, selos, fechamento parcial).
-export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = [] }) {
+export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = [], onBarraAcao }) {
   // filtros (espelham o ItemsScreen) — aplicados no servidor
   const [q, setQ] = useState("");
   const [fLote, setFLote] = useState("");
@@ -133,6 +133,13 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
   }, [itens, agrupar]);
 
   const total = itens?.length || 0;
+
+  // Enquanto a barra de geração estiver visível, o App esconde os botões
+  // flutuantes (mesmo canto — eles cobriam o botão "PDF").
+  useEffect(() => {
+    onBarraAcao?.(total > 0);
+    return () => onBarraAcao?.(false);
+  }, [total, onBarraAcao]);
 
   const gerar = async () => {
     if (!total) return;
@@ -356,7 +363,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
 
       {/* Barra de geração (acima da navegação inferior) */}
       {total > 0 && (
-        <div className="fixed bottom-14 inset-x-0 z-30 px-3">
+        <div className="fixed bottom-14 inset-x-0 z-40 px-3">
           <div className="max-w-lg mx-auto space-y-2">
             {linkPronto && (
               <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-2 text-xs font-semibold shadow-lg">

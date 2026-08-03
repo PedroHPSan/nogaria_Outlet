@@ -19,7 +19,7 @@ const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base
 const PAGE = 50;
 const DESTINO_SEM = "__sem__"; // sentinela: itens sem destino definido (campo nulo)
 
-export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params, user }) {
+export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params, user, onBarraAcao }) {
   const [q, setQ] = useState("");
   const [fLote, setFLote] = useState(initialFilter?.lote || "");
   const [fClasse, setFClasse] = useState(initialFilter?.classe || "");
@@ -70,6 +70,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     setShowFilters(true);
     setCatalogarPicker(false);
   };
+
+  // A barra de ações da seleção divide o canto inferior com os botões
+  // flutuantes do App — avisa o App para escondê-los enquanto ela estiver ali.
+  const barraSelecao = selectMode && selected.size > 0;
+  useEffect(() => {
+    onBarraAcao?.(barraSelecao);
+    return () => onBarraAcao?.(false);
+  }, [barraSelecao, onBarraAcao]);
 
   const toggleSel = (sku) =>
     setSelected((prev) => {
@@ -474,8 +482,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
       </div>
 
       {/* Ações da seleção (acima da navegação inferior) */}
-      {selectMode && selected.size > 0 && (
-        <div className="fixed bottom-14 inset-x-0 z-30 px-3">
+      {barraSelecao && (
+        <div className="fixed bottom-14 inset-x-0 z-40 px-3">
           <div className="max-w-lg mx-auto flex gap-2">
             <button onClick={imprimirSelecionados}
               className="flex-1 rounded-xl py-3.5 font-bold bg-gray-900 text-white shadow-lg flex items-center justify-center gap-2">

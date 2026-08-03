@@ -121,6 +121,18 @@ eq((orc.match(/<div class="sheet">/g) || []).length, 3, "uma folha por produto")
 eq((orc.match(/<!DOCTYPE html>/g) || []).length, 1, "um único documento");
 ok(orc.includes("page-break-after:always"), "CSS quebra página entre folhas");
 ok(orc.includes(".sheet:last-child"), "última folha não força quebra");
+ok(/\.sheet\{[^}]*height:297mm/.test(orc), "folha tem altura A4 fixa (não min-height)");
+ok(/\.sheet\{[^}]*overflow:hidden/.test(orc), "folha corta o excedente (1 produto = 1 página)");
+
+console.log("textos longos não empurram o conteúdo para fora da folha");
+const longo = gerarAnuncioHTML({
+  ...base,
+  titulo_anuncio: "Furadeira de Impacto Profissional ".repeat(6),
+  descricao_anuncio: "Descrição bem longa. ".repeat(60),
+}, {});
+ok(longo.includes('class="pname clamp"'), "nome usa clamp de linhas");
+ok(longo.includes('class="pdesc clamp"'), "descrição usa clamp de linhas");
+ok(/\.pdesc\{[^}]*-webkit-line-clamp/.test(longo), "CSS limita as linhas da descrição");
 ["NOG-A", "NOG-B", "NOG-C"].forEach((s) => ok(orc.includes(s), `inclui ${s}`));
 ok(orc.includes("<title>Orçamento (3 itens)"), "título com a contagem (N itens)");
 

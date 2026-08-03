@@ -84,22 +84,31 @@ const CSS = `
 * { box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 html,body { margin:0; padding:0; font-family:Arial,"Helvetica Neue",Helvetica,sans-serif; color:#22303c; }
 :root{ --navy:#004078; --cyan:#2BB5E8; --green:#5CB85C; --ink:#22303c; --line:#e6ebf0; }
-.sheet{ width:210mm; min-height:297mm; padding:14mm 15mm 0; position:relative; display:flex; flex-direction:column; page-break-after:always; }
+/* Altura FIXA (não min-height): o conteúdo que sobrar é cortado em vez de
+   vazar para uma 2ª página — 1 produto = 1 folha A4, sempre. */
+.sheet{ width:210mm; height:297mm; overflow:hidden; padding:14mm 15mm 0; position:relative; display:flex; flex-direction:column; page-break-after:always; }
 .sheet:last-child{ page-break-after:auto; }
+/* Só na prévia em tela: separa visualmente uma folha da outra. */
+@media screen { .sheet + .sheet{ border-top:1px dashed #cbd5e1; } }
 .head{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid var(--line); padding-bottom:9px; }
 .head img{ height:11mm; }
 .badge{ font-size:8pt; font-weight:800; letter-spacing:.6px; text-transform:uppercase; padding:5px 12px; border-radius:20px; }
 .badge.novo{ background:#e7f6ec; color:#2f8b46; } .badge.semi{ background:#eaf4fb; color:#1f6fa8; }
 .badge.aberta{ background:#fdf3e6; color:#bd7a1e; } .badge.asis{ background:#f1f3f5; color:#5f6b76; }
-.photo{ margin-top:9mm; height:92mm; background:#f6f9fb; border:1px solid var(--line); border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+/* A foto é a folga do layout: encolhe (até 45mm) quando o resto do conteúdo
+   é grande, e cresce até 92mm quando sobra espaço. */
+.photo{ margin-top:9mm; flex:1 1 92mm; max-height:92mm; min-height:45mm; background:#f6f9fb; border:1px solid var(--line); border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .photo img{ max-width:100%; max-height:100%; object-fit:contain; }
 .photo .noimg{ color:#9db3c4; font-size:11pt; letter-spacing:1px; }
-.thumbs{ display:flex; gap:6px; margin-top:6px; }
+.thumbs{ display:flex; gap:6px; margin-top:6px; flex:0 0 auto; }
 .thumbs .t{ width:28mm; height:22mm; background:#f6f9fb; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
 .thumbs img{ width:100%; height:100%; object-fit:cover; }
-.pname{ font-size:19pt; font-weight:800; color:var(--ink); line-height:1.15; margin-top:7mm; }
-.pmodel{ font-size:9pt; color:#8693a0; letter-spacing:.6px; text-transform:uppercase; margin-top:3px; }
-.pdesc{ font-size:9.5pt; color:#5f6e7a; line-height:1.45; margin-top:6px; }
+/* Nome e descrição são texto livre: sem teto de linhas, um título/descrição
+   longos empurrariam o CTA para fora da folha. */
+.clamp{ display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+.pname{ font-size:19pt; font-weight:800; color:var(--ink); line-height:1.15; margin-top:7mm; -webkit-line-clamp:2; }
+.pmodel{ font-size:9pt; color:#8693a0; letter-spacing:.6px; text-transform:uppercase; margin-top:3px; -webkit-line-clamp:1; }
+.pdesc{ font-size:9.5pt; color:#5f6e7a; line-height:1.45; margin-top:6px; -webkit-line-clamp:3; }
 .priceband{ margin-top:6mm; border-radius:12px; background:linear-gradient(90deg,var(--cyan),var(--green)); color:#fff; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; }
 .priceband .lbl{ font-size:9pt; font-weight:700; letter-spacing:1px; opacity:.95; }
 .priceband .val{ font-size:27pt; font-weight:800; line-height:1; }
@@ -163,9 +172,9 @@ export function sheetAnuncio(it, opts = {}) {
       `</div>` +
       `<div class="photo">${principal ? `<img src="${escapeHtml(principal)}" alt="">` : `<span class="noimg">SEM FOTO</span>`}</div>` +
       thumbsHtml +
-      `<div class="pname">${escapeHtml(nome)}</div>` +
-      (modelo ? `<div class="pmodel">${escapeHtml(modelo)}</div>` : "") +
-      (it.descricao_anuncio ? `<div class="pdesc">${escapeHtml(it.descricao_anuncio)}</div>` : "") +
+      `<div class="pname clamp">${escapeHtml(nome)}</div>` +
+      (modelo ? `<div class="pmodel clamp">${escapeHtml(modelo)}</div>` : "") +
+      (it.descricao_anuncio ? `<div class="pdesc clamp">${escapeHtml(it.descricao_anuncio)}</div>` : "") +
       priceHtml +
       (specsHtml ? `<div class="specs">${specsHtml}</div>` : "") +
       estadoHtml +
