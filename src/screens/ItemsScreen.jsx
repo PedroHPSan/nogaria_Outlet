@@ -7,11 +7,13 @@ import { buscarViasImpressao } from "../lib/printLog";
 import { pendenteMedida } from "../lib/medidas";
 import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/caixas";
 import { contarACatalogarPorLote } from "../lib/conferencia";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList } from "lucide-react";
+import { LIMITE_ORCAMENTO } from "../lib/anuncio";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList, FileText } from "lucide-react";
 import FotoInputs from "../components/FotoInputs";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
+const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
@@ -54,6 +56,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [printLabels, setPrintLabels] = useState(null);
+  const [orcamento, setOrcamento] = useState(null); // itens do orçamento em prévia
   const [boxPicker, setBoxPicker] = useState(false);
   const [catalogarPicker, setCatalogarPicker] = useState(false);
   const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
@@ -88,6 +91,13 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     const escolhidos = itens.filter((i) => selected.has(i.sku));
     if (!escolhidos.length) return;
     setPrintLabels(escolhidos.map(buildProductLabel));
+  };
+
+  // Orçamento dos selecionados desta página (mesmo critério das etiquetas).
+  const orcarSelecionados = () => {
+    const escolhidos = itens.filter((i) => selected.has(i.sku));
+    if (!escolhidos.length || escolhidos.length > LIMITE_ORCAMENTO) return;
+    setOrcamento(escolhidos);
   };
 
   const abrirItem = (it) => {
@@ -346,7 +356,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             ) : (
               <button onClick={() => setSelectMode(true)}
                 className="flex items-center gap-1 text-xs font-semibold text-white bg-orange-500 rounded-lg px-2 py-1">
-                <Printer className="w-3.5 h-3.5" /> Etiquetas
+                <CheckSquare className="w-3.5 h-3.5" /> Selecionar
               </button>
             )}
           </div>
@@ -463,13 +473,22 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         )}
       </div>
 
-      {/* Barra de impressão em massa (acima da navegação inferior) */}
+      {/* Ações da seleção (acima da navegação inferior) */}
       {selectMode && selected.size > 0 && (
         <div className="fixed bottom-14 inset-x-0 z-30 px-3">
-          <div className="max-w-lg mx-auto">
+          <div className="max-w-lg mx-auto flex gap-2">
             <button onClick={imprimirSelecionados}
-              className="w-full rounded-xl py-3.5 font-bold bg-gray-900 text-white shadow-lg flex items-center justify-center gap-2">
-              <Printer className="w-4 h-4" /> Imprimir {selected.size} etiqueta(s)
+              className="flex-1 rounded-xl py-3.5 font-bold bg-gray-900 text-white shadow-lg flex items-center justify-center gap-2">
+              <Printer className="w-4 h-4" /> Etiquetas ({selected.size})
+            </button>
+            <button onClick={orcarSelecionados} disabled={selected.size > LIMITE_ORCAMENTO}
+              className={`flex-1 rounded-xl py-3.5 font-bold shadow-lg flex items-center justify-center gap-2 ${
+                selected.size > LIMITE_ORCAMENTO
+                  ? "bg-gray-300 text-gray-500"
+                  : "bg-emerald-600 text-white"
+              }`}>
+              <FileText className="w-4 h-4" />
+              {selected.size > LIMITE_ORCAMENTO ? `Orçamento (máx. ${LIMITE_ORCAMENTO})` : `Orçamento (${selected.size})`}
             </button>
           </div>
         </div>
@@ -499,6 +518,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             onPrinted={atualizarVias}
             onClose={() => setPrintLabels(null)}
           />
+        </Suspense>
+      )}
+
+      {orcamento && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <AnuncioModal itens={orcamento} onClose={() => setOrcamento(null)} />
         </Suspense>
       )}
     </div>
