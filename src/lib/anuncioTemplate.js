@@ -71,8 +71,13 @@ export function mensagemOrcamento(itens = []) {
   return [...linhas, "", `Total: ${fmtBRL(total)}${sufixo}`].join("\n");
 }
 
-// Mensagem do item único (usada no botão/QR do anúncio de um produto só).
-export const mensagemWhatsApp = (it) => linhaOrcamento(it);
+// Mensagem que o CLIENTE dispara ao escanear o QR da página do produto
+// (diferente de linhaOrcamento, que é o texto que o OPERADOR compartilha).
+export function mensagemContato(it) {
+  const preco = precoVenda(it);
+  const cod = it?.sku ? ` — Cód: ${it.sku}` : "";
+  return `${nomeAnuncio(it)}${cod} — ${preco != null ? fmtBRL(preco) : "sob consulta"}`;
+}
 
 const CSS = `
 @page { size:A4; margin:0; }
@@ -196,5 +201,9 @@ export function gerarOrcamentoHTML(itens = [], opts = {}) {
   const sheets = lista.map((it) =>
     sheetAnuncio(it, { ...(porSku[it.sku] || {}), empresa, pagamento, entrega })
   );
-  return documentoAnuncio(sheets, `Orçamento (${lista.length} itens) — ${empresa.nome}`);
+  // Com 1 item só, o título é o do produto (senão vira "Orçamento (1 itens)").
+  const titulo = lista.length === 1
+    ? `${nomeAnuncio(lista[0])} — ${empresa.nome}`
+    : `Orçamento (${lista.length} itens) — ${empresa.nome}`;
+  return documentoAnuncio(sheets, titulo);
 }

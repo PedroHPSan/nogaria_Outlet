@@ -11,3 +11,8 @@ export const EMPRESA = {
 // Link wa.me com mensagem pré-preenchida (texto opcional).
 export const waLink = (texto = "") =>
   `https://wa.me/${EMPRESA.whatsapp}${texto ? `?text=${encodeURIComponent(texto)}` : ""}`;
+
+// Link de encaminhamento (sem número): o WhatsApp abre a lista de contatos
+// para o operador escolher para quem enviar o texto pré-preenchido.
+export const waLinkSemDestino = (texto = "") =>
+  `https://wa.me/${texto ? `?text=${encodeURIComponent(texto)}` : ""}`;

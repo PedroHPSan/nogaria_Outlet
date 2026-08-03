@@ -16,6 +16,8 @@ export default function AnuncioModal({ itens = [], onClose }) {
     (async () => {
       setLoading(true);
       setErro(null);
+      setDados(null);
+      setProgresso({ feitas: 0, total: itens.length });
       try {
         const d = await montarOrcamento(itens, {
           onProgress: (feitas, total) => { if (!cancel) setProgresso({ feitas, total }); },
@@ -73,7 +75,7 @@ export default function AnuncioModal({ itens = [], onClose }) {
         {!loading && dados && (
           <iframe title="Prévia do orçamento" srcDoc={dados.html}
             className="bg-white shadow-lg w-full max-w-[210mm]"
-            style={{ height: `calc(${itens.length} * (100vw * 297 / 210))`, maxHeight: "none", border: 0 }} />
+            style={{ aspectRatio: `210 / ${297 * itens.length}`, border: 0 }} />
         )}
       </div>
 

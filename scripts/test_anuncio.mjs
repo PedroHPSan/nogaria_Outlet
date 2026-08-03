@@ -1,7 +1,7 @@
 // Testes das funções PURAS do anúncio (anuncioTemplate.js). Rode: npm run test:anuncio
 import assert from "node:assert/strict";
 import {
-  gerarAnuncioHTML, mensagemWhatsApp, nomeAnuncio,
+  gerarAnuncioHTML, mensagemContato, nomeAnuncio,
   linhaOrcamento, mensagemOrcamento, totaisOrcamento,
   gerarOrcamentoHTML, sheetAnuncio, documentoAnuncio,
 } from "../src/lib/anuncioTemplate.js";
@@ -49,14 +49,22 @@ eq(
   "usa titulo_anuncio quando existe"
 );
 
-console.log("mensagemWhatsApp é só a linha");
-const msg = mensagemWhatsApp(base);
-eq(msg, linhaOrcamento(base), "mensagem única = linha do item");
-eq(msg.split("\n").length, 1, "exatamente uma linha");
-ok(!/Ol[áa]/i.test(msg), "sem saudação");
-ok(!msg.includes("Cód"), "sem linha de código");
-ok(!/dispon[íi]vel/i.test(msg), "sem pergunta final");
-ok(!msg.includes("Nogária"), "sem nome da empresa");
+console.log("mensagemContato (QR da página do produto)");
+eq(
+  mensagemContato(base),
+  `Furadeira — Cód: ${base.sku} — ${fmtBRL(289)}`,
+  "com preço: nome + código + valor"
+);
+eq(
+  mensagemContato({ ...base, preco_ideal: null }),
+  `Furadeira — Cód: ${base.sku} — sob consulta`,
+  "sem preço vira 'sob consulta'"
+);
+eq(
+  mensagemContato({ ...base, sku: null }),
+  `Furadeira — ${fmtBRL(289)}`,
+  "sem SKU omite o trecho 'Cód: ...'"
+);
 
 console.log("mensagemOrcamento");
 const tres = [
@@ -114,7 +122,12 @@ eq((orc.match(/<!DOCTYPE html>/g) || []).length, 1, "um único documento");
 ok(orc.includes("page-break-after:always"), "CSS quebra página entre folhas");
 ok(orc.includes(".sheet:last-child"), "última folha não força quebra");
 ["NOG-A", "NOG-B", "NOG-C"].forEach((s) => ok(orc.includes(s), `inclui ${s}`));
-ok(orc.includes("<title>Orçamento (3 itens)"), "título com a contagem");
+ok(orc.includes("<title>Orçamento (3 itens)"), "título com a contagem (N itens)");
+
+console.log("gerarOrcamentoHTML com 1 item: título é o do produto (sem 'Orçamento (1 itens)')");
+const orcUm = gerarOrcamentoHTML([itensOrc[0]]);
+ok(orcUm.includes(`<title>${nomeAnuncio(itensOrc[0])} — `), "título usa o nome do produto");
+ok(!orcUm.includes("(1 itens)"), "não usa a contagem no singular");
 
 console.log("gerarOrcamentoHTML usa as fotos/QR por SKU");
 const orcFotos = gerarOrcamentoHTML(itensOrc.slice(0, 2), {

@@ -4,9 +4,9 @@
 import { supabase } from "./supabase.js";
 import { fotosComoDataURI, imprimirPortfolio } from "./portfolio.js";
 import { genQrDataUrl } from "./labels.js";
-import { EMPRESA, waLink } from "./empresa.js";
+import { EMPRESA, waLink, waLinkSemDestino } from "./empresa.js";
 import {
-  gerarOrcamentoHTML, mensagemOrcamento, mensagemWhatsApp, totaisOrcamento,
+  gerarOrcamentoHTML, mensagemOrcamento, mensagemContato, totaisOrcamento,
 } from "./anuncioTemplate.js";
 
 const BUCKET = "fotos-produtos";
@@ -19,7 +19,9 @@ export async function fotosDoItem(sku) {
     .from("fotos").select("storage_path, ordem").eq("sku", sku).order("ordem");
   if (error || !data?.length) return { principal: null, galeria: [] };
 
-  const paths = data.map((f) => f.storage_path);
+  // O template só renderiza a principal + 4 da galeria: limitar aqui evita
+  // baixar/converter fotos que nunca aparecem no PDF.
+  const paths = data.map((f) => f.storage_path).slice(0, 5);
   const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrls(paths, 3600);
   // Chaves sintéticas f0..fN preservam a ORDEM ao converter para dataURI.
   const urls = {};
@@ -48,7 +50,7 @@ export async function montarOrcamento(itens, { empresa = EMPRESA, onProgress } =
     lista.map(async (it) => {
       const [fotos, qrDataUrl] = await Promise.all([
         fotosDoItem(it.sku),
-        genQrDataUrl(waLink(mensagemWhatsApp(it))),
+        genQrDataUrl(waLink(mensagemContato(it))),
       ]);
       feitas += 1;
       onProgress?.(feitas, lista.length);
@@ -62,15 +64,12 @@ export async function montarOrcamento(itens, { empresa = EMPRESA, onProgress } =
   return {
     html: gerarOrcamentoHTML(lista, { porSku, empresa }),
     mensagem,
-    link: waLink(mensagem),
+    link: waLinkSemDestino(mensagem),
     total,
     semPreco,
     semFoto,
   };
 }
-
-// Compat: orçamento de um item só.
-export const montarAnuncio = (item, empresa = EMPRESA) => montarOrcamento([item], { empresa });
 
 // Impressão (iframe isolado → diálogo do navegador com "Salvar como PDF").
 export const imprimirAnuncio = imprimirPortfolio;
