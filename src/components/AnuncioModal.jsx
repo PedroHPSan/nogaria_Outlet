@@ -1,31 +1,58 @@
-// Modal de prévia do anúncio/orçamento de um item: renderiza o HTML A4 num iframe
+// Modal de prévia do orçamento (1..10 itens): renderiza o HTML A4 num iframe
 // (srcDoc, sem o CSS do app) e oferece Copiar mensagem / WhatsApp / Salvar PDF.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { X, Loader2, Printer, Copy, MessageCircle, Check } from "lucide-react";
-import { montarAnuncio, imprimirAnuncio } from "../lib/anuncio";
-import { precoVenda } from "../lib/export";
+import { montarOrcamento, imprimirAnuncio } from "../lib/anuncio";
 
-export default function AnuncioModal({ item, onClose }) {
+// A folha do PDF tem largura fixa de 210mm (≈794px a 96dpi); em tela estreita
+// não dá para "esticar" o iframe — o conteúdo cortaria. A prévia então mantém
+// o A4 no tamanho real e aplica um transform:scale para caber na largura.
+const A4_W = 794;   // 210mm em px @96dpi
+const A4_H = 1123;  // 297mm em px @96dpi
+
+export default function AnuncioModal({ itens = [], onClose }) {
   const [loading, setLoading] = useState(true);
-  const [dados, setDados] = useState(null); // { html, mensagem, link }
+  const [dados, setDados] = useState(null);   // { html, mensagem, link, total, semPreco, semFoto }
+  const [erro, setErro] = useState(null);
+  const [progresso, setProgresso] = useState({ feitas: 0, total: itens.length });
   const [copiado, setCopiado] = useState(false);
+  const areaRef = useRef(null);
+  const [larguraArea, setLarguraArea] = useState(0);
+
+  // Largura útil da área de prévia (já sem o padding) → fator de escala do A4.
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    setLarguraArea(el.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setLarguraArea(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const escala = larguraArea ? Math.min(1, larguraArea / A4_W) : 1;
 
   useEffect(() => {
     let cancel = false;
     (async () => {
       setLoading(true);
+      setErro(null);
+      setDados(null);
+      setProgresso({ feitas: 0, total: itens.length });
       try {
-        const d = await montarAnuncio(item);
+        const d = await montarOrcamento(itens, {
+          onProgress: (feitas, total) => { if (!cancel) setProgresso({ feitas, total }); },
+        });
         if (!cancel) setDados(d);
+      } catch (e) {
+        if (!cancel) setErro(e.message || "Falha ao gerar o orçamento.");
       } finally {
         if (!cancel) setLoading(false);
       }
     })();
     return () => { cancel = true; };
-  }, [item]);
+  }, [itens]);
 
-  const semPreco = precoVenda(item) == null;
-  const semFoto = !item.foto_feita;
+  const titulo = itens.length === 1 ? `Orçamento — ${itens[0].sku}` : `Orçamento — ${itens.length} itens`;
 
   const copiar = async () => {
     if (!dados) return;
@@ -40,26 +67,44 @@ export default function AnuncioModal({ item, onClose }) {
   return (
     <div className="fixed inset-0 z-[75] bg-gray-100 flex flex-col">
       <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between shadow-md">
-        <span className="font-bold">Orçamento — {item.sku}</span>
+        <span className="font-bold">{titulo}</span>
         <button onClick={onClose} className="p-1.5 rounded-lg bg-gray-800" aria-label="Fechar">
           <X className="w-5 h-5" />
         </button>
       </div>
 
-      {(semPreco || semFoto) && (
+      {dados && (dados.semPreco.length > 0 || dados.semFoto.length > 0) && (
         <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 border-b border-amber-200 space-y-0.5">
-          {semPreco && <div>⚠ Sem preço ideal — o anúncio sai como "Sob consulta". Defina o preço no item.</div>}
-          {semFoto && <div>⚠ Sem foto — o anúncio sai com placeholder.</div>}
+          {dados.semPreco.length > 0 && (
+            <div>⚠ {dados.semPreco.length} sem preço ideal — sai como "Sob consulta": {dados.semPreco.join(", ")}</div>
+          )}
+          {dados.semFoto.length > 0 && (
+            <div>⚠ {dados.semFoto.length} sem foto — sai com placeholder: {dados.semFoto.join(", ")}</div>
+          )}
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-3 flex items-start justify-center">
-        {loading && <Loader2 className="w-8 h-8 animate-spin text-orange-500 mt-10" />}
-        {!loading && dados && (
-          <iframe title="Prévia do anúncio" srcDoc={dados.html}
-            className="bg-white shadow-lg w-full max-w-[210mm]"
-            style={{ aspectRatio: "210 / 297", border: 0 }} />
-        )}
+      <div className="flex-1 overflow-auto p-3">
+        <div ref={areaRef} className="w-full">
+          {loading && (
+            <div className="mt-10 flex flex-col items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+              {progresso.total > 1 && <span>{progresso.feitas}/{progresso.total} produtos</span>}
+            </div>
+          )}
+          {!loading && erro && <p className="mt-10 text-sm text-red-600 text-center">{erro}</p>}
+          {!loading && dados && (
+            // O wrapper reserva o tamanho JÁ escalado (transform não afeta layout).
+            <div className="mx-auto bg-white shadow-lg"
+              style={{ width: A4_W * escala, height: A4_H * itens.length * escala }}>
+              <iframe title="Prévia do orçamento" srcDoc={dados.html} scrolling="no"
+                style={{
+                  width: A4_W, height: A4_H * itens.length, border: 0,
+                  transform: `scale(${escala})`, transformOrigin: "0 0",
+                }} />
+            </div>
+          )}
+        </div>
       </div>
 
       {!loading && dados && (

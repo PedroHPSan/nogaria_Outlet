@@ -1,11 +1,13 @@
-// Orquestra a geração do anúncio/orçamento de um item: busca TODAS as fotos do SKU,
-// gera o QR do link de WhatsApp e monta o HTML A4 (anuncioTemplate). A impressão reusa
-// o iframe isolado do portfólio (imprimirPortfolio → diálogo "Salvar como PDF").
+// Orquestra a geração do orçamento (1..10 itens): busca TODAS as fotos de cada
+// SKU, gera o QR do WhatsApp de cada produto e monta o HTML A4 — uma página por
+// item. A impressão reusa o iframe isolado do portfólio (imprimirPortfolio → diálogo "Salvar como PDF").
 import { supabase } from "./supabase.js";
 import { fotosComoDataURI, imprimirPortfolio } from "./portfolio.js";
 import { genQrDataUrl } from "./labels.js";
-import { EMPRESA, waLink } from "./empresa.js";
-import { gerarAnuncioHTML, mensagemWhatsApp } from "./anuncioTemplate.js";
+import { EMPRESA, waLink, waLinkSemDestino } from "./empresa.js";
+import {
+  gerarOrcamentoHTML, mensagemOrcamento, mensagemContato, totaisOrcamento,
+} from "./anuncioTemplate.js";
 
 const BUCKET = "fotos-produtos";
 
@@ -17,7 +19,9 @@ export async function fotosDoItem(sku) {
     .from("fotos").select("storage_path, ordem").eq("sku", sku).order("ordem");
   if (error || !data?.length) return { principal: null, galeria: [] };
 
-  const paths = data.map((f) => f.storage_path);
+  // O template só renderiza a principal + 4 da galeria: limitar aqui evita
+  // baixar/converter fotos que nunca aparecem no PDF.
+  const paths = data.map((f) => f.storage_path).slice(0, 5);
   const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrls(paths, 3600);
   // Chaves sintéticas f0..fN preservam a ORDEM ao converter para dataURI.
   const urls = {};
@@ -27,16 +31,44 @@ export async function fotosDoItem(sku) {
   return { principal: ordenadas[0] || null, galeria: ordenadas.slice(1) };
 }
 
-// Monta o anúncio completo (NÃO imprime). Retorna { html, mensagem, link }.
-export async function montarAnuncio(item, empresa = EMPRESA) {
-  const mensagem = mensagemWhatsApp(item, empresa);
-  const link = waLink(mensagem);
-  const [fotos, qrDataUrl] = await Promise.all([
-    fotosDoItem(item.sku),
-    genQrDataUrl(link),
-  ]);
-  const html = gerarAnuncioHTML(item, { fotos, qrDataUrl, empresa });
-  return { html, mensagem, link };
+// Teto de produtos por orçamento: acima disso a geração fica lenta (uma foto
+// em dataURI por item) e o PDF pesa demais no celular.
+export const LIMITE_ORCAMENTO = 10;
+
+// Monta o orçamento de 1..LIMITE_ORCAMENTO itens (NÃO imprime). Cada página
+// leva o QR do seu próprio produto; o `link` devolvido é o do orçamento todo.
+// onProgress(feitas, total) roda a cada item concluído.
+export async function montarOrcamento(itens, { empresa = EMPRESA, onProgress } = {}) {
+  const lista = itens || [];
+  if (!lista.length) throw new Error("Selecione ao menos um produto.");
+  if (lista.length > LIMITE_ORCAMENTO) {
+    throw new Error(`Máximo de ${LIMITE_ORCAMENTO} produtos por orçamento.`);
+  }
+
+  let feitas = 0;
+  const partes = await Promise.all(
+    lista.map(async (it) => {
+      const [fotos, qrDataUrl] = await Promise.all([
+        fotosDoItem(it.sku),
+        genQrDataUrl(waLink(mensagemContato(it))),
+      ]);
+      feitas += 1;
+      onProgress?.(feitas, lista.length);
+      return [it.sku, { fotos, qrDataUrl }];
+    })
+  );
+
+  const porSku = Object.fromEntries(partes);
+  const mensagem = mensagemOrcamento(lista);
+  const { total, semPreco, semFoto } = totaisOrcamento(lista);
+  return {
+    html: gerarOrcamentoHTML(lista, { porSku, empresa }),
+    mensagem,
+    link: waLinkSemDestino(mensagem),
+    total,
+    semPreco,
+    semFoto,
+  };
 }
 
 // Impressão (iframe isolado → diálogo do navegador com "Salvar como PDF").
