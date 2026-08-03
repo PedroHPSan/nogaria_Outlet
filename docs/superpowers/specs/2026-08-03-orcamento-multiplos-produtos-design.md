@@ -55,7 +55,8 @@ No CSS, o mesmo idioma já usado em `catalogoTemplate.js`:
 
 **Texto compartilhável** (vale para único e múltiplo):
 
-- `linhaOrcamento(it)` → `Furadeira de Impacto 750W — R$ 289,00`. Sem preço
+- `linhaOrcamento(it)` → `Furadeira de Impacto 750W — R$ 289`. (`fmtBRL` formata
+  sem centavos.) Sem preço
   (`precoVenda(it) == null`) → `Furadeira de Impacto 750W — sob consulta`.
 - `mensagemWhatsApp(it)` passa a ser exatamente `linhaOrcamento(it)`. Somem a
   saudação, a linha `Cód:`, o nome da empresa e o "Está disponível?".
@@ -71,7 +72,10 @@ No CSS, o mesmo idioma já usado em `catalogoTemplate.js`:
 - `export const LIMITE_ORCAMENTO = 10` — fonte única do limite, consumida tanto
   pela validação quanto pela UI.
 - `montarOrcamento(itens, { empresa, onProgress } = {})` →
-  `{ html, mensagem, link, total, semPreco, semFoto }`.
+  `{ html, mensagem, link, total, semPreco, semFoto }`. O cálculo de
+  `total`/`semPreco`/`semFoto` fica em `totaisOrcamento(itens)`, na camada pura,
+  para poder ser testado em Node (este módulo importa o cliente Supabase e não
+  roda fora do browser).
   - Lança erro se `itens.length` for 0 ou maior que `LIMITE_ORCAMENTO`.
   - Para cada item, busca fotos (`fotosDoItem`) e gera o QR do link da própria
     linha, em paralelo. `onProgress(feitas, total)` é chamado a cada item
