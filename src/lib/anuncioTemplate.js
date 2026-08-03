@@ -79,7 +79,8 @@ const CSS = `
 * { box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 html,body { margin:0; padding:0; font-family:Arial,"Helvetica Neue",Helvetica,sans-serif; color:#22303c; }
 :root{ --navy:#004078; --cyan:#2BB5E8; --green:#5CB85C; --ink:#22303c; --line:#e6ebf0; }
-.sheet{ width:210mm; min-height:297mm; padding:14mm 15mm 0; position:relative; display:flex; flex-direction:column; }
+.sheet{ width:210mm; min-height:297mm; padding:14mm 15mm 0; position:relative; display:flex; flex-direction:column; page-break-after:always; }
+.sheet:last-child{ page-break-after:auto; }
 .head{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid var(--line); padding-bottom:9px; }
 .head img{ height:11mm; }
 .badge{ font-size:8pt; font-weight:800; letter-spacing:.6px; text-transform:uppercase; padding:5px 12px; border-radius:20px; }
@@ -112,9 +113,11 @@ html,body { margin:0; padding:0; font-family:Arial,"Helvetica Neue",Helvetica,sa
 .bar{ height:7px; background:linear-gradient(90deg,var(--cyan),var(--green)); margin-top:6mm; }
 `;
 
-// Monta o HTML A4 completo. opts: { fotos:{principal,galeria[]}, qrDataUrl, empresa,
-// pagamento, entrega }. Sem preço → "Sob consulta"; sem foto → placeholder.
-export function gerarAnuncioHTML(it, opts = {}) {
+// Uma folha A4 (o produto em si). Sem o envelope HTML — assim várias folhas
+// podem ser empilhadas num só documento (orçamento com N produtos).
+// opts: { fotos:{principal,galeria[]}, qrDataUrl, empresa, pagamento, entrega }.
+// Sem preço → "Sob consulta"; sem foto → placeholder.
+export function sheetAnuncio(it, opts = {}) {
   const {
     fotos = {}, qrDataUrl = null, empresa = EMPRESA,
     pagamento = PAGAMENTO_PADRAO, entrega = ENTREGA_PADRAO,
@@ -149,8 +152,6 @@ export function gerarAnuncioHTML(it, opts = {}) {
   const qrHtml = qrDataUrl ? `<div class="qr"><img src="${escapeHtml(qrDataUrl)}" alt="QR WhatsApp"></div>` : "";
 
   return (
-    `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">` +
-    `<title>${escapeHtml(nome)} — ${escapeHtml(empresa.nome)}</title><style>${CSS}</style></head><body>` +
     `<div class="sheet">` +
       `<div class="head"><img src="${LOGO_HORIZONTAL}" alt="${escapeHtml(empresa.nome)}">` +
         (badge ? `<span class="badge ${badge.cls}">${escapeHtml(badge.txt)}</span>` : "") +
@@ -167,6 +168,33 @@ export function gerarAnuncioHTML(it, opts = {}) {
         `<div class="wbtn"><span class="b">📱 Comprar no WhatsApp</span><div class="n">${escapeHtml(empresa.whatsappLabel)} · ${escapeHtml(empresa.nome)}</div></div>` +
         qrHtml +
       `</div><div class="bar"></div></div>` +
-    `</div></body></html>`
+    `</div>`
   );
+}
+
+// Envelope HTML A4 com o CSS compartilhado por todas as folhas.
+export function documentoAnuncio(sheets, titulo) {
+  return (
+    `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">` +
+    `<title>${escapeHtml(titulo)}</title><style>${CSS}</style></head><body>` +
+    sheets.join("") +
+    `</body></html>`
+  );
+}
+
+// Anúncio/orçamento de UM item (API antiga, preservada).
+export function gerarAnuncioHTML(it, opts = {}) {
+  const empresa = opts.empresa || EMPRESA;
+  return documentoAnuncio([sheetAnuncio(it, opts)], `${nomeAnuncio(it)} — ${empresa.nome}`);
+}
+
+// Orçamento com N produtos: uma folha A4 por item, num só documento.
+// opts: { porSku:{ [sku]:{fotos,qrDataUrl} }, empresa, pagamento, entrega }.
+export function gerarOrcamentoHTML(itens = [], opts = {}) {
+  const { porSku = {}, empresa = EMPRESA, pagamento, entrega } = opts;
+  const lista = itens || [];
+  const sheets = lista.map((it) =>
+    sheetAnuncio(it, { ...(porSku[it.sku] || {}), empresa, pagamento, entrega })
+  );
+  return documentoAnuncio(sheets, `Orçamento (${lista.length} itens) — ${empresa.nome}`);
 }

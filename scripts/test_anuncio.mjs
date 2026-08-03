@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   gerarAnuncioHTML, mensagemWhatsApp, nomeAnuncio,
   linhaOrcamento, mensagemOrcamento, totaisOrcamento,
+  gerarOrcamentoHTML, sheetAnuncio, documentoAnuncio,
 } from "../src/lib/anuncioTemplate.js";
 import { fmtBRL } from "../src/lib/model.js";
 
@@ -93,5 +94,36 @@ const tot = totaisOrcamento([
 eq(tot.total, 150, "soma só quem tem preço");
 eq(tot.semPreco.join(","), "B", "lista SKUs sem preço");
 eq(tot.semFoto.join(","), "C", "lista SKUs sem foto");
+
+console.log("sheetAnuncio / documentoAnuncio");
+const folha = sheetAnuncio(base, {});
+ok(folha.startsWith('<div class="sheet">'), "folha é só a div");
+ok(!folha.includes("<!DOCTYPE"), "folha não traz o envelope");
+ok(documentoAnuncio([folha], "T").includes("<!DOCTYPE html>"), "documento tem o envelope");
+ok(documentoAnuncio([folha], "T").includes("<title>T</title>"), "documento usa o título");
+
+console.log("gerarOrcamentoHTML");
+const itensOrc = [
+  { ...base, sku: "NOG-A", produto: "Furadeira" },
+  { ...base, sku: "NOG-B", produto: "Parafusadeira" },
+  { ...base, sku: "NOG-C", produto: "Serra" },
+];
+const orc = gerarOrcamentoHTML(itensOrc);
+eq((orc.match(/<div class="sheet">/g) || []).length, 3, "uma folha por produto");
+eq((orc.match(/<!DOCTYPE html>/g) || []).length, 1, "um único documento");
+ok(orc.includes("page-break-after:always"), "CSS quebra página entre folhas");
+ok(orc.includes(".sheet:last-child"), "última folha não força quebra");
+["NOG-A", "NOG-B", "NOG-C"].forEach((s) => ok(orc.includes(s), `inclui ${s}`));
+ok(orc.includes("<title>Orçamento (3 itens)"), "título com a contagem");
+
+console.log("gerarOrcamentoHTML usa as fotos/QR por SKU");
+const orcFotos = gerarOrcamentoHTML(itensOrc.slice(0, 2), {
+  porSku: {
+    "NOG-A": { fotos: { principal: "data:image/png;base64,AAA", galeria: [] }, qrDataUrl: "data:image/png;base64,QQQ" },
+  },
+});
+ok(orcFotos.includes("data:image/png;base64,AAA"), "foto do 1º item entra");
+ok(orcFotos.includes("data:image/png;base64,QQQ"), "QR do 1º item entra");
+ok(orcFotos.includes("SEM FOTO"), "2º item sem foto cai no placeholder");
 
 console.log(`\n${passou} asserções OK`);
