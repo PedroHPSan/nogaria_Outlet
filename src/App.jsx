@@ -6,13 +6,14 @@ import ItemsScreen from "./screens/ItemsScreen";
 import ItemDetail from "./screens/ItemDetail";
 import NewItem from "./screens/NewItem";
 import ExportScreen from "./screens/ExportScreen";
+import PlanilhaScreen from "./screens/PlanilhaScreen";
 import ConferenciaScreen from "./screens/ConferenciaScreen";
 import VendasScreen from "./screens/VendasScreen";
 import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints, DoorOpen } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints, DoorOpen, Table2 } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixasScreen from "./screens/CaixasScreen";
 import SalasScreen from "./screens/SalasScreen";
@@ -151,6 +152,12 @@ export default function App() {
         <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} />
       )}
       {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} params={params} lotes={lotes} onBarraAcao={setBarraAcao} />}
+      {tab === "planilha" && (
+        <PlanilhaScreen
+          lotes={lotes} params={params} user={user} onOpen={setOpenItem}
+          refreshKey={refreshKey} onBarraAcao={setBarraAcao}
+        />
+      )}
       {tab === "exportar" && <ExportScreen lotes={lotes} refreshKey={refreshKey} />}
       {tab === "registro" && (
         <div className="px-4 pt-4 pb-24">
@@ -171,18 +178,19 @@ export default function App() {
       )}
 
       <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-200">
-        <div className="max-w-lg mx-auto grid grid-cols-7">
+        <div className="max-w-lg mx-auto grid grid-cols-8">
           {[
             { id: "painel", icon: BarChart3, t: "Painel" },
             { id: "itens", icon: ClipboardList, t: "Itens" },
             { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
             { id: "vendas", icon: Receipt, t: "Vendas" },
             { id: "portfolio", icon: Footprints, t: "Catálogo" },
+            { id: "planilha", icon: Table2, t: "Planilha" },
             { id: "exportar", icon: Upload, t: "Exportar" },
             { id: "registro", icon: History, t: "Registro" },
           ].map((n) => (
             <button key={n.id} onClick={() => { if (n.id !== "itens") setPreFilter(null); setTab(n.id); }}
-              className={`py-2.5 flex flex-col items-center gap-0.5 text-[11px] font-semibold ${tab === n.id ? "text-orange-600" : "text-gray-400"}`}>
+              className={`py-2.5 flex flex-col items-center gap-0.5 text-[10px] leading-tight font-semibold ${tab === n.id ? "text-orange-600" : "text-gray-400"}`}>
               <n.icon className="w-5 h-5" /> {n.t}
             </button>
           ))}
