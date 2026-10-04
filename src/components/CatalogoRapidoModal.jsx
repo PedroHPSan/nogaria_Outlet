@@ -199,6 +199,7 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
           <h2 className="font-bold text-gray-900">Catálogo em PDF</h2>
           <button onClick={fechar} aria-label="Fechar"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
+        <p className="text-xs text-gray-500 -mt-1">1) escolha o modelo e as opções · 2) gere o PDF · 3) divulgue por link, texto ou imagens.</p>
 
         {!itens && !erro && (
           <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando itens…</p>

@@ -45,6 +45,7 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
           <h2 className="font-bold text-gray-900">Preço rápido ({itens.length})</h2>
           <button onClick={onClose} aria-label="Fechar"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
+        <p className="text-xs text-gray-500 -mt-1">Aplica desconto por tempo parado e arredonda (…9). Só baixa preço e nunca passa do piso.</p>
         {!plano ? (
           <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Calculando…</p>
         ) : (

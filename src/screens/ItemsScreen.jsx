@@ -80,7 +80,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
   // A barra de ações da seleção divide o canto inferior com os botões
   // flutuantes do App — avisa o App para escondê-los enquanto ela estiver ali.
-  const barraSelecao = selectMode && selected.size > 0;
+  const barraSelecao = selectMode; // a barra aparece ao ligar o modo (botões ficam desativados até marcar itens)
   useEffect(() => {
     onBarraAcao?.(barraSelecao);
     return () => onBarraAcao?.(false);
@@ -256,7 +256,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const nActive = [fLote, fClasse, fStatus, fGrupo, fDestino, fPendMedida, fSemCaixa, fSemEtiq, fSemClasse, fSemFoto, fIaPreco, fAptoAmazon, fCaixa].filter(Boolean).length;
 
   return (
-    <div className="pb-24">
+    <div className={selectMode ? "pb-60" : "pb-24"}>
       <div className="sticky top-14 z-10 bg-gray-50 px-4 pt-3 pb-2 border-b border-gray-200">
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -347,10 +347,15 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
           </div>
         )}
         <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-gray-400">
-            {count.toLocaleString("pt-BR")} itens
-            {selectMode && ` · ${selected.size} selecionado(s)`}
-          </p>
+          <div>
+            <p className="text-xs text-gray-400">
+              {count.toLocaleString("pt-BR")} itens
+              {selectMode && ` · ${selected.size} selecionado(s)`}
+            </p>
+            {!selectMode && (
+              <p className="text-[11px] text-gray-400">Toque em <b>Selecionar</b> para gerar catálogo, mudar preços, orçar ou imprimir etiquetas</p>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setCatalogarPicker(true)}
               className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg px-2 py-1">
@@ -491,31 +496,27 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         )}
       </div>
 
-      {/* Ações da seleção (acima da navegação inferior) */}
+      {/* Ações da seleção (acima da navegação inferior). Visível durante todo o modo seleção:
+          os botões ficam desativados até haver itens marcados, para o usuário ver o que existe. */}
       {barraSelecao && (
         <div className="fixed bottom-14 inset-x-0 z-40 px-3">
-          <div className="max-w-lg mx-auto flex flex-wrap gap-2">
-            <button onClick={imprimirSelecionados}
-              className="flex-1 basis-[45%] rounded-xl py-3 font-bold bg-gray-900 text-white shadow-lg flex items-center justify-center gap-2">
-              <Printer className="w-4 h-4" /> Etiquetas ({selected.size})
-            </button>
-            <button onClick={orcarSelecionados} disabled={selected.size > LIMITE_ORCAMENTO}
-              className={`flex-1 basis-[45%] rounded-xl py-3 font-bold shadow-lg flex items-center justify-center gap-2 ${
-                selected.size > LIMITE_ORCAMENTO
-                  ? "bg-gray-300 text-gray-500"
-                  : "bg-emerald-600 text-white"
-              }`}>
-              <FileText className="w-4 h-4" />
-              {selected.size > LIMITE_ORCAMENTO ? `Orçamento (máx. ${LIMITE_ORCAMENTO})` : `Orçamento (${selected.size})`}
-            </button>
-            <button onClick={catalogarSelecionados}
-              className="flex-1 basis-[45%] rounded-xl py-3 font-bold bg-orange-500 text-white shadow-lg flex items-center justify-center gap-2">
-              <BookOpen className="w-4 h-4" /> Catálogo ({selected.size})
-            </button>
-            <button onClick={precificarSelecionados}
-              className="flex-1 basis-[45%] rounded-xl py-3 font-bold bg-blue-600 text-white shadow-lg flex items-center justify-center gap-2">
-              <Tag className="w-4 h-4" /> Preço rápido ({selected.size})
-            </button>
+          <div className="max-w-lg mx-auto bg-white/95 backdrop-blur rounded-2xl border border-gray-200 shadow-xl p-2.5 space-y-2">
+            <p className="text-xs font-semibold text-gray-600 text-center">
+              {selected.size === 0
+                ? "Toque nos itens (ou em Todos) para liberar as ações"
+                : `${selected.size} selecionado(s) · escolha uma ação`}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <BotaoAcao cor="bg-orange-500" icone={BookOpen} titulo={`Catálogo (${selected.size})`}
+                sub="PDF, link, WhatsApp e Instagram" desativado={selected.size === 0} onClick={catalogarSelecionados} />
+              <BotaoAcao cor="bg-blue-600" icone={Tag} titulo={`Preço rápido (${selected.size})`}
+                sub="desconto por tempo parado" desativado={selected.size === 0} onClick={precificarSelecionados} />
+              <BotaoAcao cor="bg-emerald-600" icone={FileText}
+                titulo={selected.size > LIMITE_ORCAMENTO ? `Orçamento (máx. ${LIMITE_ORCAMENTO})` : `Orçamento (${selected.size})`}
+                sub="proposta para o cliente" desativado={selected.size === 0 || selected.size > LIMITE_ORCAMENTO} onClick={orcarSelecionados} />
+              <BotaoAcao cor="bg-gray-900" icone={Printer} titulo={`Etiquetas (${selected.size})`}
+                sub="imprimir etiquetas" desativado={selected.size === 0} onClick={imprimirSelecionados} />
+            </div>
           </div>
         </div>
       )}
@@ -565,6 +566,20 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </Suspense>
       )}
     </div>
+  );
+}
+
+// Botão da barra de seleção: título + uma linha dizendo o que a ação faz.
+function BotaoAcao({ cor, icone: Icone, titulo, sub, desativado, onClick }) {
+  return (
+    <button onClick={onClick} disabled={desativado}
+      className={`rounded-xl px-3 py-2 text-left flex items-center gap-2.5 text-white ${desativado ? "bg-gray-300" : cor}`}>
+      <Icone className="w-5 h-5 shrink-0" />
+      <span className="min-w-0">
+        <span className="block text-sm font-bold leading-tight truncate">{titulo}</span>
+        <span className="block text-[10px] leading-tight opacity-90 truncate">{sub}</span>
+      </span>
+    </button>
   );
 }
 
