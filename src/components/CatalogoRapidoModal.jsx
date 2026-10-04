@@ -2,9 +2,11 @@
 // uma sala (salaId), sem passar pelos filtros da aba Catálogo. Só entram itens
 // com preço de venda, condição mapeada e em estoque (regra do catálogo).
 import React, { useEffect, useRef, useState } from "react";
-import { X, Loader2, Printer, AlertTriangle } from "lucide-react";
+import { X, Loader2, Printer, AlertTriangle, Share2, Download } from "lucide-react";
 import { listarItensCatalogo, resumoSelecao } from "../lib/catalogo";
-import { gerarCatalogoDeItens } from "../lib/catalogoGerar";
+import { gerarCatalogoDeItens, gerarCatalogoPdfDeItens } from "../lib/catalogoGerar";
+import { compartilharArquivo, baixarArquivo } from "../lib/compartilhar";
+import { MODELOS, TEMAS } from "../lib/catalogoSpec";
 import { imprimirPortfolio } from "../lib/portfolio";
 
 const edicaoAtual = () =>
@@ -18,6 +20,12 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
   const [comFoto, setComFoto] = useState(true);
   const [mostrarPreco, setMostrarPreco] = useState(true);
   const [comQr, setComQr] = useState(true);
+  const [modelo, setModelo] = useState("catalogo");
+  const [tema, setTema] = useState("noite");
+  const [colunas, setColunas] = useState(2);
+  const [contatoNome, setContatoNome] = useState("");
+  const [validade, setValidade] = useState("");
+  const [aviso, setAviso] = useState(null);
   const [gerando, setGerando] = useState(false);
   const [progresso, setProgresso] = useState(null);
   const abortRef = useRef(null);
@@ -55,6 +63,32 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
       abortRef.current = null;
       setProgresso(null);
       setGerando(false);
+    }
+  };
+
+  // PDF como ARQUIVO (jsPDF): compartilha (WhatsApp etc.) ou baixa.
+  const gerarPdf = async (acao) => {
+    if (!itens?.length) return;
+    setGerando(true); setErro(null); setAviso(null);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    try {
+      const { blob, resumo: r } = await gerarCatalogoPdfDeItens(itens, {
+        modelo, tema, colunas, titulo, edicao: edicaoAtual(), validade,
+        campos: { foto: modelo === "lista" ? comFoto : comFoto, preco: mostrarPreco, qr: comQr },
+        contato: { nome: contatoNome },
+      }, { signal: ctrl.signal, onProgress: setProgresso });
+      const nome = `${(titulo || "catalogo").replace(/[^\w]+/g, "_").slice(0, 40)}.pdf`;
+      const mb = (blob.size / 1048576).toFixed(1);
+      if (acao === "baixar") { baixarArquivo(blob, nome); setAviso(`PDF baixado · ${r.paginas} páginas · ${mb} MB`); }
+      else {
+        const res = await compartilharArquivo(blob, nome, { titulo });
+        if (res !== "cancelado") setAviso(`${res === "baixado" ? "PDF baixado" : "PDF compartilhado"} · ${r.paginas} páginas · ${mb} MB`);
+      }
+    } catch (e) {
+      if (e?.message !== "cancelado") setErro(e.message || "Falha ao gerar o PDF.");
+    } finally {
+      abortRef.current = null; setProgresso(null); setGerando(false);
     }
   };
 
@@ -102,12 +136,35 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
               <Opcao valor={comQr} onChange={setComQr}>QR de WhatsApp em cada item</Opcao>
             </div>
 
+            <div className="grid grid-cols-2 gap-2">
+              <select value={modelo} onChange={(e) => setModelo(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+                {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </select>
+              <select value={tema} onChange={(e) => setTema(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+                {Object.entries(TEMAS).map(([id, t]) => <option key={id} value={id}>Tema {t.nome}</option>)}
+              </select>
+              {modelo === "catalogo" && (
+                <select value={colunas} onChange={(e) => setColunas(Number(e.target.value))} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+                  <option value={2}>2 colunas</option><option value={3}>3 colunas</option>
+                </select>
+              )}
+              <input value={validade} onChange={(e) => setValidade(e.target.value)} placeholder="Preços válidos até (dd/mm)" className="rounded-lg border border-gray-300 px-2 py-2 text-sm" />
+              <input value={contatoNome} onChange={(e) => setContatoNome(e.target.value)} placeholder="Nome do vendedor" className="col-span-2 rounded-lg border border-gray-300 px-2 py-2 text-sm" />
+            </div>
+
             {progresso && <p className="text-xs text-gray-500">Comprimindo {progresso.feitas} de {progresso.total} fotos</p>}
-            <button onClick={gerar} disabled={gerando || !itens.length}
-              className="w-full rounded-xl py-3 font-bold bg-orange-500 text-white flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:text-gray-500">
-              {gerando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-              {gerando ? "Gerando…" : "Gerar PDF"}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => gerarPdf("compartilhar")} disabled={gerando || !itens.length}
+                className="flex-1 rounded-xl py-3 font-bold bg-orange-500 text-white flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:text-gray-500">
+                {gerando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                {gerando ? "Gerando…" : "Compartilhar PDF"}
+              </button>
+              <button onClick={() => gerarPdf("baixar")} disabled={gerando || !itens.length} aria-label="Baixar PDF"
+                className="rounded-xl px-4 border border-gray-300 text-gray-700 disabled:opacity-50"><Download className="w-4 h-4" /></button>
+              <button onClick={gerar} disabled={gerando || !itens.length} aria-label="Imprimir"
+                className="rounded-xl px-4 border border-gray-300 text-gray-700 disabled:opacity-50"><Printer className="w-4 h-4" /></button>
+            </div>
+            {aviso && <p className="text-xs text-emerald-700">{aviso}</p>}
           </>
         )}
 

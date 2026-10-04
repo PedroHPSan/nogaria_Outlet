@@ -44,8 +44,11 @@ export function fraseCondicao(it) {
 }
 
 // Mensagem que o cliente dispara ao escanear o QR do card (wa.me com o SKU).
-export const linkInteresseItem = (it) =>
-  waLink(`Olá! Tenho interesse no item ${it.sku} (${it.produto || "produto"}) do catálogo Nogária Outlet.`);
+// `numero` (só dígitos, DDI+DDD) sobrescreve o WhatsApp da empresa (ex.: vendedor).
+export const linkInteresseItem = (it, numero) => {
+  const texto = `Olá! Tenho interesse no item ${it.sku} (${it.produto || "produto"}) do catálogo Nogária Outlet.`;
+  return numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texto)}` : waLink(texto);
+};
 
 // Seleção/sala → catálogo: separa o que entrou do que ficou de fora (sem preço,
 // sem condição mapeada ou fora de estoque) para avisar o vendedor.
