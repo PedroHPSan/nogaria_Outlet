@@ -1,4 +1,4 @@
-// Logos da marca Nogária para o catálogo (catalogoTemplate.js), embutidos como
+// Logos da marca Nogária para o catálogo, embutidos como
 // data URIs PNG para impressão/PDF offline. Extraídos de docs/Catalogo_Nogaria_Parcial.pdf
 // (compostos com o soft-mask de transparência, recortados e reduzidos).
 //   LOGO_VERTICAL   — capa (ícone + wordmark empilhados)

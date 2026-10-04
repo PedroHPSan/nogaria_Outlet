@@ -13,7 +13,7 @@ import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, Footprints, DoorOpen, Table2 } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, BookOpen, DoorOpen, Table2 } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixasScreen from "./screens/CaixasScreen";
 import SalasScreen from "./screens/SalasScreen";
@@ -151,7 +151,7 @@ export default function App() {
       {tab === "vendas" && (
         <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} />
       )}
-      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} params={params} lotes={lotes} onBarraAcao={setBarraAcao} />}
+      {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} user={user} params={params} lotes={lotes} onBarraAcao={setBarraAcao} />}
       {tab === "planilha" && (
         <PlanilhaScreen
           lotes={lotes} params={params} user={user} onOpen={setOpenItem}
@@ -184,7 +184,7 @@ export default function App() {
             { id: "itens", icon: ClipboardList, t: "Itens" },
             { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
             { id: "vendas", icon: Receipt, t: "Vendas" },
-            { id: "portfolio", icon: Footprints, t: "Catálogo" },
+            { id: "portfolio", icon: BookOpen, t: "Catálogo" },
             { id: "planilha", icon: Table2, t: "Planilha" },
             { id: "exportar", icon: Upload, t: "Exportar" },
             { id: "registro", icon: History, t: "Registro" },

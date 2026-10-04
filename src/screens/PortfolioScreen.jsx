@@ -1,18 +1,14 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import {
-  Loader2, Search, Filter, Printer, Eye, EyeOff, Layers, Image as ImageIcon, FileText, Boxes, X, Link2, Check,
-} from "lucide-react";
-import {
-  listarItensCatalogo, dedupCatalogo, agruparCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE,
-} from "../lib/catalogo";
-import { gerarCatalogoHTML } from "../lib/catalogoTemplate";
-import { imprimirPortfolio, ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
-import { prepararFotos } from "../lib/catalogoImagens";
-import { publicarCatalogo } from "../lib/catalogoPublico";
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { Loader2, Search, Filter, Boxes, BookOpen } from "lucide-react";
+import { listarItensCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
+import { ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
 import { listarCaixas } from "../lib/caixas";
 import { fmtBRL, ALL_STATUS, DESTINOS, LOTE_SEM } from "../lib/model";
+
+// Motor de catálogo único: o mesmo modal usado em Itens → Selecionar e em Salas.
+const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const CLASSES = ["A+", "A", "B", "C", "D", "E"];
@@ -23,23 +19,10 @@ const BADGE_CLS = {
   semi: "bg-sky-100 text-sky-700",
   asis: "bg-gray-200 text-gray-700",
 };
-const AGRUPAR_OPCOES = [
-  { id: "categoria", label: "Categoria" },
-  { id: "tamanho", label: "Tamanho" },
-  { id: "lote", label: "Lote" },
-  { id: "marca", label: "Marca" },
-];
-
-const capitalizar = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-const edicaoAtual = () => {
-  const d = new Date();
-  return `${capitalizar(d.toLocaleDateString("pt-BR", { month: "long" }))}/${d.getFullYear()}`;
-};
-
 // Catálogo de produtos: filtra com os mesmos filtros da aba Itens + filtro por
 // caixa, mostra a galeria por item (tocável → abre a ficha) e gera o catálogo
-// PDF de marca da Nogária (capa, seções por categoria, selos, fechamento parcial).
-export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = [], onBarraAcao }) {
+// pelo motor novo (CatalogoRapidoModal): PDF, link público, textos e imagens.
+export default function PortfolioScreen({ refreshKey, onOpen, user, params, lotes = [], onBarraAcao }) {
   // filtros (espelham o ItemsScreen) — aplicados no servidor
   const [q, setQ] = useState("");
   const [fLote, setFLote] = useState("");
@@ -55,23 +38,12 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
   const [fSemFoto, setFSemFoto] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // opções do catálogo
-  const [agrupar, setAgrupar] = useState("categoria");
-  const [parcial, setParcial] = useState(true);
-  const [comFoto, setComFoto] = useState(true);
-  const [mostrarPreco, setMostrarPreco] = useState(true);
-  const [titulo, setTitulo] = useState("Catálogo de Produtos");
-  const [edicao, setEdicao] = useState(edicaoAtual);
-
   const [itens, setItens] = useState(null);     // resultado da busca (por item)
   const [fotos, setFotos] = useState({});       // { sku: url }
   const [loading, setLoading] = useState(true);
   const [caixas, setCaixas] = useState([]);
-  const [gerando, setGerando] = useState(false);
-  const [progresso, setProgresso] = useState(null); // { feitas, total } enquanto prepara fotos
-  const abortRef = useRef(null);
-  const [gerandoLink, setGerandoLink] = useState(false);
-  const [linkPronto, setLinkPronto] = useState(null); // { url, expira_em }
+  const [catalogoAberto, setCatalogoAberto] = useState(false);
+  const agrupar = "categoria"; // a galeria agrupa por categoria; o PDF tem o seu próprio agrupamento
   const debounce = useRef();
 
   const catList = useMemo(
@@ -140,71 +112,6 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
     onBarraAcao?.(total > 0);
     return () => onBarraAcao?.(false);
   }, [total, onBarraAcao]);
-
-  const gerar = async () => {
-    if (!total) return;
-    setGerando(true);
-    try {
-      const cards = dedupCatalogo(itens);
-      const secoes = agruparCatalogo(cards, agrupar);
-      const cats = [...new Set(itens.map((i) => (i.grupo || "").trim()).filter(Boolean))];
-      let fotosPdf = {};
-      if (comFoto) {
-        const entradas = cards
-          .map((c) => ({ sku: c.rep.sku, url: fotos[c.rep.sku] }))
-          .filter((e) => e.url);
-        if (entradas.length) {
-          const ctrl = new AbortController();
-          abortRef.current = ctrl;
-          setProgresso({ feitas: 0, total: entradas.length });
-          try {
-            fotosPdf = await prepararFotos(entradas, {
-              signal: ctrl.signal,
-              onProgress: (p) => setProgresso(p),
-            });
-          } catch (err) {
-            if (err?.message === "cancelado") return; // usuário cancelou: aborta silenciosamente
-            throw err;
-          } finally {
-            abortRef.current = null;
-            setProgresso(null);
-          }
-        }
-      }
-      const html = gerarCatalogoHTML(secoes, {
-        titulo: titulo.trim() || "Catálogo de Produtos",
-        subtitulo: cats.join(" · "),
-        edicao, parcial, comFoto, mostrarPreco, fotos: fotosPdf,
-      });
-      // Aguarda a impressão (resolve em impresso/timeout/erro) para o botão só
-      // sair do estado "gerando" quando o diálogo de impressão for tratado.
-      await imprimirPortfolio(html);
-    } finally {
-      setGerando(false);
-    }
-  };
-
-  const gerarLink = async () => {
-    if (!total) return;
-    setGerandoLink(true);
-    setLinkPronto(null);
-    try {
-      const cards = dedupCatalogo(itens);
-      const secoes = agruparCatalogo(cards, agrupar);
-      const cats = [...new Set(itens.map((i) => (i.grupo || "").trim()).filter(Boolean))];
-      const res = await publicarCatalogo(secoes, {
-        titulo: titulo.trim() || "Catálogo de Produtos",
-        subtitulo: cats.join(" · "),
-        edicao, comFoto, mostrarPreco,
-      });
-      try { await navigator.clipboard.writeText(res.url); } catch { /* clipboard pode falhar */ }
-      setLinkPronto(res);
-    } catch {
-      alert("Falha ao gerar o link. Tente novamente.");
-    } finally {
-      setGerandoLink(false);
-    }
-  };
 
   return (
     <div className="pb-28">
@@ -277,33 +184,11 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
         )}
       </div>
 
-      {/* Opções do catálogo */}
-      <div className="px-4 pt-3 space-y-2">
-        <div className="flex gap-2">
-          <label className="flex-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 flex items-center gap-1"><Layers className="w-3 h-3" /> Agrupar por</span>
-            <select value={agrupar} onChange={(e) => setAgrupar(e.target.value)} className={`${inputCls} mt-1`}>
-              {AGRUPAR_OPCOES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-          </label>
-          <label className="flex-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 flex items-center gap-1"><FileText className="w-3 h-3" /> Edição</span>
-            <input value={edicao} onChange={(e) => setEdicao(e.target.value)} className={`${inputCls} mt-1`} />
-          </label>
-        </div>
-        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título da capa" className={inputCls} />
-        <div className="flex items-center gap-3 flex-wrap">
-          <button onClick={() => setMostrarPreco((v) => !v)} className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 active:text-gray-900">
-            {mostrarPreco ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}{mostrarPreco ? "Preços visíveis" : "Preços ocultos"}
-          </button>
-          <button onClick={() => setComFoto((v) => !v)} className={`flex items-center gap-1.5 text-sm font-semibold ${comFoto ? "text-orange-600" : "text-gray-500"}`}>
-            <ImageIcon className="w-4 h-4" />{comFoto ? "Com foto" : "Sem foto"}
-          </button>
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-600 ml-auto">
-            <input type="checkbox" checked={parcial} onChange={(e) => setParcial(e.target.checked)} className="w-4 h-4 accent-orange-500" />
-            Parcial
-          </label>
-        </div>
+      {/* Como usar */}
+      <div className="px-4 pt-3">
+        <p className="text-xs text-gray-500">
+          Filtre os produtos, confira a galeria e toque em <b>Gerar catálogo</b>. Para escolher itens específicos, use <b>Itens → Selecionar</b>.
+        </p>
       </div>
 
       {/* Galeria */}
@@ -348,9 +233,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
                       <div className="p-2 flex-1 flex flex-col">
                         <p className="text-xs font-bold text-gray-900 leading-tight line-clamp-2">{it.produto || it.sku}</p>
                         <p className="text-[11px] text-gray-500 mt-0.5 truncate">{[it.marca, it.cor].filter(Boolean).join(" · ") || "—"}</p>
-                        {mostrarPreco && (
-                          <p className="text-sm font-extrabold text-emerald-600 mt-auto pt-1">{preco != null ? fmtBRL(preco) : "—"}</p>
-                        )}
+                        <p className="text-sm font-extrabold text-emerald-600 mt-auto pt-1">{preco != null ? fmtBRL(preco) : "—"}</p>
                       </div>
                     </button>
                   );
@@ -364,43 +247,18 @@ export default function PortfolioScreen({ refreshKey, onOpen, params, lotes = []
       {/* Barra de geração (acima da navegação inferior) */}
       {total > 0 && (
         <div className="fixed bottom-14 inset-x-0 z-40 px-3">
-          <div className="max-w-lg mx-auto space-y-2">
-            {linkPronto && (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-2 text-xs font-semibold shadow-lg">
-                <Check className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate flex-1">Link copiado · válido até {new Date(linkPronto.expira_em).toLocaleDateString("pt-BR")}</span>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button onClick={gerarLink} disabled={gerandoLink || gerando}
-                className="flex-1 flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-60">
-                {gerandoLink ? <Loader2 className="w-5 h-5 animate-spin" /> : <Link2 className="w-5 h-5" />}
-                Gerar link
-              </button>
-              <button onClick={gerar} disabled={gerando || gerandoLink}
-                className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-gray-800 disabled:opacity-60">
-                {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
-                PDF ({total})
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {progresso && (
-        <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center px-8">
-          <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl">
-            <p className="text-sm font-bold text-gray-800 mb-1">Preparando o catálogo…</p>
-            <p className="text-xs text-gray-500 mb-3">Comprimindo {progresso.feitas} de {progresso.total} fotos</p>
-            <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-orange-500 transition-all"
-                style={{ width: `${progresso.total ? Math.round((progresso.feitas / progresso.total) * 100) : 0}%` }} />
-            </div>
-            <button onClick={() => abortRef.current?.abort()}
-              className="mt-4 w-full flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 rounded-xl py-2.5 text-sm font-semibold active:bg-gray-100">
-              <X className="w-4 h-4" /> Cancelar
+          <div className="max-w-lg mx-auto">
+            <button onClick={() => setCatalogoAberto(true)}
+              className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600">
+              <BookOpen className="w-5 h-5" /> Gerar catálogo ({total})
             </button>
           </div>
         </div>
+      )}
+      {catalogoAberto && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <CatalogoRapidoModal itens={itens} user={user} titulo="Catálogo Nogária Outlet" onClose={() => setCatalogoAberto(false)} />
+        </Suspense>
       )}
     </div>
   );

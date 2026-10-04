@@ -2,9 +2,9 @@
 // uma sala (salaId), sem passar pelos filtros da aba Catálogo. Só entram itens
 // com preço de venda, condição mapeada e em estoque (regra do catálogo).
 import React, { useEffect, useRef, useState } from "react";
-import { X, Loader2, Printer, AlertTriangle, Share2, Download, Link2, MessageCircle, Instagram, FileSpreadsheet } from "lucide-react";
+import { X, Loader2, AlertTriangle, Share2, Download, Link2, MessageCircle, Instagram, FileSpreadsheet } from "lucide-react";
 import { listarItensCatalogo, resumoSelecao } from "../lib/catalogo";
-import { gerarCatalogoDeItens, gerarCatalogoPdfDeItens, gerarCardsDivulgacao } from "../lib/catalogoGerar";
+import { gerarCatalogoPdfDeItens, gerarCardsDivulgacao } from "../lib/catalogoGerar";
 import { compartilharArquivo, compartilharArquivos, compartilharTexto, baixarArquivo } from "../lib/compartilhar";
 import { dedupCatalogo, agruparCatalogo, linkInteresseItem } from "../lib/catalogo";
 import { publicarCatalogo } from "../lib/catalogoPublico";
@@ -15,12 +15,11 @@ import { carregarContato } from "../lib/empresaConfig";
 import { listarPredefinicoes, salvarPredefinicao, registrarHistorico, listarHistorico } from "../lib/catalogoPredefinicoes";
 import EmpresaContatoModal from "./EmpresaContatoModal";
 import { MODELOS, TEMAS } from "../lib/catalogoSpec";
-import { imprimirPortfolio } from "../lib/portfolio";
 
 const edicaoAtual = () =>
   new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicial = "Catálogo de Produtos", user, onClose }) {
+export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos, titulo: tituloInicial = "Catálogo de Produtos", user, onClose }) {
   const [itens, setItens] = useState(null);
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState(null);
@@ -78,7 +77,8 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
     let cancel = false;
     (async () => {
       try {
-        const lista = await listarItensCatalogo(salaId ? { salaId } : { skus });
+        // Aba Catálogo já entrega os itens filtrados; seleção e sala buscam pelo servidor.
+        const lista = itensProntos || await listarItensCatalogo(salaId ? { salaId } : { skus });
         if (cancel) return;
         setItens(lista);
         if (skus) setResumo(resumoSelecao(skus, lista));
@@ -87,28 +87,7 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
       }
     })();
     return () => { cancel = true; };
-  }, [skus, salaId]);
-
-  const gerar = async () => {
-    if (!itens?.length) return;
-    setGerando(true);
-    setErro(null);
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    try {
-      const html = await gerarCatalogoDeItens(itens, {
-        titulo, edicao: edicaoAtual(), comFoto, mostrarPreco, comQr,
-        signal: ctrl.signal, onProgress: setProgresso,
-      });
-      await imprimirPortfolio(html);
-    } catch (e) {
-      if (e?.message !== "cancelado") setErro(e.message || "Falha ao gerar o catálogo.");
-    } finally {
-      abortRef.current = null;
-      setProgresso(null);
-      setGerando(false);
-    }
-  };
+  }, [skus, salaId, itensProntos]);
 
   // PDF como ARQUIVO (jsPDF): compartilha (WhatsApp etc.) ou baixa.
   const gerarPdf = async (acao) => {
@@ -261,8 +240,6 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
               </button>
               <button onClick={() => gerarPdf("baixar")} disabled={gerando || !itens.length} aria-label="Baixar PDF"
                 className="rounded-xl px-4 border border-gray-300 text-gray-700 disabled:opacity-50"><Download className="w-4 h-4" /></button>
-              <button onClick={gerar} disabled={gerando || !itens.length} aria-label="Imprimir"
-                className="rounded-xl px-4 border border-gray-300 text-gray-700 disabled:opacity-50"><Printer className="w-4 h-4" /></button>
             </div>
             {aviso && <p className="text-xs text-emerald-700">{aviso}</p>}
 
