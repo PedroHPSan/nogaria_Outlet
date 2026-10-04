@@ -24,10 +24,23 @@ create index if not exists idx_orcamentos_status on orcamentos (status, criado_e
 alter table orcamentos enable row level security;
 drop policy if exists auth_full_orcamentos on orcamentos;
 create policy auth_full_orcamentos on orcamentos for all to authenticated using (true) with check (true);
--- Página pública: anônimo lê só pelo slug e só orçamentos não encerrados.
+-- Página pública: SEM policy de leitura para anon (uma policy `using (status…)` deixaria
+-- qualquer anônimo listar TODOS os orçamentos ativos, com nome/WhatsApp de clientes).
+-- O acesso é por função SECURITY DEFINER que devolve UM orçamento, só pelo slug exato
+-- e só os campos necessários à página (sem WhatsApp do cliente).
 drop policy if exists anon_select_orcamentos on orcamentos;
-create policy anon_select_orcamentos on orcamentos for select to anon
-  using (status in ('ENVIADO','RESERVADO') and validade > now());
+create or replace function orcamento_publico(p_slug text)
+returns table (codigo text, status text, itens jsonb, desconto_pct numeric, total numeric,
+               validade timestamptz, cliente_nome text, vendedor_nome text, vendedor_whatsapp text)
+language sql security definer set search_path = public as $$
+  select o.codigo, o.status, o.itens, o.desconto_pct, o.total, o.validade,
+         o.cliente_nome, o.vendedor_nome, o.vendedor_whatsapp
+  from orcamentos o
+  where o.slug = p_slug and o.status in ('ENVIADO','RESERVADO') and o.validade > now()
+  limit 1;
+$$;
+revoke all on function orcamento_publico(text) from public;
+grant execute on function orcamento_publico(text) to anon, authenticated;
 
 alter table itens add column if not exists reservado_ate timestamptz;
 alter table itens add column if not exists reservado_por_orc text;

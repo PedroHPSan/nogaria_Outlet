@@ -93,11 +93,11 @@ export async function confirmarVenda(orc, user, { canal = "B2C / Venda direta" }
   return novo;
 }
 
-// Página pública: só o necessário (RLS limita a ENVIADO/RESERVADO não vencidos).
+// Página pública: RPC SECURITY DEFINER (orcamento_publico) devolve UM orçamento por slug
+// exato, só ENVIADO/RESERVADO não vencido e sem o WhatsApp do cliente. A tabela não
+// tem leitura anônima (evita listar todos os orçamentos).
 export async function buscarOrcamentoPublico(slug) {
-  const { data, error } = await supabase.from("orcamentos")
-    .select("codigo, status, itens, desconto_pct, total, validade, cliente_nome, vendedor_nome, vendedor_whatsapp")
-    .eq("slug", slug).maybeSingle();
-  if (error || !data) return null;
-  return data;
+  const { data, error } = await supabase.rpc("orcamento_publico", { p_slug: slug });
+  if (error || !data?.length) return null;
+  return data[0];
 }
