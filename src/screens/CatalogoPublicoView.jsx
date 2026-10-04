@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { buscarCatalogoPublico } from "../lib/catalogoPublico";
+import { buscarCatalogoPublico, registrarVisualizacao } from "../lib/catalogoPublico";
+import { EMPRESA } from "../lib/empresa";
 import { fmtBRL } from "../lib/model";
-import { Loader2, Boxes } from "lucide-react";
+import { Loader2, Boxes, MessageCircle } from "lucide-react";
 
 // Selos de condição → cor (mesma paleta da galeria interna).
 const BADGE_CLS = {
@@ -23,6 +24,7 @@ export default function CatalogoPublicoView({ slug }) {
       if (!vivo) return;
       if (!d) { setEstado("indisponivel"); return; }
       setDados(d); setEstado("ok");
+      registrarVisualizacao(slug);
     });
     return () => { vivo = false; };
   }, [slug]);
@@ -41,12 +43,19 @@ export default function CatalogoPublicoView({ slug }) {
   }
 
   const p = dados.payload;
+  const numero = p.contato?.whatsapp || EMPRESA.whatsapp;
+  const rotulo = p.contato?.label || EMPRESA.whatsappLabel;
+  const wa = (texto) => `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
   return (
     <div className="min-h-screen bg-gray-50 pb-16">
       <header className="bg-gray-900 text-white px-4 py-4 sticky top-0 z-10">
         <h1 className="text-lg font-bold"><span className="text-orange-400">NOGÁRIA</span> OUTLET</h1>
         <p className="text-sm text-gray-200">{p.titulo}{p.edicao ? ` · ${p.edicao}` : ""}</p>
         {p.subtitulo && <p className="text-xs text-gray-400 mt-0.5">{p.subtitulo}</p>}
+        <a href={wa(`Olá! Vi o catálogo "${p.titulo}" da Nogária Outlet e quero atendimento.`)} target="_blank" rel="noreferrer"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">
+          <MessageCircle className="w-4 h-4" /> Falar com {p.contato?.nome || "a Nogária"} · {rotulo}
+        </a>
       </header>
       <div className="px-4 pt-4 space-y-5 max-w-3xl mx-auto">
         {p.secoes.map((sec, si) => (
@@ -73,13 +82,22 @@ export default function CatalogoPublicoView({ slug }) {
                     {p.mostrarPreco && c.preco != null && (
                       <p className="text-sm font-extrabold text-emerald-600 mt-auto pt-1">{fmtBRL(c.preco)}</p>
                     )}
+                    {c.sku && (
+                      <a href={wa(`Olá! Tenho interesse no item ${c.sku} (${c.produto}) do catálogo Nogária Outlet.`)} target="_blank" rel="noreferrer"
+                        className="mt-1.5 text-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold py-1.5">
+                        Quero este
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </section>
         ))}
-        <footer className="text-center text-xs text-gray-400 pt-4">NOGÁRIA OUTLET · {p.totalItens} {p.totalItens === 1 ? "item" : "itens"}</footer>
+        <footer className="text-center text-xs text-gray-400 pt-4 space-y-0.5">
+          <p>NOGÁRIA OUTLET · {p.totalItens} {p.totalItens === 1 ? "item" : "itens"}</p>
+          <p>WhatsApp {rotulo}{(p.contato?.extras || []).map((e) => ` · ${e.rotulo}: ${e.valor}`).join("")}</p>
+        </footer>
       </div>
     </div>
   );

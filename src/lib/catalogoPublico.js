@@ -11,7 +11,7 @@ const VALIDADE_SEG = 30 * 24 * 60 * 60; // 30 dias (para as signed URLs das foto
 // Monta o snapshot renderizável a partir das seções (agruparCatalogo), das opções
 // e do mapa { [sku]: url } de fotos representativas. Puro.
 export function montarPayload(secoes, opcoes = {}, fotosUrl = {}) {
-  const { titulo = "Catálogo de Produtos", edicao = "", subtitulo = "", mostrarPreco = true } = opcoes;
+  const { titulo = "Catálogo de Produtos", edicao = "", subtitulo = "", mostrarPreco = true, contato = null } = opcoes;
   let totalItens = 0;
   const secoesOut = (secoes || []).map((sec) => ({
     titulo: sec.titulo,
@@ -19,6 +19,7 @@ export function montarPayload(secoes, opcoes = {}, fotosUrl = {}) {
       totalItens += c.qtd || 1;
       const badge = CATALOGO_ESTADO_BADGE[(c.rep.estado || "").trim()] || null;
       return {
+        sku: c.rep.sku,
         produto: c.rep.produto || c.rep.sku,
         marca: c.rep.marca || "",
         cor: c.rep.cor || "",
@@ -29,7 +30,12 @@ export function montarPayload(secoes, opcoes = {}, fotosUrl = {}) {
       };
     }),
   }));
-  return { versao: 1, titulo, edicao, subtitulo, mostrarPreco, totalItens, secoes: secoesOut };
+  // v2: SKU por card e contato (WhatsApp só em dígitos DDI+DDD; sem ele a página usa o da empresa).
+  const wa = String(contato?.whatsapp || "").replace(/\D/g, "");
+  const contatoOut = wa.length >= 12
+    ? { nome: String(contato?.nome || "").slice(0, 60), whatsapp: wa, label: String(contato?.label || "").slice(0, 30), extras: (contato?.extras || []).slice(0, 6) }
+    : null;
+  return { versao: 2, titulo, edicao, subtitulo, mostrarPreco, totalItens, contato: contatoOut, secoes: secoesOut };
 }
 
 // Converte bytes em um slug url-safe (base36). Puro.
@@ -91,4 +97,10 @@ export async function buscarCatalogoPublico(slug) {
     .maybeSingle();
   if (error || !data) return null;
   return data;
+}
+
+// Conta uma abertura do link (RPC SECURITY DEFINER que só incrementa). Best-effort:
+// sem a migration (catalogo_publico_visualizar) ou offline, simplesmente não conta.
+export async function registrarVisualizacao(slug) {
+  try { await supabase.rpc("catalogo_publico_visualizar", { p_slug: slug }); } catch { /* métrica opcional */ }
 }

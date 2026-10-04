@@ -34,3 +34,14 @@ export async function compartilharTexto(texto, titulo) {
   await navigator.clipboard?.writeText(texto);
   return "copiado";
 }
+
+// Vários arquivos de uma vez (carrossel): Web Share quando suportado; senão baixa um a um.
+export async function compartilharArquivos(arquivos, { titulo, texto } = {}) {
+  const files = arquivos.map(({ blob, nome }) => new File([blob], nome, { type: blob.type }));
+  if (typeof navigator !== "undefined" && navigator.canShare?.({ files })) {
+    try { await navigator.share({ files, title: titulo, text: texto }); return "compartilhado"; }
+    catch (e) { if (e?.name === "AbortError") return "cancelado"; }
+  }
+  arquivos.forEach(({ blob, nome }, i) => setTimeout(() => baixarArquivo(blob, nome), i * 300));
+  return "baixado";
+}

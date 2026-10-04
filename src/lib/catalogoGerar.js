@@ -69,3 +69,24 @@ export async function gerarCatalogoPdfDeItens(itens, specEntrada = {}, { signal,
   const { blob, resumo } = gerarCatalogoPdf(secoes, spec, ctx);
   return { blob, resumo, spec };
 }
+
+// Cards de divulgação (PNG) para Instagram/WhatsApp: carrossel (capa + produtos + chamada)
+// ou um card único. Retorna [{ nome, blob }]. Fotos só dos itens que entram nos slides.
+export async function gerarCardsDivulgacao(itens, { formato = "feed", titulo = "Catálogo Nogária Outlet", tema = "noite", contato = {}, mostrarPreco = true } = {}, { signal, onProgress } = {}) {
+  const [{ montarCarrossel }, { renderizarCard }, { genQrDataUrl }] = await Promise.all([
+    import("./cardCore.js"), import("./cardImagem.js"), import("./labels.js"),
+  ]);
+  const escolhidos = itens.slice(0, 8);
+  const urls = await primeirasFotos(escolhidos.map((i) => i.sku));
+  const entradas = escolhidos.map((i) => ({ sku: i.sku, url: urls[i.sku] })).filter((e) => e.url);
+  const fotos = entradas.length ? await prepararFotos(entradas, { signal, onProgress }) : {};
+  const numero = contato.whatsapp || "";
+  const qrContato = numero ? await genQrDataUrl(`https://wa.me/${numero}?text=${encodeURIComponent("Olá! Vi o anúncio da Nogária Outlet e quero atendimento.")}`) : null;
+  const ctxPorSku = Object.fromEntries(escolhidos.map((i) => [i.sku, { foto: fotos[i.sku] }]));
+  const slides = montarCarrossel(itens, titulo, formato, ctxPorSku, { tema, contato, mostrarPreco, qrContato, logoBranco: LOGO_BRANCO, logoRatio: 265 / 520 });
+  const saida = [];
+  for (let i = 0; i < slides.length; i++) {
+    saida.push({ nome: `${formato}-${String(i + 1).padStart(2, "0")}.png`, blob: await renderizarCard(slides[i]) });
+  }
+  return saida;
+}
