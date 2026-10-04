@@ -46,9 +46,11 @@ export function arredondarPsicologico(v, modo = "perto") {
 const r2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
 
 // item: linha de itens; derivado: retorno de derivarPreco(item,…) ({ recomendado, piso }).
-// opts: { hoje, faixas, arredondar=true, aprovacaoPct, markdown=true }.
+// opts: { hoje, faixas, arredondar=true, aprovacaoPct, markdown=true, permitirAumento=false }.
+// Por padrão a ferramenta só BAIXA preço (desconto por idade): nunca sobe acima do preço atual
+// nem define preço de item que ainda não tem (isso é decisão manual).
 export function calcularPrecoRapido(item, derivado, opts = {}) {
-  const { hoje = new Date(), faixas = FAIXAS_PADRAO, arredondar = true, markdown = true, aprovacaoPct = LIMITE_APROVACAO_PCT } = opts;
+  const { hoje = new Date(), faixas = FAIXAS_PADRAO, arredondar = true, markdown = true, aprovacaoPct = LIMITE_APROVACAO_PCT, permitirAumento = false } = opts;
   const atual = Number(item?.preco_ideal) > 0 ? Number(item.preco_ideal) : null;
   const recomendado = Number(derivado?.recomendado) || 0;
   const piso = Number(derivado?.piso) || 0;
@@ -56,23 +58,31 @@ export function calcularPrecoRapido(item, derivado, opts = {}) {
 
   if (!(recomendado > 0)) return { ...base, ignorado: "sem recomendação do motor (faltam referências)" };
 
+  if (atual == null && !permitirAumento) {
+    return { ...base, ignorado: `sem preço atual: defina manualmente (recomendado R$ ${Math.round(recomendado)})` };
+  }
+
   const dias = diasParado(item, hoje);
   const pct = markdown ? markdownPorIdade(dias, faixas) : 0;
   let alvo = r2(recomendado * (1 - pct / 100));
   alvo = arredondar ? arredondarPsicologico(alvo) : alvo;
 
   const motivos = [];
+  if (!permitirAumento && atual != null && alvo > atual) { alvo = atual; motivos.push("mantido o preço atual (a recomendação é maior)"); }
+  let abaixoDoPiso = false;
   if (piso > 0 && alvo < piso) {
-    alvo = arredondar ? arredondarPsicologico(piso, "cima") : Math.ceil(piso);
-    motivos.push("limitado ao piso");
+    const noPiso = arredondar ? arredondarPsicologico(piso, "cima") : Math.ceil(piso);
+    if (!permitirAumento && atual != null && noPiso > atual) abaixoDoPiso = true; // o preço atual já está abaixo do piso
+    else { alvo = noPiso; motivos.push("limitado ao piso"); }
   }
+  if (abaixoDoPiso) motivos.push("preço atual abaixo do piso: revisar manualmente");
   const pisoInviavel = !(piso > 0);
   if (pisoInviavel) motivos.push("piso inviável/indefinido");
 
   const delta = atual != null ? r2(alvo - atual) : null;
   const deltaPct = atual ? r2((delta / atual) * 100) : null;
   let aprovacao = false;
-  if (pisoInviavel) aprovacao = true;
+  if (pisoInviavel || abaixoDoPiso) aprovacao = true;
   if (deltaPct != null && deltaPct < -aprovacaoPct) { aprovacao = true; motivos.push(`queda de ${Math.abs(Math.round(deltaPct))}% sobre o preço atual`); }
   if (item?.classe === "A+" && atual != null && alvo !== atual) { aprovacao = true; motivos.push("item A+ exige aprovação"); }
   if (dias == null && markdown) motivos.push("sem data de entrada: sem desconto por idade");

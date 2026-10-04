@@ -122,7 +122,7 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
         campos: { foto: modelo === "lista" ? comFoto : comFoto, preco: mostrarPreco, qr: comQr },
         contato: { nome: contatoNome, ...(contatoBase || {}) },
       }, { signal: ctrl.signal, onProgress: setProgresso });
-      const nome = `${(titulo || "catalogo").replace(/[^\w]+/g, "_").slice(0, 40)}.pdf`;
+      const nome = `${(titulo || "catalogo").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "catalogo"}.pdf`;
       const mb = (blob.size / 1048576).toFixed(1);
       registrar("pdf");
       if (acao === "baixar") { baixarArquivo(blob, nome); setAviso(`PDF baixado · ${r.paginas} páginas · ${mb} MB`); }

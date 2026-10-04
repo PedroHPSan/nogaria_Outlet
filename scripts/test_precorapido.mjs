@@ -57,6 +57,18 @@ ok(r.aprovacao, "piso indefinido exige aprovação");
 r = calcularPrecoRapido({ sku: "I", preco_ideal: 500, disponivel_desde: dias(100) }, d(500, 100), { hoje: HOJE, arredondar: false });
 eq(r.novo, 350, "sem arredondar: 500 × 0,7 = 350");
 
+console.log("só baixa preço");
+r = calcularPrecoRapido({ sku: "J", preco_ideal: 400, disponivel_desde: dias(10) }, d(900, 100), { hoje: HOJE });
+eq(r.novo, 400, "recomendação maior que o atual → mantém o atual");
+ok(!r.aplicar, "e não aplica nada");
+r = calcularPrecoRapido({ sku: "K", preco_ideal: 400, disponivel_desde: dias(10) }, d(900, 100), { hoje: HOJE, permitirAumento: true });
+eq(r.novo, 899, "permitirAumento libera a subida (900 → 899)");
+r = calcularPrecoRapido({ sku: "L", disponivel_desde: dias(100) }, d(500, 100), { hoje: HOJE });
+ok(r.ignorado && r.ignorado.includes("sem preço atual") && !r.aplicar, "item sem preço não é precificado automaticamente");
+r = calcularPrecoRapido({ sku: "M", preco_ideal: 200, disponivel_desde: dias(100) }, d(500, 300), { hoje: HOJE });
+ok(r.aprovacao && !r.aplicar, "preço atual já abaixo do piso → revisão manual (não sobe sozinho)");
+ok(r.motivos.some((m) => m.includes("abaixo do piso")), "motivo explica o piso");
+
 console.log("plano em massa");
 const itens = [
   { sku: "1", preco_ideal: 500, disponivel_desde: dias(70) },

@@ -63,7 +63,7 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
                   <span className="flex-1 min-w-0 truncate text-gray-800">{l.item.produto}</span>
                   {l.ignorado ? <span className="text-gray-400">{l.ignorado}</span> : (
                     <span className={l.aprovacao ? "text-amber-700" : l.aplicar ? "text-emerald-700 font-semibold" : "text-gray-400"}>
-                      {l.atual != null ? fmtBRL(l.atual) : "—"} → {fmtBRL(l.novo)}{l.pctMarkdown ? ` (−${l.pctMarkdown}%)` : ""}
+                      {l.atual != null ? fmtBRL(l.atual) : "—"} → {fmtBRL(l.novo)}{l.pctMarkdown && l.novo !== l.atual ? ` (−${l.pctMarkdown}% idade)` : ""}
                     </span>
                   )}
                   {l.aprovacao && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" title={l.motivos.join("; ")} />}

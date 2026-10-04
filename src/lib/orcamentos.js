@@ -80,6 +80,11 @@ export async function cancelarOrcamento(orc) {
 // Converte em venda: 1 registrarVenda por SKU com o valor já com desconto rateado.
 export async function confirmarVenda(orc, user, { canal = "B2C / Venda direta" } = {}) {
   if (!podeTransitar(orc.status, "VENDIDO")) throw new Error(`Orçamento ${orc.codigo} está ${orc.status}.`);
+  // Trava contra revenda: outro orçamento (ou venda avulsa) pode ter levado o item antes.
+  const { data: atuais, error: eSel } = await supabase.from("itens").select("sku, status").in("sku", orc.itens.map((i) => i.sku));
+  if (eSel) throw eSel;
+  const jaVendidos = (atuais || []).filter((i) => ["VENDIDO", "ENTREGUE", "DESCARTE"].includes(i.status));
+  if (jaVendidos.length) throw new Error(`Já vendido/fora de estoque: ${jaVendidos.map((i) => i.sku).join(", ")}. Cancele ou ajuste o orçamento.`);
   const valores = valoresPorItem(orc.itens, orc.desconto_pct);
   const falhas = [];
   for (const v of valores) {
