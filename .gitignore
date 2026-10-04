@@ -9,3 +9,11 @@ supabase/.temp/
 # Fotos exportadas para assessoria (não versionar)
 fotos_assessoria/
 .superpowers/
+.vercel
+
+# Documentação local (não versionar)
+docs/
+
+# Gerados / fora do escopo do repo
+graphify-out/
+introducao-ciclo-de-vida-de-modelos/
