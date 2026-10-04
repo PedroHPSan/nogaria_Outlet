@@ -1,8 +1,10 @@
 // Modal de prévia do orçamento (1..10 itens): renderiza o HTML A4 num iframe
 // (srcDoc, sem o CSS do app) e oferece Copiar mensagem / WhatsApp / Salvar PDF.
 import React, { useEffect, useRef, useState } from "react";
-import { X, Loader2, Printer, Copy, MessageCircle, Check } from "lucide-react";
+import { X, Loader2, Printer, Copy, MessageCircle, Check, Save } from "lucide-react";
 import { montarOrcamento, imprimirAnuncio } from "../lib/anuncio";
+import { criarOrcamento, linkOrcamento } from "../lib/orcamentos";
+import { mensagemCliente } from "../lib/orcamentosCore";
 
 // A folha do PDF tem largura fixa de 210mm (≈794px a 96dpi); em tela estreita
 // não dá para "esticar" o iframe — o conteúdo cortaria. A prévia então mantém
@@ -10,12 +12,16 @@ import { montarOrcamento, imprimirAnuncio } from "../lib/anuncio";
 const A4_W = 794;   // 210mm em px @96dpi
 const A4_H = 1123;  // 297mm em px @96dpi
 
-export default function AnuncioModal({ itens = [], onClose }) {
+export default function AnuncioModal({ itens = [], user, onClose }) {
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState(null);   // { html, mensagem, link, total, semPreco, semFoto }
   const [erro, setErro] = useState(null);
   const [progresso, setProgresso] = useState({ feitas: 0, total: itens.length });
   const [copiado, setCopiado] = useState(false);
+  const [salvando, setSalvando] = useState(false);   // formulário "Salvar orçamento" aberto
+  const [form, setForm] = useState({ cliente: "", whats: "", desconto: "" });
+  const [salvo, setSalvo] = useState(null);          // orçamento persistido
+  const [erroSalvar, setErroSalvar] = useState(null);
   const areaRef = useRef(null);
   const [larguraArea, setLarguraArea] = useState(0);
 
@@ -62,6 +68,14 @@ export default function AnuncioModal({ itens = [], onClose }) {
       setTimeout(() => setCopiado(false), 1800);
     } catch { /* clipboard indisponível */ }
   };
+  const salvar = async () => {
+    setErroSalvar(null);
+    try {
+      const orc = await criarOrcamento(itens, { clienteNome: form.cliente, clienteWhatsapp: form.whats, descontoPct: Number(form.desconto) || 0 }, user);
+      setSalvo(orc);
+      await navigator.clipboard?.writeText(mensagemCliente(orc, linkOrcamento(orc.slug)));
+    } catch (e) { setErroSalvar(e.message || "Falha ao salvar (a migration de orçamentos já foi aplicada?)."); }
+  };
   const abrirWhats = () => { if (!dados) return; try { window.open(dados.link, "_blank"); } catch { /* noop */ } };
 
   return (
@@ -107,8 +121,30 @@ export default function AnuncioModal({ itens = [], onClose }) {
         </div>
       </div>
 
+      {salvando && !loading && dados && (
+        <div className="p-3 border-t border-gray-200 bg-white space-y-2 max-w-lg mx-auto w-full">
+          {salvo ? (
+            <p className="text-sm text-emerald-700"><b>{salvo.codigo}</b> salvo · mensagem com o link copiada. Gerencie em Vendas → Orçamentos.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} placeholder="Cliente" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                <input value={form.whats} onChange={(e) => setForm({ ...form, whats: e.target.value })} placeholder="WhatsApp (opcional)" inputMode="tel" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                <input value={form.desconto} onChange={(e) => setForm({ ...form, desconto: e.target.value })} placeholder="Desconto % (opcional)" inputMode="decimal" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                <button onClick={salvar} className="rounded-lg bg-orange-500 text-white text-sm font-bold">Salvar orçamento</button>
+              </div>
+              {erroSalvar && <p className="text-xs text-red-600">{erroSalvar}</p>}
+            </>
+          )}
+        </div>
+      )}
+
       {!loading && dados && (
         <div className="p-3 border-t border-gray-200 bg-white flex gap-2 max-w-lg mx-auto w-full">
+          <button onClick={() => setSalvando((v) => !v)}
+            className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-sm font-semibold border border-orange-200 text-orange-700 bg-orange-50" aria-label="Salvar orçamento">
+            <Save className="w-4 h-4" />
+          </button>
           <button onClick={copiar}
             className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-3 text-sm font-semibold border border-gray-300 text-gray-700 bg-white">
             {copiado ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />} {copiado ? "Copiado" : "Copiar msg"}

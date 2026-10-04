@@ -4,7 +4,7 @@
 // rodapé numerado e bloco de fechamento parcial. Renderiza offline (só
 // Arial/Helvetica + logos base64), impresso pelo iframe de portfolio.js.
 import { escapeHtml } from "./portfolio";
-import { CATALOGO_ESTADO_BADGE } from "./catalogo";
+import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogo";
 import { precoVenda } from "./export";
 import { LOGO_VERTICAL, LOGO_HORIZONTAL, LOGO_BRANCO } from "./catalogoLogos";
 
@@ -63,10 +63,10 @@ function specCurta(it) {
 // ───────────────────────── paginação (estimativa em mm) ─────────────────────────
 // Distribui as seções em páginas A4 explícitas para ter chrome (cabeçalho/rodapé)
 // e numeração por página — auto-flow do CSS não garante isso de forma confiável.
-function paginar(secoes, { comFoto, parcial }) {
+function paginar(secoes, { comFoto, parcial, comQr }) {
   const USABLE = 250;            // altura útil após padding + phead + pfoot-bar
   const SECHEAD = 14;            // cabeçalho de seção
-  const ROW = comFoto ? 96 : 58; // linha de 2 cards (+ gap)
+  const ROW = (comFoto ? 96 : 58) + 4 + (comQr ? 6 : 0); // linha de 2 cards (+ gap); +4 frase de condição, +6 QR
   const CLOSING = 62;            // bloco de fechamento
 
   const paginas = [];
@@ -134,12 +134,14 @@ function renderSectionHead(sec, cont) {
   return `<div class="sechead"><svg class="secicon" viewBox="0 0 24 24">${iconeDoGrupo(sec.grupoRaw || sec.titulo)}</svg><h2>${escapeHtml(String(sec.titulo).toUpperCase())}${cont ? " (CONT.)" : ""}</h2></div>`;
 }
 
-function renderCard(card, { comFoto, mostrarPreco, fotos }) {
+function renderCard(card, { comFoto, mostrarPreco, fotos, qrs }) {
   const it = card.rep;
   const badge = badgeDoEstado(it.estado);
   const pmodel = modeloLinha(it);
   const spec = specCurta(it);
   const foto = comFoto ? fotos?.[it.sku] : null;
+  const frase = fraseCondicao(it);
+  const qr = qrs?.[it.sku];
   return `<div class="card${foto ? " foto" : ""}">
     <div class="stripe"></div>
     <div class="cbody">
@@ -148,9 +150,13 @@ function renderCard(card, { comFoto, mostrarPreco, fotos }) {
       <div class="pname">${escapeHtml(it.produto || it.sku)}</div>
       ${pmodel ? `<div class="pmodel">${escapeHtml(pmodel)}</div>` : ""}
       <div class="pspec">${escapeHtml(spec)}</div>
+      ${frase ? `<div class="pcond">${escapeHtml(frase)}</div>` : ""}
       <div class="pfoot">
-        <span class="price">${mostrarPreco ? precoCatalogo(precoVenda(it)) : ""}</span>
-        ${card.qtd > 1 ? `<span class="qty">${card.qtd} disponíveis</span>` : ""}
+        <div class="pinfo">
+          <span class="price">${mostrarPreco ? precoCatalogo(precoVenda(it)) : ""}</span>
+          <span class="qty">${card.qtd > 1 ? `${card.qtd} disponíveis · ` : ""}${escapeHtml(it.sku)}</span>
+        </div>
+        ${qr ? `<img class="qr" src="${escapeHtml(qr)}" alt="QR WhatsApp ${escapeHtml(it.sku)}">` : ""}
       </div>
     </div>
   </div>`;
@@ -204,7 +210,9 @@ html,body { margin:0; padding:0; font-family:Arial,"Helvetica Neue",Helvetica,sa
 .pname{ font-size:10.3pt; font-weight:800; color:var(--ink); line-height:1.2; padding-right:82px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .pmodel{ font-size:7.7pt; color:#8693a0; letter-spacing:.4px; text-transform:uppercase; margin:3px 0 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pspec{ font-size:8.2pt; color:#5f6e7a; line-height:1.35; min-height:21px; }
-.pfoot{ display:flex; align-items:baseline; justify-content:space-between; margin-top:8px; padding-top:7px; border-top:1px dashed var(--line); }
+.pcond{ font-size:7.6pt; color:#2f6f94; font-weight:700; margin-top:2px; }
+.pinfo{ display:flex; flex-direction:column; gap:1px; min-width:0; } .qr{ width:13mm; height:13mm; flex:none; display:block; }
+.pfoot{ display:flex; align-items:flex-end; justify-content:space-between; margin-top:8px; padding-top:7px; border-top:1px dashed var(--line); }
 .price{ font-size:15pt; font-weight:800; color:var(--navy); } .qty{ font-size:7.4pt; color:#8a98a5; font-weight:700; }
 .card.foto .cbody{ padding-top:0; } .card.foto .photo{ width:100%; height:34mm; object-fit:contain; background:#f6f9fb; border-bottom:1px solid var(--line); margin:0 -11px 8px; width:calc(100% + 22px); }
 .card.foto .pname{ padding-right:0; }
@@ -213,7 +221,7 @@ html,body { margin:0; padding:0; font-family:Arial,"Helvetica Neue",Helvetica,sa
 `;
 
 // Monta o HTML completo do catálogo.
-// opts: { titulo, subtitulo, edicao, parcial, comFoto, mostrarPreco, fotos, tagline }
+// opts: { titulo, subtitulo, edicao, parcial, comFoto, mostrarPreco, fotos, qrs {sku: dataUrl}, tagline }
 export function gerarCatalogoHTML(secoes, opts = {}) {
   const {
     titulo = "Catálogo de Produtos",
@@ -223,10 +231,11 @@ export function gerarCatalogoHTML(secoes, opts = {}) {
     comFoto = false,
     mostrarPreco = true,
     fotos = {},
+    qrs = null,
     tagline = "Produtos selecionados · atacado e varejo",
   } = opts;
 
-  const paginas = paginar(secoes, { comFoto, parcial });
+  const paginas = paginar(secoes, { comFoto, parcial, comQr: !!qrs });
 
   const conteudo = paginas
     .map((pagina, i) => {
@@ -234,7 +243,7 @@ export function gerarCatalogoHTML(secoes, opts = {}) {
         .map(
           (seg) =>
             renderSectionHead(seg.sec, seg.cont) +
-            `<div class="grid">${seg.cards.map((c) => renderCard(c, { comFoto, mostrarPreco, fotos })).join("")}</div>`
+            `<div class="grid">${seg.cards.map((c) => renderCard(c, { comFoto, mostrarPreco, fotos, qrs })).join("")}</div>`
         )
         .join("");
       return `<div class="sheet">${renderHead(parcial)}${corpo}${pagina.closing ? renderClosing() : ""}${renderFootBar(i + 2, parcial)}</div>`;

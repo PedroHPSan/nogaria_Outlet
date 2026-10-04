@@ -18,7 +18,13 @@ const fotosUrl = { A1: "https://x/a1.jpg" }; // B1 sem foto
 
 console.log("montarPayload — estrutura e preço visível");
 const pv = montarPayload(secoes, { titulo: "Cat", edicao: "Jul/2026", subtitulo: "Ferramentas", mostrarPreco: true }, fotosUrl);
-eq(pv.versao, 1, "versao = 1");
+eq(pv.versao, 2, "versao = 2");
+eq(pv.secoes[0].cards[0].sku, "A1", "sku no card (v2)");
+eq(pv.contato, null, "sem contato → null (página usa o da empresa)");
+const pc = montarPayload(secoes, { contato: { nome: "Ana", whatsapp: "(91) 98888-7777", extras: [] } }, {});
+eq(pc.contato, null, "WhatsApp sem DDI → descartado");
+const pc2 = montarPayload(secoes, { contato: { nome: "Ana", whatsapp: "5591988887777", label: "+55 91 98888-7777" } }, {});
+eq(pc2.contato.whatsapp, "5591988887777", "contato com DDI mantido");
 eq(pv.titulo, "Cat", "titulo preservado");
 eq(pv.mostrarPreco, true, "mostrarPreco true");
 eq(pv.totalItens, 3, "totalItens = Σ qtd (2 + 1)");
