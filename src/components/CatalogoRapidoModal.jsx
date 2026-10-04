@@ -11,13 +11,16 @@ import { publicarCatalogo } from "../lib/catalogoPublico";
 import { textoWhatsApp, textoInstagram, csvCatalogo } from "../lib/divulgacao";
 import { FORMATOS } from "../lib/cardCore";
 import { normalizarSpec } from "../lib/catalogoSpec";
+import { carregarContato } from "../lib/empresaConfig";
+import { listarPredefinicoes, salvarPredefinicao, registrarHistorico, listarHistorico } from "../lib/catalogoPredefinicoes";
+import EmpresaContatoModal from "./EmpresaContatoModal";
 import { MODELOS, TEMAS } from "../lib/catalogoSpec";
 import { imprimirPortfolio } from "../lib/portfolio";
 
 const edicaoAtual = () =>
   new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicial = "Catálogo de Produtos", onClose }) {
+export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicial = "Catálogo de Produtos", user, onClose }) {
   const [itens, setItens] = useState(null);
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState(null);
@@ -33,9 +36,43 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
   const [aviso, setAviso] = useState(null);
   const [formatoCard, setFormatoCard] = useState("feed");
   const [link, setLink] = useState(null);
+  const [contatoBase, setContatoBase] = useState(null);   // empresa_config (ou EMPRESA)
+  const [contatoAberto, setContatoAberto] = useState(false);
+  const [predefs, setPredefs] = useState([]);
+  const [historico, setHistorico] = useState([]);
   const [gerando, setGerando] = useState(false);
   const [progresso, setProgresso] = useState(null);
   const abortRef = useRef(null);
+
+  useEffect(() => {
+    carregarContato().then(setContatoBase);
+    listarPredefinicoes().then(setPredefs);
+    listarHistorico().then(setHistorico);
+  }, []);
+
+  // Estado atual do formulário como spec serializável (predefinições e histórico).
+  const specAtual = () => ({
+    modelo, tema, colunas, titulo, validade,
+    campos: { foto: comFoto, preco: mostrarPreco, qr: comQr },
+    contato: { nome: contatoNome, ...(contatoBase || {}) },
+  });
+  const aplicarPredef = (id) => {
+    const p = predefs.find((x) => x.id === id);
+    if (!p) return;
+    const sp = normalizarSpec(p.spec);
+    setModelo(sp.modelo); setTema(sp.tema); setColunas(sp.colunas); setTitulo(sp.titulo); setValidade(sp.validade);
+    setComFoto(sp.campos.foto); setMostrarPreco(sp.campos.preco); setComQr(sp.campos.qr); setContatoNome(sp.contato.nome);
+  };
+  const salvarComoPredef = async () => {
+    const nome = window.prompt("Nome da predefinição:", titulo);
+    if (!nome?.trim()) return;
+    try { await salvarPredefinicao(nome, specAtual(), user); setPredefs(await listarPredefinicoes()); setAviso("Predefinição salva."); }
+    catch (e) { setErro(e.message || "Falha ao salvar (a migration de configuração já foi aplicada?)."); }
+  };
+  const registrar = async (formato) => {
+    await registrarHistorico({ titulo, formato, nItens: itens?.length || 0, spec: specAtual() }, user);
+    listarHistorico().then(setHistorico);
+  };
 
   useEffect(() => {
     let cancel = false;
@@ -83,10 +120,11 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
       const { blob, resumo: r } = await gerarCatalogoPdfDeItens(itens, {
         modelo, tema, colunas, titulo, edicao: edicaoAtual(), validade,
         campos: { foto: modelo === "lista" ? comFoto : comFoto, preco: mostrarPreco, qr: comQr },
-        contato: { nome: contatoNome },
+        contato: { nome: contatoNome, ...(contatoBase || {}) },
       }, { signal: ctrl.signal, onProgress: setProgresso });
       const nome = `${(titulo || "catalogo").replace(/[^\w]+/g, "_").slice(0, 40)}.pdf`;
       const mb = (blob.size / 1048576).toFixed(1);
+      registrar("pdf");
       if (acao === "baixar") { baixarArquivo(blob, nome); setAviso(`PDF baixado · ${r.paginas} páginas · ${mb} MB`); }
       else {
         const res = await compartilharArquivo(blob, nome, { titulo });
@@ -100,7 +138,7 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
   };
 
   // ── Divulgação: tudo a partir dos MESMOS itens/contato/validade do catálogo ──
-  const contato = () => normalizarSpec({ contato: { nome: contatoNome } }).contato;
+  const contato = () => normalizarSpec({ contato: { nome: contatoNome, ...(contatoBase || {}) } }).contato;
   const rotuloContato = () => { const c = contato(); return [c.nome, c.whatsappLabel].filter(Boolean).join(" · "); };
   const executar = async (fn) => {
     setGerando(true); setErro(null); setAviso(null);
@@ -114,19 +152,20 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
     const secoes = agruparCatalogo(dedupCatalogo(itens), "categoria");
     const c = contato();
     const res = await publicarCatalogo(secoes, { titulo, edicao: edicaoAtual(), comFoto, mostrarPreco, contato: { nome: c.nome, whatsapp: c.whatsapp, label: c.whatsappLabel, extras: c.extras } });
-    setLink(res.url);
+    setLink(res.url); registrar("link");
     try { await navigator.clipboard.writeText(res.url); } catch { /* sem clipboard */ }
     setAviso("Link copiado (vale 30 dias).");
   });
 
   const textoWpp = () => executar(async () => {
     const msg = textoWhatsApp(itens, { titulo, link, validade, contato: rotuloContato(), mostrarPreco });
-    const r = await compartilharTexto(msg, titulo);
+    const r = await compartilharTexto(msg, titulo); registrar("texto");
     setAviso(r === "copiado" ? "Texto copiado — cole no WhatsApp." : r === "compartilhado" ? "Compartilhado." : null);
   });
 
   const legendaIg = () => executar(async () => {
     await navigator.clipboard.writeText(textoInstagram(itens, { titulo, validade, contato: rotuloContato(), mostrarPreco }));
+    registrar("texto");
     setAviso("Legenda copiada (≤ 2.200 caracteres, com hashtags).");
   });
 
@@ -134,12 +173,13 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
     const c = contato();
     const arqs = await gerarCardsDivulgacao(itens, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco }, { signal, onProgress: setProgresso });
     const r = await compartilharArquivos(arqs, { titulo });
+    registrar("cards");
     if (r !== "cancelado") setAviso(`${arqs.length} imagens ${r === "baixado" ? "baixadas" : "compartilhadas"}.`);
   });
 
   const baixarCsv = () => executar(async () => {
     const blob = new Blob([csvCatalogo(itens, { linkDe: (it) => linkInteresseItem(it, contato().whatsapp) })], { type: "text/csv;charset=utf-8" });
-    baixarArquivo(blob, "catalogo-nogaria.csv");
+    baixarArquivo(blob, "catalogo-nogaria.csv"); registrar("csv");
     setAviso("CSV baixado (nome, preço, descrição, código, link).");
   });
 
@@ -201,7 +241,15 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
               )}
               <input value={validade} onChange={(e) => setValidade(e.target.value)} placeholder="Preços válidos até (dd/mm)" className="rounded-lg border border-gray-300 px-2 py-2 text-sm" />
               <input value={contatoNome} onChange={(e) => setContatoNome(e.target.value)} placeholder="Nome do vendedor" className="col-span-2 rounded-lg border border-gray-300 px-2 py-2 text-sm" />
+              <select defaultValue="" onChange={(e) => { aplicarPredef(e.target.value); e.target.value = ""; }} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+                <option value="">Predefinições…</option>
+                {predefs.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+              <button onClick={salvarComoPredef} className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-semibold">Salvar predefinição</button>
             </div>
+            <button onClick={() => setContatoAberto(true)} className="text-xs font-semibold text-orange-600 underline">
+              Contatos da Nogária: {contatoBase ? contatoBase.whatsappLabel : "…"}{contatoBase?.extras?.length ? ` +${contatoBase.extras.length}` : ""} (editar)
+            </button>
 
             {progresso && <p className="text-xs text-gray-500">Comprimindo {progresso.feitas} de {progresso.total} fotos</p>}
             <div className="flex gap-2">
@@ -233,9 +281,18 @@ export default function CatalogoRapidoModal({ skus, salaId, titulo: tituloInicia
               </div>
               {link && <p className="text-xs text-gray-500 break-all">{link}</p>}
             </div>
+            {historico.length > 0 && (
+              <details className="text-xs text-gray-500">
+                <summary className="cursor-pointer font-semibold">Gerados recentemente</summary>
+                <ul className="mt-1 space-y-0.5">
+                  {historico.map((h) => <li key={h.id}>{new Date(h.criado_em).toLocaleDateString("pt-BR")} · {h.formato} · {h.titulo} · {h.n_itens} itens</li>)}
+                </ul>
+              </details>
+            )}
           </>
         )}
 
+        {contatoAberto && <EmpresaContatoModal user={user} onClose={() => setContatoAberto(false)} onSalvo={() => carregarContato().then(setContatoBase)} />}
         {erro && <p className="text-sm text-red-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {erro}</p>}
       </div>
     </div>

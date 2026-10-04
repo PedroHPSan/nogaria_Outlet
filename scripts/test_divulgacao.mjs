@@ -1,6 +1,6 @@
 // Teste dos textos de divulgação e do layout dos cards. Rode: npm run test:divulgacao
 import assert from "node:assert/strict";
-import { hashtagDe, hashtagsPara, textoWhatsApp, textoInstagram, csvCatalogo, legendaCard, LIMITE_LEGENDA_IG, LIMITE_HASHTAGS_IG } from "../src/lib/divulgacao.js";
+import { neutralizarFormula, hashtagDe, hashtagsPara, textoWhatsApp, textoInstagram, csvCatalogo, legendaCard, LIMITE_LEGENDA_IG, LIMITE_HASHTAGS_IG } from "../src/lib/divulgacao.js";
 import { FORMATOS, cardProduto, montarCarrossel } from "../src/lib/cardCore.js";
 
 let n = 0;
@@ -41,6 +41,13 @@ ok(csv.startsWith("\uFEFFnome,preco,descricao,codigo,link"), "BOM + cabeçalho")
 ok(csv.includes('"Mesa ""A"", grande"'), "aspas escapadas");
 ok(csv.includes("100.00") && csv.includes("https://x/NOG1"), "preço e link");
 ok(legendaCard(it(1)).includes("NOG1"), "legenda do card cita SKU");
+eq(neutralizarFormula("=HYPERLINK(\"http://x\")"), "'=HYPERLINK(\"http://x\")", "= vira texto");
+eq(neutralizarFormula("+55 91"), "'+55 91", "+ vira texto");
+eq(neutralizarFormula("@cmd"), "'@cmd", "@ vira texto");
+eq(neutralizarFormula("Mesa"), "Mesa", "texto normal intacto");
+const evil = csvCatalogo([it(1, { produto: "=1+1", marca: "-cmd" })]);
+ok(evil.includes("'=1+1") && !/(^|,)=1\+1/m.test(evil), "nome malicioso neutralizado no CSV");
+ok(csvCatalogo([it(1)]).includes(",100.00,"), "preço numérico não recebe apóstrofo");
 
 console.log("cards");
 const c = cardProduto(it(2), "story", { contato: { nome: "Ana", whatsappLabel: "+55 91" } });

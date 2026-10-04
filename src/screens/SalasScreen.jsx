@@ -366,7 +366,7 @@ function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, 
 
       {catalogoOpen && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <CatalogoRapidoModal salaId={sala.codigo} titulo={`Catálogo — ${sala.nome || sala.codigo}`} onClose={() => setCatalogoOpen(false)} />
+          <CatalogoRapidoModal salaId={sala.codigo} user={user} titulo={`Catálogo — ${sala.nome || sala.codigo}`} onClose={() => setCatalogoOpen(false)} />
         </Suspense>
       )}
 

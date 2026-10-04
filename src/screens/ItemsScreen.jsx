@@ -561,7 +561,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
       {catalogoSkus && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <CatalogoRapidoModal skus={catalogoSkus} titulo="Catálogo Nogária Outlet" onClose={() => setCatalogoSkus(null)} />
+          <CatalogoRapidoModal skus={catalogoSkus} user={user} titulo="Catálogo Nogária Outlet" onClose={() => setCatalogoSkus(null)} />
         </Suspense>
       )}
     </div>

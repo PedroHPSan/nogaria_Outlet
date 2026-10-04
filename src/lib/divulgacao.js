@@ -70,8 +70,11 @@ export function textoInstagram(itens, { titulo = "Novidades no outlet", validade
 
 export const legendaCard = (it) => `${it.produto || it.sku}${preco(it) > 0 ? ` por ${brl(preco(it))}` : ""} · ${fraseCondicao(it) || "consulte a condição"} · ${it.sku}`;
 
-const csvCel = (v) => {
-  const s = String(v ?? "");
+// Células de TEXTO que começam com = + - @ (ou tab/CR) viram fórmula no Excel/Sheets
+// (injeção de fórmula via nome de produto): prefixa apóstrofo para tratá-las como texto.
+export const neutralizarFormula = (v) => (/^[=+\-@\t\r]/.test(String(v ?? "")) ? `'${v}` : String(v ?? ""));
+const csvCel = (v, { texto = true } = {}) => {
+  const s = texto ? neutralizarFormula(v) : String(v ?? "");
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
@@ -85,5 +88,6 @@ export function csvCatalogo(itens, { linkDe } = {}) {
     it.sku,
     linkDe ? linkDe(it) : "",
   ]);
-  return `\uFEFF${[cab, ...linhas].map((l) => l.map(csvCel).join(",")).join("\r\n")}\r\n`;
+  // coluna 1 (preço) é numérica gerada por nós: não passa pela neutralização de texto.
+  return `\uFEFF${[cab, ...linhas].map((l) => l.map((c, i) => csvCel(c, { texto: i !== 1 })).join(",")).join("\r\n")}\r\n`;
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { normalizarSpec, specPadrao } from "../src/lib/catalogoSpec.js";
 import { montarCatalogoPdf, formatarPreco, precoDe } from "../src/lib/catalogoPdfCore.js";
 import { dedupCatalogo, agruparCatalogo } from "../src/lib/catalogoCore.js";
+import { configParaContato, rotuloWhatsApp } from "../src/lib/empresaConfigCore.js";
 
 let n = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); n++; console.log(`  ok  ${m}`); };
@@ -58,5 +59,14 @@ ok(textos(c.paginas[0]).some((t) => t.includes("preços válidos até 15/10")), 
 ok(textos(c.paginas[0]).includes("Ana"), "capa mostra vendedor");
 ok(textos(c.paginas[0]).some((t) => t.includes("Instagram: @nogaria")), "capa mostra contato extra");
 ok(textos(c.paginas.at(-1)).includes("Ana"), "fechamento mostra vendedor");
+
+console.log("contato configurável");
+eq(rotuloWhatsApp("5591983929085"), "+55 91 98392-9085", "rótulo BR");
+eq(configParaContato({}).whatsapp, specPadrao().contato.whatsapp, "sem config → EMPRESA");
+const cc = configParaContato({ whatsapp: "(91) 98888-7777", instagram: "@nogaria", site: " ", horario: "Seg–Sáb" });
+eq(cc.whatsapp, "91988887777".length >= 12 ? "91988887777" : specPadrao().contato.whatsapp, "WhatsApp sem DDI → EMPRESA");
+const cc2 = configParaContato({ whatsapp: "5591988887777", instagram: "@nogaria", site: " ", horario: "Seg–Sáb" });
+eq(cc2.whatsapp, "5591988887777", "WhatsApp com DDI usado");
+eq(cc2.extras.map((e) => e.rotulo), ["Instagram", "Horário"], "extras só dos campos preenchidos");
 
 console.log(`\n${n} asserções OK`);
