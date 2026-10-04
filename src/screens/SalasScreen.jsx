@@ -9,11 +9,12 @@ import { buscarViasImpressaoSala } from "../lib/printLog";
 import { CLASSE_STYLE } from "../lib/model";
 import {
   X, Loader2, ScanLine, ArrowRight, AlertTriangle, DoorOpen, Package, Boxes,
-  ChevronRight, ChevronLeft, Plus, Search, Printer, QrCode, History, Trash2, Pencil,
+  ChevronRight, ChevronLeft, Plus, Search, Printer, QrCode, History, Trash2, Pencil, BookOpen,
 } from "lucide-react";
 
 const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
 const LazyLabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
+const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
 
 const eventoSalaLabel = (a) => ({
   "sala:criada": "sala criada", "sala:editada": "sala editada",
@@ -161,6 +162,7 @@ function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, 
   const [printLabels, setPrintLabels] = useState(null);
   const [vias, setVias] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [catalogoOpen, setCatalogoOpen] = useState(false);
   const [scanMsg, setScanMsg] = useState(null); // { tom, texto }
   const [pendente, setPendente] = useState(null); // { sku, caixa_id } aguardando confirmar retirada
   const [erro, setErro] = useState(null);
@@ -267,6 +269,10 @@ function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, 
             className="w-full flex items-center justify-center gap-1.5 bg-gray-900 text-white rounded-xl py-2.5 text-sm font-bold active:bg-gray-800">
             <QrCode className="w-4 h-4" /> Encher sala (escanear caixas/itens)
           </button>
+          <button onClick={() => setCatalogoOpen(true)}
+            className="w-full flex items-center justify-center gap-1.5 bg-orange-500 text-white rounded-xl py-2.5 text-sm font-bold active:bg-orange-600">
+            <BookOpen className="w-4 h-4" /> Catálogo da sala (PDF)
+          </button>
           {/* Alternativa ao scan: digitar o código da caixa (CX/MALA) ou o SKU do item. */}
           <form onSubmit={(e) => { e.preventDefault(); const c = manualCodigo.trim(); if (c) { handleScan(c); setManualCodigo(""); } }} className="flex gap-2">
             <input value={manualCodigo} onChange={(e) => setManualCodigo(e.target.value)}
@@ -355,6 +361,12 @@ function SalaDetalhe({ sala, conteudo, hist, user, onBack, onClose, onOpenItem, 
       {printLabels && (
         <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <LazyLabelPrint labels={printLabels} user={user} onClose={fecharImpressao} />
+        </Suspense>
+      )}
+
+      {catalogoOpen && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <CatalogoRapidoModal salaId={sala.codigo} titulo={`Catálogo — ${sala.nome || sala.codigo}`} onClose={() => setCatalogoOpen(false)} />
         </Suspense>
       )}
 

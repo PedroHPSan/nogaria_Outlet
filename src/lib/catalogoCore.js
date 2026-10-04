@@ -3,7 +3,8 @@
 // importável em testes Node sem puxar a cadeia do cliente. catalogo.js reexporta.
 import { precoVenda } from "./export.js";
 import { ordenarTamanhos, tamanhoLabel } from "./tamanhos.js";
-import { STATUS_FORA_ESTOQUE } from "./model.js";
+import { STATUS_FORA_ESTOQUE, embalagemLabel } from "./model.js";
+import { waLink } from "./empresa.js";
 
 export const DESTINO_SEM = "__sem__"; // espelha o sentinela do ItemsScreen
 
@@ -22,6 +23,37 @@ export const CATALOGO_ESTADO_BADGE = {
   "Usado sem teste": { txt: "Como está", cls: "asis" },
   Avariado: { txt: "Como está", cls: "asis" },
 };
+
+// Frase curta de condição para o cliente (abaixo do selo). A embalagem só entra
+// quando o produto é novo/caixa aberta e a embalagem não está perfeita.
+const FRASE_ESTADO = {
+  novo: "Produto novo",
+  aberta: "Produto novo, embalagem aberta ou avariada",
+  semi: "Usado, em funcionamento",
+  asis: "Vendido no estado em que se encontra",
+};
+export function fraseCondicao(it) {
+  const b = CATALOGO_ESTADO_BADGE[(it?.estado || "").trim()];
+  if (!b) return "";
+  const base = FRASE_ESTADO[b.cls] || "";
+  const emb = it.cond_embalagem;
+  if ((b.cls === "novo" || b.cls === "aberta") && emb && emb !== "PERFEITA") {
+    return `${base} · caixa ${embalagemLabel(emb).toLowerCase()}`;
+  }
+  return base;
+}
+
+// Mensagem que o cliente dispara ao escanear o QR do card (wa.me com o SKU).
+export const linkInteresseItem = (it) =>
+  waLink(`Olá! Tenho interesse no item ${it.sku} (${it.produto || "produto"}) do catálogo Nogária Outlet.`);
+
+// Seleção/sala → catálogo: separa o que entrou do que ficou de fora (sem preço,
+// sem condição mapeada ou fora de estoque) para avisar o vendedor.
+export function resumoSelecao(skusPedidos, itens) {
+  const entrou = new Set((itens || []).map((i) => i.sku));
+  const fora = (skusPedidos || []).filter((s) => !entrou.has(s));
+  return { incluidos: entrou.size, fora };
+}
 
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 

@@ -8,19 +8,32 @@ import { DESTINO_SEM, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE } from "./c
 // Reexporta o núcleo puro para os consumidores antigos (PortfolioScreen, template).
 export {
   DESTINO_SEM, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE,
-  dedupCatalogo, agruparCatalogo,
+  dedupCatalogo, agruparCatalogo, fraseCondicao, linkInteresseItem, resumoSelecao,
 } from "./catalogoCore.js";
+
+const SKU_CHUNK = 150; // .in("sku", …) vai na URL: lotes pequenos evitam estourar o limite
 
 // Busca paginada (PostgREST corta em 1.000 linhas) replicando os operadores do
 // ItemsScreen. `filtros` aceita: lote, classe, status, grupo, destino, caixaId,
-// pendMedida, semCaixa, semEtiq, semClasse, semFoto, q, e os flags de regra
+// pendMedida, semCaixa, semEtiq, semClasse, semFoto, q, skus[] (seleção), salaId
+// (itens da sala, inclusive os que estão em caixas dela) e os flags de regra
 // soComPreco/statusPadrao/soComEstado (todos default true).
 export async function listarItensCatalogo(filtros = {}) {
   const {
     lote, classe, status, grupo, destino, caixaId,
-    pendMedida, semCaixa, semEtiq, semClasse, semFoto, q,
+    pendMedida, semCaixa, semEtiq, semClasse, semFoto, q, skus, salaId,
     soComPreco = true, statusPadrao = true, soComEstado = true,
   } = filtros;
+  if (skus) {
+    if (!skus.length) return [];
+    if (skus.length > SKU_CHUNK) {
+      const partes = [];
+      for (let i = 0; i < skus.length; i += SKU_CHUNK) {
+        partes.push(await listarItensCatalogo({ ...filtros, skus: skus.slice(i, i + SKU_CHUNK) }));
+      }
+      return partes.flat().sort((a, b) => (b.preco_ideal || 0) - (a.preco_ideal || 0) || String(a.sku).localeCompare(String(b.sku)));
+    }
+  }
   const excluirStatus = `(${CATALOGO_STATUS_EXCLUIR.join(",")})`;
 
   const PAGE = 1000;
@@ -37,6 +50,8 @@ export async function listarItensCatalogo(filtros = {}) {
     if (destino === DESTINO_SEM) query = query.is("destino", null);
     else if (destino) query = query.eq("destino", destino);
     if (caixaId) query = query.eq("caixa_id", caixaId);
+    if (skus) query = query.in("sku", skus);
+    if (salaId) query = query.eq("sala_id", salaId);
     if (pendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
     if (semCaixa) query = query.is("caixa_id", null);
     if (semEtiq) query = query.neq("status", "A_CATALOGAR").eq("etiqueta_impressa", false);

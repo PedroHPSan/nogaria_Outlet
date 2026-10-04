@@ -9,12 +9,13 @@ import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/cai
 import { contarACatalogarPorLote } from "../lib/conferencia";
 import { LIMITE_ORCAMENTO } from "../lib/anuncio";
 import { alternarSelecao, marcarTodos, desmarcarTodos, todosSelecionados, selecionados } from "../lib/selecao";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList, FileText } from "lucide-react";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList, FileText, BookOpen } from "lucide-react";
 import FotoInputs from "../components/FotoInputs";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
+const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
@@ -60,6 +61,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [selected, setSelected] = useState(() => new Map());
   const [printLabels, setPrintLabels] = useState(null);
   const [orcamento, setOrcamento] = useState(null); // itens do orçamento em prévia
+  const [catalogoSkus, setCatalogoSkus] = useState(null); // SKUs do catálogo rápido (seleção)
   const [boxPicker, setBoxPicker] = useState(false);
   const [catalogarPicker, setCatalogarPicker] = useState(false);
   const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
@@ -100,6 +102,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     const escolhidos = selecionados(selected, itens);
     if (!escolhidos.length || escolhidos.length > LIMITE_ORCAMENTO) return;
     setOrcamento(escolhidos);
+  };
+
+  // Catálogo PDF de TODOS os selecionados (sem limite de 10: é catálogo, não orçamento).
+  const catalogarSelecionados = () => {
+    const escolhidos = selecionados(selected, itens);
+    if (escolhidos.length) setCatalogoSkus(escolhidos.map((i) => i.sku));
   };
 
   const abrirItem = (it) => {
@@ -492,6 +500,10 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <FileText className="w-4 h-4" />
               {selected.size > LIMITE_ORCAMENTO ? `Orçamento (máx. ${LIMITE_ORCAMENTO})` : `Orçamento (${selected.size})`}
             </button>
+            <button onClick={catalogarSelecionados}
+              className="flex-1 rounded-xl py-3.5 font-bold bg-orange-500 text-white shadow-lg flex items-center justify-center gap-2">
+              <BookOpen className="w-4 h-4" /> Catálogo ({selected.size})
+            </button>
           </div>
         </div>
       )}
@@ -526,6 +538,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
       {orcamento && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <AnuncioModal itens={orcamento} onClose={() => setOrcamento(null)} />
+        </Suspense>
+      )}
+
+      {catalogoSkus && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <CatalogoRapidoModal skus={catalogoSkus} titulo="Catálogo Nogária Outlet" onClose={() => setCatalogoSkus(null)} />
         </Suspense>
       )}
     </div>

@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import {
   dedupCatalogo, agruparCatalogo, CATALOGO_ESTADO_BADGE, CATALOGO_STATUS_EXCLUIR,
+  fraseCondicao, linkInteresseItem, resumoSelecao,
 } from "../src/lib/catalogoCore.js";
 
 let passou = 0;
@@ -48,5 +49,19 @@ eq(CATALOGO_ESTADO_BADGE["Avariado"].cls, "asis", 'Avariado → "Como está"');
 
 console.log("\nstatus terminais excluídos do catálogo");
 ["VENDIDO", "DESCARTE", "ENTREGUE"].forEach((s) => ok(CATALOGO_STATUS_EXCLUIR.includes(s), `${s} excluído`));
+
+console.log("frase de condição, link do QR e resumo da seleção (F0)");
+eq(fraseCondicao({ estado: "Novo" }), "Produto novo", "Novo → frase simples");
+eq(fraseCondicao({ estado: "Novo", cond_embalagem: "PERFEITA" }), "Produto novo", "embalagem perfeita não polui a frase");
+eq(fraseCondicao({ estado: "Embalagem aberta/avariada", cond_embalagem: "LEVE" }),
+  "Produto novo, embalagem aberta ou avariada · caixa levemente avariada", "caixa aberta + embalagem leve");
+eq(fraseCondicao({ estado: "Usado funcionando" }), "Usado, em funcionamento", "seminovo");
+eq(fraseCondicao({ estado: "Avariado" }), "Vendido no estado em que se encontra", "como está");
+eq(fraseCondicao({ estado: "Sucata" }), "", "estado fora do mapa → sem frase");
+const wa = linkInteresseItem({ sku: "NOG0001", produto: "Sofá" });
+ok(wa.startsWith("https://wa.me/") && wa.includes("NOG0001"), "QR leva o SKU no wa.me");
+const r = resumoSelecao(["A", "B", "C"], [{ sku: "A" }, { sku: "C" }]);
+eq(r.incluidos, 2, "resumo: 2 incluídos");
+eq(r.fora.join(","), "B", "resumo: B ficou de fora");
 
 console.log(`\n${passou} asserções OK`);
