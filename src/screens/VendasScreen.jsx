@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMeta, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
 import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
-import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store } from "lucide-react";
+import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText } from "lucide-react";
+
+const OrcamentosScreen = React.lazy(() => import("./OrcamentosScreen"));
 
 const PAGE = 50;
 
@@ -18,6 +20,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState("entregar"); // "entregar" | "entregues"
   const [marcando, setMarcando] = useState(null); // sku em entrega
+  const [orcamentosOpen, setOrcamentosOpen] = useState(false);
 
   const refLote = useCallback((lote) => {
     const l = lotes.find((x) => String(x.lote) === String(lote));
@@ -91,6 +94,16 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
+      <button onClick={() => setOrcamentosOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
+        <FileText className="w-4 h-4 text-orange-500" /> Orçamentos (venda assistida)
+      </button>
+      {orcamentosOpen && (
+        <Suspense fallback={null}>
+          <OrcamentosScreen user={user} onClose={() => setOrcamentosOpen(false)} />
+        </Suspense>
+      )}
+
       {/* Resumo consolidado */}
       <div className="bg-gray-900 rounded-2xl p-5 text-white">
         <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold flex items-center gap-1.5">

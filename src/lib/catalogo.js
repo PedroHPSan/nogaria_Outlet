@@ -77,5 +77,8 @@ export async function listarItensCatalogo(filtros = {}) {
   // Exclui condições não mapeadas (ou nulas). Feito no cliente porque comparar
   // texto acentuado com IN no PostgREST é frágil.
   if (soComEstado) data = data.filter((it) => CATALOGO_ESTADO_BADGE[(it.estado || "").trim()]);
+  // Reservado em orçamento ativo (itens.reservado_ate, migration de orçamentos): não anunciar.
+  const agora = Date.now();
+  data = data.filter((it) => !(it.reservado_ate && new Date(it.reservado_ate).getTime() > agora));
   return data;
 }

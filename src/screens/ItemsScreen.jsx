@@ -549,7 +549,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
       {orcamento && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <AnuncioModal itens={orcamento} onClose={() => setOrcamento(null)} />
+          <AnuncioModal itens={orcamento} user={user} onClose={() => setOrcamento(null)} />
         </Suspense>
       )}
 
