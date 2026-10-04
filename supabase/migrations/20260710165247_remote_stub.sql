@@ -1,0 +1,3 @@
+-- Migration aplicada direto no banco remoto (painel/outra ferramenta); o SQL original
+-- está em supabase_migrations.schema_migrations. Stub só para reconciliar o histórico
+-- (`supabase migration list` / `db push`). NÃO reaplicar. Versão: 20260710165247
