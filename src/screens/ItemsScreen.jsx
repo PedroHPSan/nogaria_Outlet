@@ -9,13 +9,14 @@ import { listarCaixas, itensDaCaixa, CAIXA_TIPO, CAIXA_STATUS } from "../lib/cai
 import { contarACatalogarPorLote } from "../lib/conferencia";
 import { LIMITE_ORCAMENTO } from "../lib/anuncio";
 import { alternarSelecao, marcarTodos, desmarcarTodos, todosSelecionados, selecionados } from "../lib/selecao";
-import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList, FileText, BookOpen } from "lucide-react";
+import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Square, Boxes, X, Camera, Images, Ruler, Package, Sparkles, ShoppingCart, ClipboardList, FileText, BookOpen, Tag } from "lucide-react";
 import FotoInputs from "../components/FotoInputs";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
 const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
 const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
+const PrecoRapidoModal = React.lazy(() => import("../components/PrecoRapidoModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
@@ -62,6 +63,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [printLabels, setPrintLabels] = useState(null);
   const [orcamento, setOrcamento] = useState(null); // itens do orçamento em prévia
   const [catalogoSkus, setCatalogoSkus] = useState(null); // SKUs do catálogo rápido (seleção)
+  const [precoRapido, setPrecoRapido] = useState(null); // itens do preço rápido em massa
   const [boxPicker, setBoxPicker] = useState(false);
   const [catalogarPicker, setCatalogarPicker] = useState(false);
   const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
@@ -108,6 +110,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const catalogarSelecionados = () => {
     const escolhidos = selecionados(selected, itens);
     if (escolhidos.length) setCatalogoSkus(escolhidos.map((i) => i.sku));
+  };
+
+  // Preço rápido de TODOS os selecionados (desconto por idade + arredondamento, sem passar do piso).
+  const precificarSelecionados = () => {
+    const escolhidos = selecionados(selected, itens);
+    if (escolhidos.length) setPrecoRapido(escolhidos);
   };
 
   const abrirItem = (it) => {
@@ -486,13 +494,13 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
       {/* Ações da seleção (acima da navegação inferior) */}
       {barraSelecao && (
         <div className="fixed bottom-14 inset-x-0 z-40 px-3">
-          <div className="max-w-lg mx-auto flex gap-2">
+          <div className="max-w-lg mx-auto flex flex-wrap gap-2">
             <button onClick={imprimirSelecionados}
-              className="flex-1 rounded-xl py-3.5 font-bold bg-gray-900 text-white shadow-lg flex items-center justify-center gap-2">
+              className="flex-1 basis-[45%] rounded-xl py-3 font-bold bg-gray-900 text-white shadow-lg flex items-center justify-center gap-2">
               <Printer className="w-4 h-4" /> Etiquetas ({selected.size})
             </button>
             <button onClick={orcarSelecionados} disabled={selected.size > LIMITE_ORCAMENTO}
-              className={`flex-1 rounded-xl py-3.5 font-bold shadow-lg flex items-center justify-center gap-2 ${
+              className={`flex-1 basis-[45%] rounded-xl py-3 font-bold shadow-lg flex items-center justify-center gap-2 ${
                 selected.size > LIMITE_ORCAMENTO
                   ? "bg-gray-300 text-gray-500"
                   : "bg-emerald-600 text-white"
@@ -501,8 +509,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               {selected.size > LIMITE_ORCAMENTO ? `Orçamento (máx. ${LIMITE_ORCAMENTO})` : `Orçamento (${selected.size})`}
             </button>
             <button onClick={catalogarSelecionados}
-              className="flex-1 rounded-xl py-3.5 font-bold bg-orange-500 text-white shadow-lg flex items-center justify-center gap-2">
+              className="flex-1 basis-[45%] rounded-xl py-3 font-bold bg-orange-500 text-white shadow-lg flex items-center justify-center gap-2">
               <BookOpen className="w-4 h-4" /> Catálogo ({selected.size})
+            </button>
+            <button onClick={precificarSelecionados}
+              className="flex-1 basis-[45%] rounded-xl py-3 font-bold bg-blue-600 text-white shadow-lg flex items-center justify-center gap-2">
+              <Tag className="w-4 h-4" /> Preço rápido ({selected.size})
             </button>
           </div>
         </div>
@@ -538,6 +550,12 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
       {orcamento && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <AnuncioModal itens={orcamento} onClose={() => setOrcamento(null)} />
+        </Suspense>
+      )}
+
+      {precoRapido && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <PrecoRapidoModal itens={precoRapido} params={params} user={user} onClose={() => setPrecoRapido(null)} onAplicado={() => buscar(true)} />
         </Suspense>
       )}
 
