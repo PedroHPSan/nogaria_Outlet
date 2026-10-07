@@ -112,8 +112,23 @@ Deno.serve(async (req) => {
       if (!r.ok) return json({ error: "origem indisponível" }, 502);
       const tipo = r.headers.get("content-type") ?? "";
       if (!tipo.startsWith("image/")) return json({ error: "a URL não é uma imagem" }, 415);
-      const buf = await r.arrayBuffer();
-      if (buf.byteLength > MAX_BYTES) return json({ error: "imagem maior que 8 MB" }, 413);
+      const declarado = Number(r.headers.get("content-length") ?? 0);
+      if (declarado > MAX_BYTES) return json({ error: "imagem maior que 8 MB" }, 413);
+      // Lê em streaming e aborta ao passar do limite (content-length pode faltar ou mentir).
+      const partes: Uint8Array[] = [];
+      let total = 0;
+      const leitor = r.body?.getReader();
+      if (!leitor) return json({ error: "resposta vazia" }, 502);
+      while (true) {
+        const { done, value } = await leitor.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_BYTES) { await leitor.cancel(); return json({ error: "imagem maior que 8 MB" }, 413); }
+        partes.push(value);
+      }
+      const buf = new Uint8Array(total);
+      let off = 0;
+      for (const c of partes) { buf.set(c, off); off += c.byteLength; }
       return new Response(buf, { headers: { ...cors, "Content-Type": tipo } });
     }
 
