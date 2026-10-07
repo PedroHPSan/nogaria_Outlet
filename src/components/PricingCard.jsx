@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from "react";
-import { Tag, TrendingUp, AlertTriangle, Check, Copy, Wand2, ChevronDown, Sparkles } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Tag, TrendingUp, AlertTriangle, Check, Copy, Wand2, ChevronDown, Sparkles, Loader2 } from "lucide-react";
 import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO, ESTADOS, EMBALAGENS } from "../lib/model";
 import { gerarTitulo, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
-import { derivarPreco } from "../lib/precoView";
+import { analisarItens, validarPreco } from "../lib/motorPrecoDb";
+import { lucroEm, canalV2, REGRAS } from "../lib/motorPreco";
 import PriceRuler from "./pricing/PriceRuler";
-import { MemoriaPiso, MemoriaTeto } from "./pricing/MemoriaCalculo";
+import MemoriaCalculoV2 from "./pricing/MemoriaCalculoV2";
+import { STATUS_V2 } from "./pricing/statusV2";
 import Ajuda from "./pricing/Ajuda";
 
 const CANAIS = [
@@ -73,59 +75,69 @@ function Secao({ titulo, aberto, onToggle, children }) {
 // Card de Precificação & venda — caminho principal curto: condição/canal → um preço
 // de venda (com presets) → mínimo derivado automaticamente. Detalhamento e campos
 // secundários ficam em seções recolhíveis. onChange(patch) grava no item (set do
-// ItemDetail); salvar() persiste. Motor de preço (pricing.js) inalterado.
+// ItemDetail); salvar() persiste. O preço vem do MOTOR NOVO (motorPreco: custo real do lote
+// rateado + taxas + margem mínima 25%); o preço de mercado parte de pricing.js (condição × embalagem × risco).
 //
 // Obs.: a busca de preço no Mercado Livre está aposentada; a referência usa o valor
 // salvo no item ou a âncora do grupo.
-export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem = null, onChange }) {
+export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onChange }) {
   const [canal, setCanal] = useState(normalizarCanal(item.canal_principal));
   const [copiado, setCopiado] = useState(false);
   const [detalhes, setDetalhes] = useState(false);
+  const [r, setR] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState(null);
 
-  // Fonte ÚNICA da UI: derivarPreco consome precificar() (sem recalcular). O canal
-  // selecionado entra por override para a recomendação reagir na hora.
-  const d = useMemo(() => {
-    const grupo = params.grupos?.[item.grupo] || {};
-    return derivarPreco({ ...item, canal_principal: canal }, grupo, params, custoItem);
-  }, [item, canal, params, custoItem]);
+  // Motor novo: recalcula quando muda qualquer entrada que afeta custo/preço.
+  const chave = [item.sku, item.lote, item.estado, item.cond_embalagem, canal, item.grupo,
+    item.preco_ref_novo, item.preco_ref_usado, item.peso_kg, item.peso_real_kg].join("|");
+  useEffect(() => {
+    let cancel = false;
+    setErro(null);
+    analisarItens([{ ...item, canal_principal: canal }], params)
+      .then((m) => { if (!cancel) setR(m.get(item.sku) || null); })
+      .catch((e) => { if (!cancel) setErro(e.message || "Falha ao calcular o preço"); });
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave]);
 
   const tituloSugerido = gerarTitulo(item, canal);
   const titulo = item.titulo_anuncio || tituloSugerido;
-
   const setVenda = (v) => onChange?.({ preco_ideal: v });
-  const usarSugerido = () => onChange?.({ preco_ideal: d.recomendado });
   const copiar = () => { navigator.clipboard?.writeText(titulo); setCopiado(true); setTimeout(() => setCopiado(false), 1500); };
 
-  // Inviável = o piso (preço mínimo p/ a margem) está acima do que o mercado paga.
-  const inviavel = !d.economia.viavel;
   const canalLabel = (CANAIS.find(([v]) => v === canal) || [null, canal])[1];
-  const destinoTxt = item.destino || "destino atual";
-  const margemPct = Math.round((d.economia.margemMin ?? 0) * 100);
+  const canalSel = canalV2(canal);
+  const margemPct = Math.round(REGRAS.margemMin * 100);
+  const st = r ? (STATUS_V2[r.status] || STATUS_V2.SEM_REF) : null;
 
-  // Indicadores AO VIVO no preço efetivo (o que o operador digitou, senão o recomendado).
-  const eco = d.economia;
-  const precoVenda = Number(item.preco_ideal) > 0 ? Number(item.preco_ideal) : d.recomendado;
-  const lucroVenda = d.lucroEm(precoVenda);
-  const margemVenda = d.margemEm(precoVenda);
-  const abaixoPiso = d.piso > 0 && precoVenda > 0 && precoVenda < d.piso;
-  const comissaoVenda = precoVenda * eco.taxa;
-  const reservaVenda = precoVenda * eco.reserva;
-  const plataformaVenda = comissaoVenda + eco.fixo;
+  // Números do canal ESCOLHIDO (r.piso/minimo podem ser os da venda local quando só ela fecha)
+  const pisoE = r?.pisoEscolhido ?? 0;
+  const minE = r?.minimoEscolhido ?? 0;
+  const precoVenda = Number(item.preco_ideal) > 0 ? Number(item.preco_ideal) : (r?.sugerido ?? 0);
+  const eco = r && precoVenda > 0 ? lucroEm(precoVenda, r.base, canalSel) : null;
+  const abaixoPiso = r && pisoE > 0 && precoVenda > 0 && precoVenda < pisoE;
+  const abaixoMin = r && !abaixoPiso && Number.isFinite(minE) && precoVenda > 0 && precoVenda < minE;
+  const pode = r && r.sugerido > 0 && ["ANUNCIAR", "GIRO", "LOCAL"].includes(r.status);
+  const jaValidado = r && item.preco_aprovacao === "APROVADO" && Number(item.preco_ideal) === r.sugerido;
 
-  const badge = d.economia.viavel
-    ? { txt: "Publicar", cls: "bg-emerald-600 text-white", Icon: Check }
-    : (canal === "LOCAL" || canal === "B2B")
-      ? { txt: "Rever preço/custo", cls: "bg-amber-500 text-white", Icon: AlertTriangle }
-      : { txt: "Kit / Lote ou local", cls: "bg-red-500 text-white", Icon: AlertTriangle };
+  const validar = async () => {
+    setSalvando(true); setMsg(null);
+    const v = await validarPreco({ sku: item.sku, preco: r.sugerido, piso: r.piso, user,
+      motivo: `motor-v2 ${r.status} margem ${(r.margem * 100).toFixed(1)}%` });
+    setSalvando(false);
+    if (!v.ok) { setMsg({ erro: true, txt: v.erro }); return; }
+    setMsg({ erro: false, txt: "Preço validado e salvo." });
+    onChange?.({ preco_ideal: r.sugerido, preco_aprovacao: "APROVADO" });
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-3 space-y-3 shadow-sm">
       <div className="flex items-center gap-2 text-gray-800">
         <Tag className="w-4 h-4 text-orange-500" />
         <span className="text-sm font-bold">Precificação &amp; venda</span>
-        <span className={`ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${badge.cls}`}>
-          <badge.Icon className="w-3 h-3" /> {badge.txt}
-        </span>
+        {st && <span className={`ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${st.cls}`}>{st.txt}</span>}
       </div>
 
       {/* Entradas do motor */}
@@ -150,104 +162,89 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, custoItem =
         </Campo>
       </div>
 
-      {/* Destino — afeta a margem mínima e, portanto, o piso */}
+      {/* Destino logístico (informativo: a margem mínima agora é única) */}
       <div>
-        <span className="text-[11px] font-semibold uppercase text-gray-500 flex items-center gap-1">
-          Destino logístico <Ajuda termo="margem" />
-        </span>
+        <span className="text-[11px] font-semibold uppercase text-gray-500">Destino logístico</span>
         <div className="mt-1">
           <Chips options={DESTINOS} value={item.destino || null}
             onChange={(v) => onChange?.({ destino: v })} activeCls="bg-orange-500 text-white border-orange-500" />
         </div>
       </div>
 
-      {/* Bloco central: seu preço + régua + veredito ao vivo */}
-      <div className="rounded-2xl border border-gray-200 p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase text-gray-500">Seu preço de venda</span>
-          {d.recomendado > 0 && (
-            <button type="button" onClick={usarSugerido}
-              className="text-xs font-semibold text-orange-600 inline-flex items-center gap-1 active:opacity-70">
-              <Sparkles className="w-3.5 h-3.5" /> Usar recomendado ({fmtBRL(d.recomendado)})
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-gray-400">R$</span>
-          <input type="number" inputMode="decimal"
-            className={`w-full rounded-xl border px-3 py-2.5 text-2xl font-bold bg-white focus:outline-none focus:ring-2 ${abaixoPiso ? "border-red-400 text-red-700 focus:ring-red-400" : "border-gray-300 text-gray-900 focus:ring-orange-500"}`}
-            value={item.preco_ideal ?? ""} onChange={(e) => setVenda(e.target.value)}
-            placeholder={d.recomendado ? String(d.recomendado) : "0"} />
-        </div>
+      {erro && <p className="text-xs text-red-600">Não foi possível calcular o preço agora ({erro}). Você ainda pode digitar o preço manualmente.</p>}
+      {!r && !erro && <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Calculando o preço…</p>}
 
-        <PriceRuler piso={d.piso} recomendado={d.recomendado} preco={precoVenda} fmtBRL={fmtBRL} />
-
-        {/* Veredito ao vivo: inviável > abaixo do piso > lucro saudável */}
-        {inviavel ? (
-          <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
-            <p className="font-bold flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Inviável em {canalLabel} · {destinoTxt}</p>
-            <p className="mt-0.5">O mercado paga ~{fmtBRL(d.recomendado)}, mas o piso p/ {margemPct}% de margem é {fmtBRL(d.piso)}. {eco.sugestao}.</p>
-          </div>
-        ) : abaixoPiso ? (
-          <div className="rounded-xl bg-red-50 border border-red-200 p-2.5 text-xs text-red-700">
-            <p className="font-bold flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Abaixo do piso — risco de prejuízo</p>
-            <p className="mt-0.5">A {fmtBRL(precoVenda)} você fica {fmtBRL(d.piso - precoVenda)} abaixo do mínimo. Suba para ≥ {fmtBRL(d.piso)} ou venda em kit/lote/canal local.</p>
-          </div>
-        ) : (
-          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 text-xs text-emerald-800">
-            <p className="font-bold flex items-center gap-1"><TrendingUp className="w-4 h-4" /> Vendendo a {fmtBRL(precoVenda)} em {canalLabel} · {destinoTxt}</p>
-            <p className="mt-0.5">Lucro {fmtBRL(lucroVenda)} · margem {Math.round((margemVenda ?? 0) * 100)}%. Faixa segura: {fmtBRL(d.piso)} a {fmtBRL(d.recomendado)}.</p>
-          </div>
-        )}
-
-        {d.flags.filter((f) => f.tipo !== "erro").map((f, i) => (
-          <p key={i} className="text-xs inline-flex items-center gap-1 text-amber-600">
-            <AlertTriangle className="w-3 h-3" /> {f.msg}
-          </p>
-        ))}
-        {custoItem == null && (
-          <p className="text-[11px] text-amber-600 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" /> Custo do lote não carregado — piso aproximado.
-          </p>
-        )}
-      </div>
-
-      {/* Memórias de cálculo: como chegamos no piso e no recomendado, com valores */}
-      <div className="space-y-2">
-        <MemoriaPiso memoria={d.memoria} fmtBRL={fmtBRL} />
-        <MemoriaTeto memoria={d.memoria} fmtBRL={fmtBRL} />
-
-        {/* Para onde vai o preço — taxas da plataforma em R$, no preço digitado */}
-        <details className="rounded-xl border border-gray-100">
-          <summary className="flex items-center justify-between cursor-pointer list-none px-2.5 py-2 text-[11px] font-semibold uppercase text-gray-500">
-            <span className="flex items-center gap-1">Para onde vai o preço <Ajuda termo="comissao" /></span>
-            <span className="normal-case font-bold text-gray-700">{canalLabel} leva {fmtBRL(plataformaVenda)}</span>
-          </summary>
-          <div className="px-2.5 pb-2.5 space-y-1">
-            <div className="flex items-center justify-between text-xs border-b border-gray-100 pb-1">
-              <span className="text-gray-700 font-semibold">Receita</span>
-              <span className="text-gray-800 font-semibold">{fmtBRL(precoVenda)}</span>
+      {r && (
+        <>
+          {/* Preço sugerido pelo motor novo */}
+          <div className="rounded-2xl border border-orange-200 bg-orange-50/40 p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-gray-500">
+              <Sparkles className="w-3.5 h-3.5 text-orange-500" /> Preço sugerido
             </div>
-            {[
-              [`Comissão ${canalLabel} (${Math.round(eco.taxa * 100)}%)`, comissaoVenda],
-              ["Tarifa fixa", eco.fixo],
-              [`Reserva (${Math.round(eco.reserva * 100)}%)`, reservaVenda],
-              ["Frete", eco.frete],
-              ["Embalagem", eco.custoEmbalagem],
-              ["Custo do item", eco.custo],
-            ].map(([lbl, val], i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">{lbl}</span>
-                <span className="text-red-600">− {fmtBRL(val)}</span>
+            {r.sugerido != null ? (
+              <p className="text-2xl font-bold text-gray-900">
+                {fmtBRL(r.sugerido)}
+                <span className="text-xs font-normal text-gray-500 ml-2">
+                  lucro {fmtBRL(r.lucro)} · margem {(r.margem * 100).toFixed(1).replace(".", ",")}%{r.canal === "LOCAL" && canalSel !== "LOCAL" ? " · venda local" : ""}
+                </span>
+              </p>
+            ) : <p className="text-sm text-gray-700">{r.motivo}</p>}
+            <p className="text-xs text-gray-600">{r.sugerido != null ? r.motivo : ""}</p>
+            <p className="text-xs text-gray-500">
+              Piso {fmtBRL(pisoE)} · Mínimo p/ {margemPct}% {Number.isFinite(minE) ? fmtBRL(minE) : "—"}
+              {Number(item.preco_ideal) > 0 ? ` · Preço atual ${fmtBRL(item.preco_ideal)}` : ""}
+            </p>
+            {r.semCusto && <p className="text-xs text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Lote sem custo cadastrado: o piso não inclui custo de aquisição.</p>}
+            {r.custoOrigem && /estimad/.test(r.custoOrigem) && <p className="text-[11px] text-gray-400">Custo do lote: {r.custoOrigem}.</p>}
+            {pode && (
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => onChange?.({ preco_ideal: r.sugerido })}
+                  className="px-3 py-2 rounded-xl text-sm font-semibold border border-orange-300 text-orange-700 bg-white">Usar</button>
+                <button type="button" onClick={validar} disabled={salvando || jaValidado}
+                  className="flex-1 rounded-xl py-2 font-bold bg-orange-500 text-white flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:text-gray-500">
+                  {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  {jaValidado ? "Preço já validado" : `Validar ${fmtBRL(r.sugerido)}`}
+                </button>
               </div>
-            ))}
-            <div className="flex items-center justify-between text-xs border-t border-gray-100 pt-1">
-              <span className="font-semibold text-gray-700">Lucro</span>
-              <span className={`font-bold ${(lucroVenda ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{fmtBRL(lucroVenda)}</span>
-            </div>
+            )}
+            {msg && <p className={`text-xs ${msg.erro ? "text-red-600" : "text-emerald-700"}`}>{msg.txt}</p>}
           </div>
-        </details>
-      </div>
+
+          {/* Seu preço + régua + veredito ao vivo */}
+          <div className="rounded-2xl border border-gray-200 p-3 space-y-2">
+            <span className="text-[11px] font-semibold uppercase text-gray-500">Seu preço de venda</span>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-gray-400">R$</span>
+              <input type="number" inputMode="decimal"
+                className={`w-full rounded-xl border px-3 py-2.5 text-2xl font-bold bg-white focus:outline-none focus:ring-2 ${abaixoPiso ? "border-red-400 text-red-700 focus:ring-red-400" : "border-gray-300 text-gray-900 focus:ring-orange-500"}`}
+                value={item.preco_ideal ?? ""} onChange={(e) => setVenda(e.target.value)}
+                placeholder={r.sugerido ? String(r.sugerido) : "0"} />
+            </div>
+
+            <PriceRuler piso={pisoE} recomendado={r.alvo} preco={precoVenda} fmtBRL={fmtBRL} />
+
+            {abaixoPiso ? (
+              <div className="rounded-xl bg-red-50 border border-red-200 p-2.5 text-xs text-red-700">
+                <p className="font-bold flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Abaixo do piso — risco de prejuízo</p>
+                <p className="mt-0.5">A {fmtBRL(precoVenda)} você fica {fmtBRL(pisoE - precoVenda)} abaixo do piso. Suba para ≥ {fmtBRL(pisoE)} ou venda em kit/lote/canal local.</p>
+              </div>
+            ) : abaixoMin ? (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
+                <p className="font-bold flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Dá lucro, mas abaixo da margem mínima de {margemPct}%</p>
+                <p className="mt-0.5">A {fmtBRL(precoVenda)} em {canalLabel}: lucro {fmtBRL(eco.lucro)} · margem {(eco.margem * 100).toFixed(1).replace(".", ",")}%. Para {margemPct}% seria {fmtBRL(minE)}.</p>
+              </div>
+            ) : eco ? (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 text-xs text-emerald-800">
+                <p className="font-bold flex items-center gap-1"><TrendingUp className="w-4 h-4" /> Vendendo a {fmtBRL(precoVenda)} em {canalLabel}</p>
+                <p className="mt-0.5">Lucro {fmtBRL(eco.lucro)} · margem {(eco.margem * 100).toFixed(1).replace(".", ",")}%. Faixa segura: {fmtBRL(pisoE)} a {fmtBRL(r.alvo)}.</p>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Memória de cálculo: como chegamos neste preço (no canal escolhido e no preço avaliado) */}
+          <MemoriaCalculoV2 r={{ ...r, canal: r.canalEscolhido, piso: pisoE, minimo: minE }} preco={precoVenda} fmtBRL={fmtBRL} />
+        </>
+      )}
 
       {/* Detalhes do anúncio e envio (secundário) */}
       <Secao titulo="Detalhes do anúncio e envio" aberto={detalhes} onToggle={() => setDetalhes((o) => !o)}>

@@ -14,7 +14,6 @@ import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import PricingCard from "../components/PricingCard";
-import SugestaoPrecoCard from "../components/SugestaoPrecoCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
 import FotoInputs from "../components/FotoInputs";
@@ -1000,14 +999,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
 
         {/* Precificação & venda — card único (motor + preço final + anúncio + destino + venda) */}
-        <SugestaoPrecoCard item={it} params={params} user={user} onValidado={(patch) => set(patch)} />
         <div className="mb-4">
-          <PricingCard
-            item={it}
-            params={params}
-            custoItem={custoItem}
-            onChange={(patch) => set(patch)}
-          />
+          <PricingCard item={it} params={params} user={user} onChange={(patch) => set(patch)} />
         </div>
 
         {/* Publicar em marketplace (Amazon) — após revisão; gate de preço/GTIN no PublishPanel */}

@@ -1,7 +1,7 @@
 // Teste do motor de preço v2 e do custo composto do lote (puros). Rode: npm run test:motorpreco
 import assert from "node:assert/strict";
 import { custoRealLote, TAXA_HISA_REAL, FRETE_TOTAL_ESTIMADO } from "../src/lib/custoLote.js";
-import { ratearLote, precificarV2, precoParaMargem, lucroEm, pctVariavel, embalagemPorPeso, explicar, REGRAS, custoMaximoLance, aplicarConfig, CANAIS_V2 } from "../src/lib/motorPreco.js";
+import { ratearLote, precificarV2, precoParaMargem, lucroEm, pctVariavel, embalagemPorPeso, explicar, REGRAS, custoMaximoLance, aplicarConfig, CANAIS_V2, decomporCustos, porteLabel } from "../src/lib/motorPreco.js";
 
 let n = 0;
 const eq = (a, b, m) => { assert.equal(a, b, m); n++; console.log(`  ok  ${m}`); };
@@ -80,7 +80,7 @@ ok(loc.status === "LOCAL" ? loc.canal === "LOCAL" && loc.sugerido > 0 : true, "s
 const deg = precificarV2({ alvoMercado: 77, custoAloc: 5, canal: "ML", pesoKg: 1 });
 eq(deg.sugerido, 79, "evita R$ 72–78,99 no ML (sobe para R$ 79)");
 const txt = explicar(ok1, { condicao: "A" });
-ok(txt.length >= 4 && txt.some((x) => /Lucro esperado/.test(x)) && txt.some((x) => /imposto 13%/.test(x)), "explicação cita mercado, custos e lucro");
+ok(txt.length >= 4 && txt.some((x) => /Lucro esperado/.test(x)) && txt.some((x) => /imposto sobre a receita 13,0%/.test(x)), "explicação cita mercado, custos e lucro");
 
 console.log("custo máximo de lance");
 const lance = custoMaximoLance([{ alvo: 1000, grupo: "Eletro", pesoKg: 5, canal: "ML" }]);
@@ -96,5 +96,16 @@ aplicarConfig({ canais: [{ codigo: "ML", nome: "ML", taxa: 0.12, fixo_valor: 6.5
 eq(CANAIS_V2.ML.fixo(100), 0, "ML acima de R$79 sem tarifa"); eq(CANAIS_V2.ML.fixo(50), 6.5, "ML abaixo de R$79 com tarifa");
 aplicarConfig({ params: [{ chave: "margem_min", valor: null }, { chave: "imposto", valor: "0.13" }] });
 eq(REGRAS.margemMin, 0.25, "parâmetro null mantém o padrão");
+
+console.log("decomposição dos custos (memória de cálculo)");
+const dc = decomporCustos(312, "ML");
+eq(dc.linhas.length, 6, "6 custos percentuais separados");
+perto(dc.total, 312 * 0.51, 0.02, "total no ML = 51% do preço (R$ 159,12)");
+perto(dc.linhas.find((l) => l.id === "imposto").valor, 40.56, 0.01, "imposto 13% de R$ 312 = R$ 40,56");
+eq(decomporCustos(50, "ML").fixo, 6.5, "ML abaixo de R$ 79: tarifa fixa R$ 6,50");
+eq(decomporCustos(100, "ML").fixo, 0, "ML acima de R$ 79: sem tarifa fixa");
+perto(decomporCustos(100, "LOCAL").total, 29, 0.01, "local: 29%");
+ok(/GG/.test(porteLabel(10)) && /sem peso/.test(porteLabel(0)), "porte legível");
+eq(precificarV2({ alvoMercado: 150, custoAloc: 27.05, canal: "ML", pesoKg: 1 }).base, 32.05, "base = custo alocado + embalagem");
 
 console.log(`\n${n} asserções OK`);

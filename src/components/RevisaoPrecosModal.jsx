@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, Loader2, Check, ChevronDown } from "lucide-react";
 import { analisarItens, validarPreco } from "../lib/motorPrecoDb";
-import { STATUS_V2 } from "./SugestaoPrecoCard";
+import { STATUS_V2 } from "./pricing/statusV2";
 import { fmtBRL } from "../lib/model";
 
 const FILTROS = [

@@ -5,7 +5,7 @@
 import { supabase as supabasePadrao } from "./supabase.js";
 import { derivarPreco } from "./precoView.js";
 import { custoRealLote } from "./custoLote.js";
-import { ratearLote, precificarV2, canalV2, explicar, aplicarConfig } from "./motorPreco.js";
+import { ratearLote, precificarV2, canalV2, explicar, aplicarConfig, porteLabel } from "./motorPreco.js";
 
 let sb = supabasePadrao;
 /** Troca o cliente (ex.: service role em scripts Node). */
@@ -118,15 +118,27 @@ export async function analisarItens(itens, params, { force = false } = {}) {
     const porSku = new Map(calc.linhas.map((l) => [l.it.sku, l]));
     for (const it of alvos) {
       const l = porSku.get(it.sku);
+      const d = derivarPreco(it, params?.grupos?.[it.grupo] || {}, params, null);
+      const pesoKg = it.peso_real_kg ?? it.peso_kg;
       const r = precificarV2({
-        alvoMercado: alvoDe(it, params), custoAloc: l?.custo ?? 0, canal: it.canal_principal,
-        pesoKg: it.peso_real_kg ?? it.peso_kg, refEstimada: !!l?.refEstimada,
+        alvoMercado: d.recomendado, custoAloc: l?.custo ?? 0, canal: it.canal_principal,
+        pesoKg, refEstimada: !!l?.refEstimada,
       });
       out.set(it.sku, {
         ...r, semCusto: !calc.custo, loteCusto: calc.custo?.total ?? null, custoOrigem: calc.custo?.origem ?? null,
         atual: Number(it.preco_ideal) > 0 ? Number(it.preco_ideal) : null,
         aprovacao: it.preco_aprovacao || null,
-        explicacao: explicar(r, { condicao: it.estado || "", loteCusto: calc.custo?.total ?? null, grupo: it.grupo }),
+        explicacao: explicar(r, { condicao: it.estado || "", loteCusto: calc.custo?.total ?? null }),
+        // Memória de cálculo (estruturada) para a tela do operador
+        memoria: {
+          mercado: d.derivacao,
+          lote: calc.custo || null,
+          loteFechado: calc.fechado,
+          rateio: l ? { k: l.k, contrib: l.contrib, w: l.w, custo: l.custo, refEstimada: l.refEstimada, fechado: l.fechado } : null,
+          somaContrib: calc.linhas.reduce((s2, x) => s2 + x.contrib, 0),
+          nItens: calc.linhas.length,
+          porte: porteLabel(pesoKg),
+        },
       });
     }
   }

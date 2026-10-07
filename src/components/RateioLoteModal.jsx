@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { X, Loader2, Lock, Unlock, AlertTriangle, Check } from "lucide-react";
 import { calcularLote, salvarPesoRateio, fecharRateio, reabrirRateio, temPesoRateio } from "../lib/motorPrecoDb";
 import { precificarV2, custoMaximoLance, canalV2 } from "../lib/motorPreco";
-import { STATUS_V2 } from "./SugestaoPrecoCard";
+import { STATUS_V2 } from "./pricing/statusV2";
 import { fmtBRL } from "../lib/model";
 
 const PESOS = [0.25, 0.5, 1, 2, 4];

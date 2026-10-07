@@ -179,7 +179,7 @@ export function precificarV2({ alvoMercado, custoAloc, canal, pesoKg, refEstimad
   const piso = precoParaMargem(base, cod, 0);
   const minimo = precoParaMargem(base, cod, REGRAS.margemMin);
   const pctVar = pctVariavel(cod);
-  const res = { canal: cod, custoAloc: r2(custo), embalagem: emb, piso, minimo, alvo, pctVar, refEstimada, comp: null };
+  const res = { canal: cod, canalEscolhido: cod, pisoEscolhido: piso, minimoEscolhido: minimo, custoAloc: r2(custo), embalagem: emb, base: r2(base), piso, minimo, alvo, pctVar, refEstimada };
 
   if (!(alvo > 0) || refEstimada) return { ...res, status: "SEM_REF", sugerido: null, lucro: null, margem: null, motivo: "Sem preço de referência confiável do produto." };
 
@@ -221,6 +221,36 @@ export function custoMaximoLance(itens) {
   return r2(total);
 }
 
+/** Porte da embalagem (P/M/G/GG) a partir do peso — mesmo critério de embalagemPorPeso. */
+export function porteLabel(pesoKg) {
+  const p = Number(pesoKg);
+  if (!Number.isFinite(p) || p <= 0) return "M (sem peso informado)";
+  if (p < 0.3) return "P (até 300 g)";
+  if (p < 2) return "M (até 2 kg)";
+  if (p < 8) return "G (até 8 kg)";
+  return "GG (8 kg ou mais)";
+}
+
+/**
+ * Para onde vai o preço: cada custo percentual e a tarifa fixa em R$ no preço `preco`.
+ * linhas = [{ id, label, pct, valor }]; fixo = tarifa fixa do canal; total = soma de tudo (sem o custo de aquisição).
+ */
+export function decomporCustos(preco, canalCod) {
+  const c = CANAIS_V2[canalCod] || CANAIS_V2.ML;
+  const p = Number(preco) || 0;
+  const defs = [
+    ["imposto", "Imposto sobre a receita", REGRAS.imposto],
+    ["vendedor", "Comissão do vendedor", REGRAS.comissaoVendedor],
+    ["frete", "Frete estimado", c.frete],
+    ["adm", "Custo administrativo", REGRAS.adm],
+    ["canal", `Taxa ${c.nome}`, c.taxa],
+    ["reserva", "Reserva de devolução/perda", REGRAS.reserva],
+  ];
+  const linhas = defs.map(([id, label, pct]) => ({ id, label, pct, valor: r2(p * pct) }));
+  const fixo = r2(c.fixo(p));
+  return { linhas, fixo, total: r2(linhas.reduce((s, l) => s + l.valor, 0) + fixo) };
+}
+
 const BRL = (n) => `R$ ${Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PCT = (n) => `${(Number(n) * 100).toFixed(1).replace(".", ",")}%`;
 
@@ -232,10 +262,12 @@ export function explicar(r, { condicao = "", loteCusto = null } = {}) {
   linhas.push(`Mercado: referência já ajustada pela condição${condicao ? ` (${condicao})` : ""} = ${BRL(r.alvo)}.`);
   linhas.push(`Custo do lote: ${BRL(r.custoAloc)} rateados${loteCusto ? ` do custo composto do lote (${BRL(loteCusto)})` : ""}${r.refEstimada ? " — referência ESTIMADA, baixa confiança" : ""} + embalagem ${BRL(r.embalagem)}.`);
   if (p > 0) {
-    const t = (v) => BRL(p * v);
-    linhas.push(`Custos sobre o preço (${PCT(r.pctVar)} = ${BRL(p * r.pctVar)}): imposto 13% ${t(REGRAS.imposto)} + comissão vendedor 3% ${t(REGRAS.comissaoVendedor)} + frete ${PCT(c.frete)} ${t(c.frete)} + administrativo 10% ${t(REGRAS.adm)} + ${c.nome} ${PCT(c.taxa)} ${t(c.taxa)}${c.fixo(p) ? ` + tarifa fixa ${BRL(c.fixo(p))}` : ""} + reserva de devolução 3% ${t(REGRAS.reserva)}.`);
+    const d = decomporCustos(p, r.canal);
+    const partes = d.linhas.map((l) => `${l.label.toLowerCase()} ${PCT(l.pct)} ${BRL(l.valor)}`);
+    if (d.fixo) partes.push(`tarifa fixa ${BRL(d.fixo)}`);
+    linhas.push(`Custos sobre o preço (${PCT(r.pctVar)} = ${BRL(p * r.pctVar)}${d.fixo ? ` + tarifa fixa ${BRL(d.fixo)}` : ""}): ${partes.join(" + ")}.`);
   }
-  linhas.push(`Piso (zero a zero): ${BRL(r.piso)} · Mínimo (25% de margem): ${BRL(r.minimo)}.`);
+  linhas.push(`Piso (zero a zero): ${BRL(r.piso)} · Mínimo (${Math.round(REGRAS.margemMin * 100)}% de margem): ${BRL(r.minimo)}.`);
   if (r.lucro != null) linhas.push(`Lucro esperado a ${BRL(p)}: ${BRL(r.lucro)} (${PCT(r.margem)} do preço). ${r.motivo}`);
   else linhas.push(r.motivo);
   return linhas;

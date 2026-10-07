@@ -29,11 +29,11 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
 
   const plano = useMemo(() => {
     if (!faixas || !v2) return null;
-    // Piso efetivo = o MAIOR entre o antigo e o do motor novo: nunca aplica preço abaixo de nenhum dos dois.
+    // Piso = o do MOTOR NOVO (custo real do lote + taxas). O piso antigo só entra como reserva se o novo falhar.
     const derivadoDe = (it) => {
       const d = derivarPreco(it, params?.grupos?.[it.grupo] || {}, params, custos?.[it.sku] ?? null);
       const pisoV2 = v2.get(it.sku)?.piso;
-      return Number.isFinite(pisoV2) && pisoV2 > (d.piso || 0) ? { ...d, piso: pisoV2 } : d;
+      return Number.isFinite(pisoV2) && pisoV2 > 0 ? { ...d, piso: pisoV2 } : d;
     };
     return planoEmMassa(itens, derivadoDe, { faixas, arredondar, markdown });
   }, [itens, params, faixas, custos, v2, arredondar, markdown]);
@@ -55,7 +55,7 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
           <h2 className="font-bold text-gray-900">Preço rápido ({itens.length})</h2>
           <button onClick={onClose} aria-label="Fechar"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
-        <p className="text-xs text-gray-500 -mt-1">Aplica desconto por tempo parado e arredonda (…9). Só baixa preço e nunca passa do piso (o maior entre o piso antigo e o do motor novo).</p>
+        <p className="text-xs text-gray-500 -mt-1">Aplica desconto por tempo parado e arredonda (…9). Só baixa preço e nunca passa do piso do motor novo (custo real do lote + taxas).</p>
         {!plano ? (
           <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Calculando…</p>
         ) : (
@@ -81,8 +81,8 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
                 </div>
               ))}
             </div>
-            {custos && Object.keys(custos).length === 0 && (
-              <p className="text-xs text-amber-700">Custos de lote indisponíveis: o piso pode estar menos preciso.</p>
+            {v2 && v2.size === 0 && (
+              <p className="text-xs text-amber-700">Piso do motor novo indisponível: usando o piso antigo, menos preciso.</p>
             )}
             {resultado ? (
               <p className="text-sm text-emerald-700 flex items-center gap-1.5"><Check className="w-4 h-4" /> {resultado.ok} preço(s) atualizado(s){resultado.erros.length ? ` · ${resultado.erros.length} erro(s)` : ""}</p>

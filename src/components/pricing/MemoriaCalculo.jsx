@@ -4,7 +4,7 @@ import Ajuda from "./Ajuda";
 
 const pct = (f) => `${Math.round((f ?? 0) * 100)}%`;
 
-function Linha({ op, label, valor, ajuda, termo, fmtBRL, forte, cor }) {
+export function Linha({ op, label, valor, ajuda, termo, fmtBRL, forte, cor }) {
   return (
     <div className={`flex items-center justify-between gap-2 text-xs ${forte ? "font-bold text-gray-900" : "text-gray-600"}`}>
       <span className="flex items-center gap-1 min-w-0">
@@ -19,7 +19,7 @@ function Linha({ op, label, valor, ajuda, termo, fmtBRL, forte, cor }) {
   );
 }
 
-function Bloco({ resumo, resumoValor, fmtBRL, children, aberto, onToggle }) {
+export function Bloco({ resumo, resumoValor, fmtBRL, children, aberto, onToggle }) {
   return (
     <details className="rounded-xl border border-gray-100" open={aberto} onToggle={onToggle}>
       <summary className="flex items-center justify-between cursor-pointer list-none px-2.5 py-2">
