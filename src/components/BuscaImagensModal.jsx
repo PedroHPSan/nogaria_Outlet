@@ -41,7 +41,7 @@ export default function BuscaImagensModal({ item, onAnexar, onClose }) {
   // Colar imagem da área de transferência.
   useEffect(() => {
     const onPaste = (e) => {
-      const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
+      const files = Array.from(e.clipboardData?.files || []).filter((f) => /^image\/(jpeg|png|webp|gif)$/.test(f.type));
       if (files.length) { e.preventDefault(); anexar(files); }
     };
     window.addEventListener("paste", onPaste);

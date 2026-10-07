@@ -23,6 +23,7 @@ const json = (body: unknown, status = 200) =>
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 const MAX_BYTES = 8 * 1024 * 1024;
+const TIPOS_OK = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]); // sem SVG (script)
 
 // Expande um IPv6 para 8 hextets (aceita "::" e sufixo IPv4). null se malformado.
 function hextets(ip: string): number[] | null {
@@ -111,7 +112,8 @@ Deno.serve(async (req) => {
       if (!r) return json({ error: "url inválida ou bloqueada" }, 400);
       if (!r.ok) return json({ error: "origem indisponível" }, 502);
       const tipo = r.headers.get("content-type") ?? "";
-      if (!tipo.startsWith("image/")) return json({ error: "a URL não é uma imagem" }, 415);
+      const tipoBase = tipo.split(";")[0].trim().toLowerCase();
+      if (!TIPOS_OK.has(tipoBase)) return json({ error: "formato de imagem não suportado" }, 415);
       const declarado = Number(r.headers.get("content-length") ?? 0);
       if (declarado > MAX_BYTES) return json({ error: "imagem maior que 8 MB" }, 413);
       // Lê em streaming e aborta ao passar do limite (content-length pode faltar ou mentir).
@@ -129,7 +131,7 @@ Deno.serve(async (req) => {
       const buf = new Uint8Array(total);
       let off = 0;
       for (const c of partes) { buf.set(c, off); off += c.byteLength; }
-      return new Response(buf, { headers: { ...cors, "Content-Type": tipo } });
+      return new Response(buf, { headers: { ...cors, "Content-Type": tipoBase, "X-Content-Type-Options": "nosniff" } });
     }
 
     if (body?.acao === "buscar") {
@@ -137,7 +139,7 @@ Deno.serve(async (req) => {
       const cx = Deno.env.get("GOOGLE_CSE_CX");
       if (!key || !cx) return json({ error: "google_nao_configurado" }, 501);
       const q = String(body.q ?? "").trim();
-      if (!q) return json({ error: "informe 'q'" }, 400);
+      if (!q || q.length > 200) return json({ error: "informe 'q' (até 200 caracteres)" }, 400);
       const inicio = Math.min(Math.max(Number(body.inicio) || 1, 1), 91);
       const p = new URLSearchParams({
         key, cx, q, searchType: "image", num: "10", start: String(inicio),
@@ -146,19 +148,22 @@ Deno.serve(async (req) => {
       const r = await fetch(`https://www.googleapis.com/customsearch/v1?${p}`);
       const d = await r.json();
       if (!r.ok) return json({ error: d?.error?.message ?? "falha na busca" }, 502);
-      const itens = (d.items ?? []).map((i: any) => ({
-        url: i.link,
-        thumb: i.image?.thumbnailLink ?? i.link,
-        titulo: i.title ?? "",
-        fonte: i.displayLink ?? "",
-        w: i.image?.width ?? null,
-        h: i.image?.height ?? null,
-      }));
+      const itens = (d.items ?? [])
+        .filter((i: any) => typeof i.link === "string" && i.link.startsWith("https://") && i.image?.thumbnailLink)
+        .map((i: any) => ({
+          url: i.link,
+          thumb: i.image.thumbnailLink,
+          titulo: i.title ?? "",
+          fonte: i.displayLink ?? "",
+          w: i.image?.width ?? null,
+          h: i.image?.height ?? null,
+        }));
       return json({ itens });
     }
 
     return json({ error: "acao inválida" }, 400);
   } catch (e) {
-    return json({ error: String((e as Error)?.message ?? e) }, 500);
+    console.error("buscar-imagens:", (e as Error)?.message);
+    return json({ error: "erro interno" }, 500);
   }
 });

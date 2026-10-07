@@ -41,6 +41,7 @@ export async function baixarImagem(url, nomeBase = "web") {
   const { data, error } = await supabase.functions.invoke("buscar-imagens", { body: { acao: "baixar", url } });
   if (error) throw new Error(await erroDaFuncao(error));
   if (!(data instanceof Blob)) throw new Error("resposta inesperada");
-  const ext = EXT[data.type] || "jpg";
+  const ext = EXT[data.type];
+  if (!ext) throw new Error("formato não suportado");
   return new File([data], `${nomeBase}-${Date.now()}.${ext}`, { type: data.type || "image/jpeg" });
 }
