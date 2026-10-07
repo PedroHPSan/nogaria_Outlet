@@ -20,6 +20,7 @@ import FotoInputs from "../components/FotoInputs";
 import BuscaImagensModal from "../components/BuscaImagensModal";
 import EditorFotoModal from "../components/EditorFotoModal";
 import { sugerirCategoria } from "../lib/categorizar";
+import { aoTrocarCategoria } from "../lib/categoriaTroca";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import { derivarPreco } from "../lib/precoView";
 import { construirSugestoes, separarSugestoes, patchVazios, montarAnalise } from "../lib/iaAnalise";
@@ -435,6 +436,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       cond_embalagem: it.cond_embalagem || null,
       // Classe pode ser reclassificada na triagem (lib/classificacao.js).
       classe: it.classe || null,
+      // legado: a troca de categoria limpa a "foto da âncora" do grupo antigo (aoTrocarCategoria)
+      preco_novo_est: it.preco_novo_est ?? null,
       preco_min: it.preco_min || null, preco_ideal: it.preco_ideal || null,
       preco_sugerido: it.preco_sugerido || null, canal_principal: it.canal_principal || null,
       destino: it.destino, local_fisico: it.local_fisico, caixa_num: it.caixa_num,
@@ -954,7 +957,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <Field label={<>Modelo<IaTag on={iaFez("modelo")} /></>}><input className={inputCls} value={it.modelo ?? ""} onChange={(e) => set({ modelo: e.target.value })} placeholder="ex.: BFR-2000" /></Field>
           </div>
           <Field label={<>Categoria<IaTag on={iaFez("grupo")} /></>}>
-            <CategoriaPicker value={it.grupo || ""} onChange={(g) => set({ grupo: g })} grupos={catList} sugestao={sugCat} />
+            <CategoriaPicker value={it.grupo || ""} onChange={(g) => set(aoTrocarCategoria(it, g, params))} grupos={catList} sugestao={sugCat} />
           </Field>
           <Field label={<>Voltagem<IaTag on={iaFez("voltagem")} /></>}>
             <div className="flex flex-wrap gap-1.5">

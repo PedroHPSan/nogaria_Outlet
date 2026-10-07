@@ -14,6 +14,7 @@ import { buildBoxLabel } from "../lib/labels";
 import { buscarViasImpressaoCaixa } from "../lib/printLog";
 import { primeirasFotos } from "../lib/fotos";
 import { sugerirCategoria } from "../lib/categorizar";
+import { aoTrocarCategoria } from "../lib/categoriaTroca";
 import CategoriaPicker from "../components/CategoriaPicker";
 import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
@@ -271,8 +272,10 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
         if (!sel.has(it.sku)) continue;
         const g = escolhas[it.sku];
         if (!g) continue;
-        const classe = it.classe ? undefined : classeAutomatica({ ...it, grupo: g }, params).classe;
-        await definirCategoria(it.sku, g, user, classe);
+        // Troca sem herdar a classe/preço-foto da categoria antiga; item sem classe ganha a automática.
+        const t = aoTrocarCategoria(it, g, params);
+        const classe = t.classe ?? (it.classe ? undefined : classeAutomatica({ ...it, grupo: g }, params).classe);
+        await definirCategoria(it.sku, g, user, classe, "preco_novo_est" in t ? { preco_novo_est: t.preco_novo_est } : {});
         n++;
       }
       onChanged?.();

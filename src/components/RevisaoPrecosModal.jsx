@@ -8,9 +8,10 @@ import { STATUS_V2 } from "./pricing/statusV2";
 import { fmtBRL } from "../lib/model";
 
 const FILTROS = [
-  ["TODOS", "Todos"], ["ANUNCIAR", "Pode anunciar"], ["REVISAR", "Revisar"], ["KIT", "Kit"], ["SEM_REF", "Sem ref."], ["INVIAVEL", "Inviáveis"],
+  ["TODOS", "Todos"], ["ANUNCIAR", "Pode anunciar"], ["REVISAR", "Revisar"], ["KIT", "Kit"], ["SEM_REF", "Sem ref."], ["INVIAVEL", "Inviáveis"], ["CAT", "Categoria?"],
 ];
 const grupoDe = (s) => (s === "GIRO" || s === "LOCAL" ? "REVISAR" : s);
+const temCat = (l) => !!l.r.categoria?.divergente;
 
 export default function RevisaoPrecosModal({ itens, params, user, onClose, onAplicado }) {
   const [mapa, setMapa] = useState(null);
@@ -46,10 +47,10 @@ export default function RevisaoPrecosModal({ itens, params, user, onClose, onApl
 
   const contagem = useMemo(() => {
     const c = { TODOS: linhas.length };
-    linhas.forEach((l) => { const g = grupoDe(l.r.status); c[g] = (c[g] || 0) + 1; });
+    linhas.forEach((l) => { const g = grupoDe(l.r.status); c[g] = (c[g] || 0) + 1; if (temCat(l)) c.CAT = (c.CAT || 0) + 1; });
     return c;
   }, [linhas]);
-  const visiveis = linhas.filter((l) => filtro === "TODOS" || grupoDe(l.r.status) === filtro);
+  const visiveis = linhas.filter((l) => filtro === "TODOS" || (filtro === "CAT" ? temCat(l) : grupoDe(l.r.status) === filtro));
   const aValidar = linhas.filter((l) => marcados.has(l.it.sku) && l.apto);
 
   // efeito da validação sobre os preços que já existem (evita baixar preço em massa sem perceber)
@@ -107,6 +108,7 @@ export default function RevisaoPrecosModal({ itens, params, user, onClose, onApl
                       <input type="checkbox" className="accent-orange-500" disabled={!apto} checked={marcados.has(it.sku) && apto} onChange={() => alternar(it.sku)} />
                       <span className="font-mono text-gray-500 w-20 shrink-0">{it.sku}</span>
                       <span className="flex-1 min-w-0 truncate text-gray-800">{it.produto}</span>
+                      {temCat({ r }) && <span title={`Pelo nome: ${r.categoria.sugerida} (atual: ${r.categoria.atual || "—"})`} className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">Categoria?</span>}
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${st.cls}`}>{st.txt}</span>
                     </div>
                     <div className="flex items-center gap-2 pl-6 mt-0.5 text-gray-600">

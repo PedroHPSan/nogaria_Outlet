@@ -88,14 +88,71 @@ const SINONIMOS = {
   "Alimentos/Bebidas": ["chocolate", "biscoito", "azeite", "cafe em po"],
 };
 
-// Marcadores de ACESSÓRIO: quando presentes no texto, NÃO se herda a categoria do
-// produto-pai (corrige "capa iphone" / "carregador xiaomi" virando Smartphone A+).
-// Os tokens de marca (iphone, xiaomi, galaxy...) fazem o scoring puxar o acessório
-// para a categoria do aparelho; este pré-filtro tem prioridade sobre o scoring.
+// ---------------------------------------------------------------------------------------------
+// ACESSÓRIO ≠ APARELHO. O nome de um acessório quase sempre cita o aparelho ("Cabo Baseus P/ Iphone",
+// "Capa Compatível Galaxy S21"), e o token de marca/modelo puxava o scoring para Smartphone (âncora
+// R$ 1.300, classe A+) — o que contamina preço de referência, classe, rateio do lote e as unidades-irmãs.
+// Duas defesas, nesta ordem:
+//   1) pré-filtro por substantivo de acessório (tem prioridade sobre o scoring);
+//   2) neutralização do ALVO DE COMPATIBILIDADE ("para/p/compatível com <aparelho> <modelo>") antes
+//      de pontuar, para que o aparelho citado não vote na categoria.
+// ---------------------------------------------------------------------------------------------
+
+// Aparelhos (e marcas de aparelho) que aparecem como alvo de compatibilidade.
+const APARELHO = "iphone|ipad|galaxy|samsung|xiaomi|redmi|poco|motorola|moto ?[gez]\\d*|apple|huawei|realme|asus|lenovo|lg|smartphone|celular|tablet|tab|smartwatch|notebook|macbook";
+const APARELHO_RE = new RegExp(`(^|[^a-z0-9])(${APARELHO})([^a-z0-9]|$)`);
+// Aparelhos de telefonia/tablet/relógio (para "capa"/"case", que também existem p/ sofá, chuva, bike…).
+const TELEFONIA_RE = /(^|[^a-z0-9])(iphone|ipad|galaxy|samsung|xiaomi|redmi|poco|motorola|moto ?[gez]\d*|apple|huawei|realme|smartphone|celular|tablet|tab|smartwatch|note|fit)([^a-z0-9]|$)/;
+
+// Capa/case/etc. SEM aparelho citado são ambíguos (capa de sofá, de chuva…): só valem com TELEFONIA_RE.
+const ACESSORIO_CELULAR_AMBIGUO_RE = /(^|[^a-z0-9])(capas?|capinhas?|cases?)([^a-z0-9]|$)/;
+// Inequívocos (não existem para outra coisa): valem sozinhos. `pelicula\w*` cobre "pelicula3d", "peliculas".
 const ACESSORIO_CELULAR_RE =
-  /(^|[^a-z0-9])(capa|case|pelicula|protetor de tela|suporte (de |p\/ |para )?(celular|telefone)|skin)([^a-z0-9]|$)/;
+  /(^|[^a-z0-9])(pelicula\w*|hidrogel|protetor(es)? de tela|suporte (de |p\/ |para )?(celular|telefone|smartphone)|skin)([^a-z0-9]|$)/;
+// Energia/conexão: plurais (carregadores, adaptadores), "cabo" só com qualificador de conexão.
 const ACESSORIO_ENERGIA_RE =
-  /(^|[^a-z0-9])(carregador|power ?bank|fonte|adaptador|cabo (usb|tipo ?c|lightning))([^a-z0-9]|$)/;
+  /(^|[^a-z0-9])(carregador(es)?|adaptador(es)?|power ?banks?|hubs? usb|fontes? (de |p\/ |para )?(alimentacao|energia|carregamento))([^a-z0-9]|$)/;
+const CABO_RE = /(^|[^a-z0-9])cabos?([^a-z0-9]|$)/;
+const CABO_QUALIFICADOR_RE = /(usb|tipo ?c|type ?c|lightning|hdmi|micro|p2|aux|otg|turbo|dados|carga|carregamento|ethernet|rj45|displayport)/;
+
+const MARCADORES_COMPAT = new Set(["para", "pra", "p", "compativel", "compat"]);
+const MODELO_RE = /^(\d|pro|max|plus|ultra|fe|lite|mini|se|x[rs]?|[a-z]\d)/;
+
+/** Remove o ALVO DE COMPATIBILIDADE ("para/p/compatível [com] <aparelho> <modelo…>") do texto normalizado. */
+export function semAlvoDeCompatibilidade(t) {
+  const toks = t.split(/\s+/).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const base = toks[i].replace(/[^a-z0-9/]/g, "").replace(/\/$/, "");
+    if (MARCADORES_COMPAT.has(base)) {
+      // procura um aparelho nos próximos 3 tokens (pula "com", "o", "a", "c/")
+      let j = i + 1;
+      let achou = -1;
+      for (; j < Math.min(toks.length, i + 4); j++) {
+        const tk = toks[j].replace(/[^a-z0-9]/g, "");
+        if (APARELHO_RE.test(` ${tk} `)) { achou = j; break; }
+        if (!["com", "o", "a", "c", "de", "do", "da", "ao"].includes(tk)) break;
+      }
+      if (achou >= 0) {
+        let k = achou + 1;
+        while (k < toks.length && k <= achou + 4 && MODELO_RE.test(toks[k].replace(/[^a-z0-9]/g, ""))) k++;
+        i = k - 1; // descarta marcador + aparelho + modelo
+        continue;
+      }
+    }
+    out.push(toks[i]);
+  }
+  return out.join(" ");
+}
+
+/** Pré-filtro por substantivo de acessório. Retorna o nome da categoria de acessório ou null. */
+function acessorioDe(t) {
+  if (ACESSORIO_CELULAR_RE.test(t)) return "Acessórios celular/info";
+  if (ACESSORIO_CELULAR_AMBIGUO_RE.test(t) && TELEFONIA_RE.test(t)) return "Acessórios celular/info";
+  if (ACESSORIO_ENERGIA_RE.test(t)) return "Carregadores/Acessórios eletrônicos";
+  if (CABO_RE.test(t) && CABO_QUALIFICADOR_RE.test(t)) return "Carregadores/Acessórios eletrônicos";
+  return null;
+}
 
 const cacheKw = new Map();
 function keywordsDe(cat) {
@@ -116,11 +173,12 @@ export function sugerirCategoria(texto, categoriasDisponiveis) {
   if (t.length < 3 || !categoriasDisponiveis?.length) return null;
   if (t.includes("a catalogar")) return null; // placeholder de importação
 
-  // Pré-filtro de acessório: tem prioridade sobre o scoring por marca.
-  if (ACESSORIO_CELULAR_RE.test(t) && categoriasDisponiveis.includes("Acessórios celular/info"))
-    return "Acessórios celular/info";
-  if (ACESSORIO_ENERGIA_RE.test(t) && categoriasDisponiveis.includes("Carregadores/Acessórios eletrônicos"))
-    return "Carregadores/Acessórios eletrônicos";
+  // 1) Pré-filtro de acessório: tem prioridade sobre o scoring por marca.
+  const acc = acessorioDe(t);
+  if (acc && categoriasDisponiveis.includes(acc)) return acc;
+
+  // 2) Pontua SEM o alvo de compatibilidade ("para Iphone 15" não vota em Smartphone).
+  const tScore = semAlvoDeCompatibilidade(t);
 
   let best = null;
   let bestScore = 0;
@@ -129,7 +187,7 @@ export function sugerirCategoria(texto, categoriasDisponiveis) {
     let score = 0;
     for (const kw of keywordsDe(cat)) {
       const re = new RegExp(`(^|[^a-z0-9])${escapeRe(kw)}(s|es)?([^a-z0-9]|$)`);
-      if (re.test(t)) score += kw.length + (kw.includes(" ") ? 5 : 0);
+      if (re.test(tScore)) score += kw.length + (kw.includes(" ") ? 5 : 0);
     }
     if (score > bestScore) { bestScore = score; best = cat; }
   }
