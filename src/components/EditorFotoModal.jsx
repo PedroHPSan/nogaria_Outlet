@@ -19,7 +19,7 @@ async function compor(recorte, cor) {
 }
 
 // Editor de foto: remove o fundo no próprio navegador (@imgly/background-removal,
-// open source — modelo ONNX/WASM; a 1ª execução baixa ~40 MB e fica em cache) e
+// open source — modelo ONNX/WASM; a 1ª execução baixa ~45 MB do próprio app e fica em cache) e
 // salva o resultado como NOVA foto do item (a original é preservada).
 export default function EditorFotoModal({ url, sku, onSalvar, onClose }) {
   const [original, setOriginal] = useState(null); // Blob
@@ -45,7 +45,8 @@ export default function EditorFotoModal({ url, sku, onSalvar, onClose }) {
     try {
       const { removeBackground } = await import("@imgly/background-removal");
       const png = await removeBackground(original, {
-        model: "isnet_fp16",
+        model: "isnet_quint8",
+        publicPath: `${window.location.origin}/bg-model/`, // modelo servido pelo próprio app (scripts/copiar_modelo_fundo.mjs)
         output: { format: "image/png" },
         progress: (key, cur, tot) => {
           if (tot) setProgresso(`${key.startsWith("fetch") ? "Baixando modelo" : "Processando"} ${Math.round((cur / tot) * 100)}%`);

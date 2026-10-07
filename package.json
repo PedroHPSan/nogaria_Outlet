@@ -30,7 +30,9 @@
     "test:divulgacao": "node scripts/test_divulgacao.mjs",
     "test:xlsx": "node scripts/test_xlsx.mjs",
     "test:planilha": "node scripts/test_planilha.mjs",
-    "test": "npm run test:pricing && npm run test:categoria && npm run test:preflight && npm run test:precoview && npm run test:catalogo && npm run test:anuncio && npm run test:caixas && npm run test:catalogar && npm run test:iaanalise && npm run test:catalogoimagens && npm run test:catalogopublico && npm run test:fotoinput && npm run test:estoque && npm run test:fotoprincipal && npm run test:salas && npm run test:selecao && npm run test:xlsx && npm run test:planilha"
+    "test": "npm run test:pricing && npm run test:categoria && npm run test:preflight && npm run test:precoview && npm run test:catalogo && npm run test:anuncio && npm run test:caixas && npm run test:catalogar && npm run test:iaanalise && npm run test:catalogoimagens && npm run test:catalogopublico && npm run test:fotoinput && npm run test:estoque && npm run test:fotoprincipal && npm run test:salas && npm run test:selecao && npm run test:xlsx && npm run test:planilha",
+    "predev": "node scripts/copiar_modelo_fundo.mjs",
+    "prebuild": "node scripts/copiar_modelo_fundo.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
@@ -45,6 +47,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@imgly/background-removal-data": "^1.4.5",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "eslint": "^9.39.4",

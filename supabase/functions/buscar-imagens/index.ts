@@ -7,6 +7,8 @@
 //   { acao: "buscar", q: string, inicio?: number }  → { itens: [{ url, thumb, titulo, fonte, w, h }] }
 //   { acao: "baixar", url: string }                  → bytes da imagem (Content-Type da origem)
 //
+// Cota: 30 buscas e 120 downloads por usuário/hora (migration 20261007120000_buscar_imagens_cota).
+//
 // Secrets (supabase secrets set ...):
 //   GOOGLE_CSE_KEY — chave da Custom Search JSON API (NUNCA logar)
 //   GOOGLE_CSE_CX  — ID do mecanismo de busca (com "Pesquisa de imagens" ativada)
@@ -63,36 +65,138 @@ function ipPrivado(ip: string): boolean {
     (a === 192 && b === 0 && c === 0);
 }
 
-// Valida a URL e resolve o DNS (A e AAAA): rejeita se QUALQUER endereço for interno.
-async function urlPermitida(raw: string): Promise<URL | null> {
+// Valida a URL e resolve o DNS (A e AAAA). Devolve a URL e os IPs JÁ validados, ou null se
+// qualquer endereço for interno. A conexão é feita nesses IPs (ver pedirFixo), então um
+// segundo lookup (DNS rebinding) não consegue trocar o destino depois da checagem.
+async function urlPermitida(raw: string): Promise<{ u: URL; ips: string[] } | null> {
   let u: URL;
   try { u = new URL(raw); } catch { return null; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
   if (u.port && u.port !== "80" && u.port !== "443") return null;
   const h = u.hostname.toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
   if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return null;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(":")) return ipPrivado(h) ? null : u;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(":")) return ipPrivado(h) ? null : { u, ips: [h] };
   const ips: string[] = [];
   for (const tipo of ["A", "AAAA"] as const) {
     try { ips.push(...(await Deno.resolveDns(h, tipo))); } catch { /* sem registro deste tipo */ }
   }
   if (!ips.length || ips.some(ipPrivado)) return null;
-  return u;
+  return { u, ips };
 }
 
-// Segue redirecionamentos manualmente (máx. 3), revalidando cada destino.
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+// Leitor com buffer sobre uma conexão (para parsear HTTP/1.1 na mão).
+class Leitor {
+  buf = new Uint8Array(0);
+  constructor(private c: { read(p: Uint8Array): Promise<number | null> }) {}
+  private async mais(): Promise<boolean> {
+    const tmp = new Uint8Array(16384);
+    let n: number | null;
+    try { n = await this.c.read(tmp); }
+    catch (e) {
+      // Muitos servidores fecham o TLS sem close_notify ao terminar: tratar como EOF.
+      if (e instanceof Deno.errors.UnexpectedEof) return false;
+      throw e;
+    }
+    if (n === null) return false;
+    const novo = new Uint8Array(this.buf.length + n);
+    novo.set(this.buf); novo.set(tmp.subarray(0, n), this.buf.length);
+    this.buf = novo;
+    return true;
+  }
+  async ate(delim: string, max: number): Promise<string | null> {
+    const d = enc.encode(delim);
+    let desde = 0;
+    while (true) {
+      outer: for (let i = desde; i <= this.buf.length - d.length; i++) {
+        for (let j = 0; j < d.length; j++) if (this.buf[i + j] !== d[j]) continue outer;
+        const out = dec.decode(this.buf.subarray(0, i));
+        this.buf = this.buf.subarray(i + d.length);
+        return out;
+      }
+      desde = Math.max(0, this.buf.length - d.length + 1);
+      if (this.buf.length > max || !(await this.mais())) return null;
+    }
+  }
+  async ler(): Promise<Uint8Array | null> { // o que houver (até o fim da conexão)
+    if (!this.buf.length && !(await this.mais())) return null;
+    const out = this.buf; this.buf = new Uint8Array(0); return out;
+  }
+  async exato(n: number): Promise<Uint8Array | null> {
+    while (this.buf.length < n) if (!(await this.mais())) return null;
+    const out = this.buf.subarray(0, n); this.buf = this.buf.subarray(n); return out;
+  }
+}
+
+// GET HTTP/1.1 conectando direto no IP validado (SNI/Host = nome original). Devolve uma
+// Response com o corpo em streaming; o chamador aplica os limites de tamanho.
+async function pedirFixo(u: URL, ips: string[]): Promise<Response> {
+  const https = u.protocol === "https:";
+  const porta = Number(u.port) || (https ? 443 : 80);
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  let conn: Deno.Conn = await Deno.connect({ hostname: ips[0], port: porta });
+  const timer = setTimeout(() => { try { conn.close(); } catch { /* já fechada */ } }, 15000);
+  try {
+    if (https) conn = await Deno.startTls(conn as Deno.TcpConn, { hostname: host });
+    const req = `GET ${u.pathname}${u.search} HTTP/1.1\r\nHost: ${u.host}\r\n` +
+      "User-Agent: Mozilla/5.0 (compatible; NogariaOutlet/1.0)\r\nAccept: image/*\r\n" +
+      "Accept-Encoding: identity\r\nConnection: close\r\n\r\n";
+    await conn.write(enc.encode(req));
+    const lei = new Leitor(conn);
+    const cab = await lei.ate("\r\n\r\n", 32768);
+    if (!cab) throw new Error("cabeçalho inválido");
+    const linhas = cab.split("\r\n");
+    const status = Number(linhas[0].split(" ")[1]);
+    if (!(status >= 200 && status <= 599)) throw new Error("status inválido");
+    const headers = new Headers();
+    for (const l of linhas.slice(1)) {
+      const i = l.indexOf(":");
+      if (i > 0) { try { headers.append(l.slice(0, i).trim(), l.slice(i + 1).trim()); } catch { /* cabeçalho inválido */ } }
+    }
+    const chunked = (headers.get("transfer-encoding") ?? "").toLowerCase().includes("chunked");
+    const fim = () => { clearTimeout(timer); try { conn.close(); } catch { /* já fechada */ } };
+    if (status === 204 || status === 304 || (status >= 300 && status < 400)) {
+      fim();
+      return new Response(null, { status, headers });
+    }
+    const corpo = new ReadableStream<Uint8Array>({
+      async pull(ctl) {
+        try {
+          if (!chunked) {
+            const c = await lei.ler();
+            if (c === null) { fim(); ctl.close(); } else ctl.enqueue(c);
+            return;
+          }
+          const tam = await lei.ate("\r\n", 1024);
+          const n = tam === null ? NaN : parseInt(tam.split(";")[0].trim(), 16);
+          if (!(n >= 0)) throw new Error("chunk inválido");
+          if (n === 0) { fim(); ctl.close(); return; }
+          const dados = await lei.exato(n);
+          if (!dados || (await lei.exato(2)) === null) throw new Error("chunk truncado");
+          ctl.enqueue(dados);
+        } catch (e) { fim(); ctl.error(e); }
+      },
+      cancel() { fim(); },
+    });
+    return new Response(corpo, { status, headers });
+  } catch (e) {
+    clearTimeout(timer);
+    try { conn.close(); } catch { /* já fechada */ }
+    throw e;
+  }
+}
+
+// Segue redirecionamentos manualmente (máx. 3), revalidando e re-resolvendo cada destino.
 async function buscarSeguro(raw: string): Promise<Response | null> {
   let atual = raw;
   for (let i = 0; i <= 3; i++) {
-    const alvo = await urlPermitida(atual);
-    if (!alvo) return null;
-    const r = await fetch(alvo, {
-      redirect: "manual",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; NogariaOutlet/1.0)", Accept: "image/*" },
-      signal: AbortSignal.timeout(15000),
-    });
+    const ok = await urlPermitida(atual);
+    if (!ok) return null;
+    const r = await pedirFixo(ok.u, ok.ips);
     const loc = r.headers.get("location");
-    if (r.status >= 300 && r.status < 400 && loc) { atual = new URL(loc, alvo).toString(); continue; }
+    if (r.status >= 300 && r.status < 400 && loc) { atual = new URL(loc, ok.u).toString(); continue; }
     return r;
   }
   return null;
@@ -104,6 +208,16 @@ Deno.serve(async (req) => {
     const jwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: u } = await admin.auth.getUser(jwt);
     if (!u?.user) return json({ error: "não autenticado" }, 401);
+
+    // Cota por usuário/hora (tabela buscar_imagens_uso). Fail-closed: sem a migration, nega.
+    const LIMITES = { buscar: 30, baixar: 120 } as const;
+    const acao = (await req.clone().json())?.acao as keyof typeof LIMITES;
+    if (!(acao in LIMITES)) return json({ error: "acao inválida" }, 400);
+    const { data: dentro, error: eCota } = await admin.rpc("consumir_cota_busca", {
+      p_user: u.user.id, p_acao: acao, p_limite: LIMITES[acao],
+    });
+    if (eCota) { console.error("buscar-imagens cota:", eCota.message); return json({ error: "erro interno" }, 500); }
+    if (!dentro) return json({ error: "limite de uso atingido, tente mais tarde" }, 429);
 
     const body = await req.json();
 
