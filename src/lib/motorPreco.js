@@ -221,7 +221,7 @@ export function custoMaximoLance(itens) {
   return r2(total);
 }
 
-const BRL = (n) => `R$ ${Number(n).toFixed(2).replace(".", ",")}`;
+const BRL = (n) => `R$ ${Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PCT = (n) => `${(Number(n) * 100).toFixed(1).replace(".", ",")}%`;
 
 /** Texto "de onde chegamos a esse preço" (linhas curtas para a UI). */

@@ -52,6 +52,11 @@ export default function RevisaoPrecosModal({ itens, params, user, onClose, onApl
   const visiveis = linhas.filter((l) => filtro === "TODOS" || grupoDe(l.r.status) === filtro);
   const aValidar = linhas.filter((l) => marcados.has(l.it.sku) && l.apto);
 
+  // efeito da validação sobre os preços que já existem (evita baixar preço em massa sem perceber)
+  const efeito = aValidar.reduce((e, l) => {
+    if (l.r.atual == null) e.novos++; else if (l.final < l.r.atual) e.baixam++; else if (l.final > l.r.atual) e.sobem++; else e.iguais++;
+    return e;
+  }, { baixam: 0, sobem: 0, novos: 0, iguais: 0 });
   const alternar = (sku) => setMarcados((s) => { const n = new Set(s); n.has(sku) ? n.delete(sku) : n.add(sku); return n; });
   const marcarVisiveis = () => setMarcados((s) => { const n = new Set(s); visiveis.filter((l) => l.apto).forEach((l) => n.add(l.it.sku)); return n; });
 
@@ -81,7 +86,7 @@ export default function RevisaoPrecosModal({ itens, params, user, onClose, onApl
           <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Calculando…</p>
         ) : mapa && (
           <>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 shrink-0">
               {FILTROS.map(([k, t]) => (
                 <button key={k} onClick={() => setFiltro(k)}
                   className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold border ${filtro === k ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200"}`}>
@@ -119,6 +124,9 @@ export default function RevisaoPrecosModal({ itens, params, user, onClose, onApl
               })}
               {!visiveis.length && <p className="p-3 text-xs text-gray-400">Nada nesta situação.</p>}
             </div>
+            {!resultado && aValidar.length > 0 && (
+              <p className="text-xs text-gray-600">Ao validar: <b className={efeito.baixam ? "text-red-600" : ""}>{efeito.baixam} baixam</b> · {efeito.sobem} sobem · {efeito.novos} sem preço hoje · {efeito.iguais} iguais</p>
+            )}
             {resultado ? (
               <p className="text-sm text-emerald-700 flex items-center gap-1.5"><Check className="w-4 h-4" /> {resultado.ok} preço(s) validado(s){resultado.erros.length ? ` · ${resultado.erros.length} falha(s)` : ""}</p>
             ) : (

@@ -111,7 +111,7 @@ export default function RateioLoteModal({ lote, params, user, onClose, onAlterad
                 <p className="font-semibold">Custo do lote: {fmtBRL(c.total)} <span className="font-normal text-gray-500">({c.origem})</span></p>
                 {c.lance != null && <p>Lance {fmtBRL(c.lance)} + comissão 5% {fmtBRL(c.comissao)} + taxa HISA {fmtBRL(c.taxaHisa)} ({c.taxaOrigem}) + frete {fmtBRL(c.frete)} ({c.freteOrigem})</p>}
                 <p>Anúncio potencial (com referência) {fmtBRL(resumo.anuncio)} · custo = {resumo.anuncio ? pct(resumo.custoTotal / resumo.anuncio) : "—"} do anúncio · <b>custo máximo p/ 25% de margem: {fmtBRL(resumo.maxLance)}</b></p>
-                {resumo.custoTotal > resumo.maxLance && <p className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Custo do lote acima do máximo que fecha 25% no canal escolhido: o pesos só redistribuem, não criam margem.</p>}
+                {resumo.custoTotal > resumo.maxLance && <p className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Custo do lote acima do máximo que fecha 25% no canal escolhido: os pesos só redistribuem, não criam margem.</p>}
               </div>
             ) : <p className="text-sm text-amber-700">Lote sem custo cadastrado.</p>}
             <p className="text-xs text-gray-600">
