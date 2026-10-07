@@ -89,7 +89,7 @@ const dec = new TextDecoder();
 
 // Leitor com buffer sobre uma conexão (para parsear HTTP/1.1 na mão).
 class Leitor {
-  buf = new Uint8Array(0);
+  buf: Uint8Array = new Uint8Array(0);
   constructor(private c: { read(p: Uint8Array): Promise<number | null> }) {}
   private async mais(): Promise<boolean> {
     const tmp = new Uint8Array(16384);
@@ -161,21 +161,35 @@ async function pedirFixo(u: URL, ips: string[]): Promise<Response> {
       fim();
       return new Response(null, { status, headers });
     }
+    let restante = 0; // bytes que faltam do chunk atual (transfer-encoding: chunked)
     const corpo = new ReadableStream<Uint8Array>({
+      // O stream só chama pull de novo depois de um enqueue: repete até entregar dados ou fechar.
       async pull(ctl) {
         try {
-          if (!chunked) {
-            const c = await lei.ler();
-            if (c === null) { fim(); ctl.close(); } else ctl.enqueue(c);
-            return;
+          while (true) {
+            if (!chunked) {
+              const c = await lei.ler();
+              if (c === null) { fim(); ctl.close(); } else ctl.enqueue(c);
+              return;
+            }
+            // Dentro de um chunk, repassa o que chegou sem bufferizar o chunk inteiro (o tamanho
+            // é declarado pelo servidor remoto); o teto de 8 MB é aplicado por quem consome.
+            if (restante > 0) {
+              const c = await lei.ler();
+              if (c === null) throw new Error("chunk truncado");
+              const parte = c.subarray(0, restante);
+              lei.buf = c.subarray(parte.length); // devolve o excedente ao buffer
+              restante -= parte.length;
+              if (restante === 0 && (await lei.exato(2)) === null) throw new Error("chunk truncado");
+              ctl.enqueue(parte);
+              return;
+            }
+            const tam = await lei.ate("\r\n", 1024);
+            const n = tam === null ? NaN : parseInt(tam.split(";")[0].trim(), 16);
+            if (!(n >= 0)) throw new Error("chunk inválido");
+            if (n === 0) { fim(); ctl.close(); return; }
+            restante = n;
           }
-          const tam = await lei.ate("\r\n", 1024);
-          const n = tam === null ? NaN : parseInt(tam.split(";")[0].trim(), 16);
-          if (!(n >= 0)) throw new Error("chunk inválido");
-          if (n === 0) { fim(); ctl.close(); return; }
-          const dados = await lei.exato(n);
-          if (!dados || (await lei.exato(2)) === null) throw new Error("chunk truncado");
-          ctl.enqueue(dados);
         } catch (e) { fim(); ctl.error(e); }
       },
       cancel() { fim(); },
