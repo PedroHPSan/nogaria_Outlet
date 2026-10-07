@@ -4,6 +4,7 @@
 // pesos padrão. Nada aqui grava preço sozinho — só `validarPreco`, por ação humana.
 import { supabase as supabasePadrao } from "./supabase.js";
 import { derivarPreco } from "./precoView.js";
+import { sugerirCategoria } from "./categorizar.js";
 import { custoRealLote } from "./custoLote.js";
 import { ratearLote, precificarV2, canalV2, explicar, aplicarConfig, porteLabel } from "./motorPreco.js";
 
@@ -71,6 +72,12 @@ async function snapshotDoLote(lote) {
   return m;
 }
 
+function categoriaDe(it, params) {
+  const lista = Object.keys(params?.grupos || {});
+  const sugerida = lista.length ? sugerirCategoria(it.produto, lista) : null;
+  return { atual: it.grupo || null, sugerida, divergente: !!sugerida && sugerida !== it.grupo };
+}
+
 const alvoDe = (it, params) => derivarPreco(it, params?.grupos?.[it.grupo] || {}, params, null).recomendado;
 const kDe = (it, pesos) => (pesos && pesos[it.sku] != null ? pesos[it.sku] : Number(it.peso_rateio) || 1);
 
@@ -128,6 +135,8 @@ export async function analisarItens(itens, params, { force = false } = {}) {
         ...r, semCusto: !calc.custo, loteCusto: calc.custo?.total ?? null, custoOrigem: calc.custo?.origem ?? null,
         atual: Number(it.preco_ideal) > 0 ? Number(it.preco_ideal) : null,
         aprovacao: it.preco_aprovacao || null,
+        // Categoria pelo NOME do produto × categoria gravada: divergência = preço de referência/classe suspeitos
+        categoria: categoriaDe(it, params),
         explicacao: explicar(r, { condicao: it.estado || "", loteCusto: calc.custo?.total ?? null }),
         // Memória de cálculo (estruturada) para a tela do operador
         memoria: {

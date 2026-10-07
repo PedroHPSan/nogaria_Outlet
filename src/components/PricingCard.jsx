@@ -7,6 +7,7 @@ import { lucroEm, canalV2, REGRAS } from "../lib/motorPreco";
 import PriceRuler from "./pricing/PriceRuler";
 import MemoriaCalculoV2 from "./pricing/MemoriaCalculoV2";
 import { STATUS_V2 } from "./pricing/statusV2";
+import { aoTrocarCategoria } from "../lib/categoriaTroca";
 import Ajuda from "./pricing/Ajuda";
 
 const CANAIS = [
@@ -176,6 +177,16 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onCha
 
       {r && (
         <>
+          {/* Categoria pelo nome ≠ categoria gravada: a referência de preço parte da categoria */}
+          {r.categoria?.divergente && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Pelo nome, a categoria parece ser <b>{r.categoria.sugerida}</b> (atual: {r.categoria.atual || "sem categoria"}). O preço de referência, a classe e o rateio do lote partem da categoria.</span>
+              <button type="button" onClick={() => onChange?.(aoTrocarCategoria(item, r.categoria.sugerida, params))}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-600 text-white font-semibold flex-shrink-0">Trocar</button>
+            </div>
+          )}
+
           {/* Preço sugerido pelo motor novo */}
           <div className="rounded-2xl border border-orange-200 bg-orange-50/40 p-3 space-y-1.5">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-gray-500">
