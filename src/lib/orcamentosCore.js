@@ -62,6 +62,14 @@ export function valoresPorItem(itens, descontoPct = 0) {
   });
 }
 
+// Itens cujo valor FINAL (já com o desconto do orçamento) fica abaixo do piso (custo + taxas).
+// `pisos` = { sku: piso }. Sem piso conhecido para o sku, não acusa nada.
+export function abaixoDoPiso(itens, descontoPct = 0, pisos = {}) {
+  return valoresPorItem(itens, descontoPct)
+    .filter((v) => Number(pisos[v.sku]) > 0 && v.valor < Number(pisos[v.sku]))
+    .map((v) => ({ sku: v.sku, valor: v.valor, piso: Number(pisos[v.sku]) }));
+}
+
 const brl = (v) => `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const dataHora = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 

@@ -1,6 +1,6 @@
 // Teste do núcleo puro de orçamentos. Rode: npm run test:orcamentos
 import assert from "node:assert/strict";
-import { podeTransitar, terminal, codigoOrcamento, proximoSeq, validadeEm, statusEfetivo, reservaAtiva, snapshotItens, totais, valoresPorItem, mensagemCliente, mensagemAceite } from "../src/lib/orcamentosCore.js";
+import { podeTransitar, terminal, codigoOrcamento, proximoSeq, validadeEm, statusEfetivo, reservaAtiva, snapshotItens, totais, valoresPorItem, mensagemCliente, mensagemAceite, abaixoDoPiso } from "../src/lib/orcamentosCore.js";
 
 let n = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); n++; console.log(`  ok  ${m}`); };
@@ -43,4 +43,13 @@ const m = mensagemCliente(orc, "https://x/o/abc");
 ok(m.includes("ORC-0012") && m.includes("Maria") && m.includes("Sofá (A)") && m.includes("https://x/o/abc") && m.includes("Desconto de 10%"), "mensagem completa");
 ok(m.includes("sob consulta"), "item sem preço aparece sob consulta");
 ok(mensagemAceite(orc).includes("ORC-0012"), "aceite cita o código");
+console.log("trava de piso no orçamento");
+const itP = [{ sku: "A", preco: 100 }, { sku: "B", preco: 200 }];
+eq(abaixoDoPiso(itP, 0, { A: 90, B: 150 }).length, 0, "sem desconto, acima do piso: nada");
+const v10 = abaixoDoPiso(itP, 10, { A: 95, B: 150 });
+eq(v10.length, 1, "10% de desconto leva A (R$ 90) abaixo do piso 95");
+eq(v10[0].sku, "A", "o item acusado é o A");
+eq(v10[0].valor, 90, "valor final do item com desconto");
+eq(abaixoDoPiso(itP, 50, {}).length, 0, "sem piso conhecido não acusa");
+
 console.log(`\n${n} asserções OK`);

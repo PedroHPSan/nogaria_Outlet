@@ -1000,16 +1000,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
 
         {/* Precificação & venda — card único (motor + preço final + anúncio + destino + venda) */}
         <div className="mb-4">
-          <PricingCard
-            item={it}
-            params={params}
-            custoItem={custoItem}
-            onChange={(patch) => set(patch)}
-          />
+          <PricingCard item={it} params={params} user={user} onChange={(patch) => set(patch)} />
         </div>
 
         {/* Publicar em marketplace (Amazon) — após revisão; gate de preço/GTIN no PublishPanel */}
-        <PublishPanel item={it} />
+        <PublishPanel item={it} params={params} />
 
         {/* Venda — detalhe da venda real (a partir de Triado, p/ vendas diretas) p/ apurar o lucro líquido */}
         {statusIdx(it.status) >= statusIdx("TRIADO") && (
@@ -1148,7 +1143,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       )}
       {anuncio && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <AnuncioModal itens={itensAnuncio} onClose={() => setAnuncio(false)} />
+          <AnuncioModal itens={itensAnuncio} params={params} onClose={() => setAnuncio(false)} />
         </Suspense>
       )}
 

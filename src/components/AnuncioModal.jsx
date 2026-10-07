@@ -4,7 +4,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { X, Loader2, Printer, Copy, MessageCircle, Check, Save } from "lucide-react";
 import { montarOrcamento, imprimirAnuncio } from "../lib/anuncio";
 import { criarOrcamento, linkOrcamento } from "../lib/orcamentos";
-import { mensagemCliente } from "../lib/orcamentosCore";
+import { mensagemCliente, snapshotItens, abaixoDoPiso } from "../lib/orcamentosCore";
+import { analisarItens } from "../lib/motorPrecoDb";
+import { fmtBRL } from "../lib/model";
 
 // A folha do PDF tem largura fixa de 210mm (≈794px a 96dpi); em tela estreita
 // não dá para "esticar" o iframe — o conteúdo cortaria. A prévia então mantém
@@ -12,7 +14,7 @@ import { mensagemCliente } from "../lib/orcamentosCore";
 const A4_W = 794;   // 210mm em px @96dpi
 const A4_H = 1123;  // 297mm em px @96dpi
 
-export default function AnuncioModal({ itens = [], user, onClose }) {
+export default function AnuncioModal({ itens = [], user, params, onClose }) {
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState(null);   // { html, mensagem, link, total, semPreco, semFoto }
   const [erro, setErro] = useState(null);
@@ -22,6 +24,8 @@ export default function AnuncioModal({ itens = [], user, onClose }) {
   const [form, setForm] = useState({ cliente: "", whats: "", desconto: "" });
   const [salvo, setSalvo] = useState(null);          // orçamento persistido
   const [erroSalvar, setErroSalvar] = useState(null);
+  const [pisos, setPisos] = useState({});            // sku → piso do motor novo (trava de prejuízo)
+  const [autorizaPiso, setAutorizaPiso] = useState(false);
   const areaRef = useRef(null);
   const [larguraArea, setLarguraArea] = useState(0);
 
@@ -60,6 +64,18 @@ export default function AnuncioModal({ itens = [], user, onClose }) {
 
   const titulo = itens.length === 1 ? `Orçamento — ${itens[0].sku}` : `Orçamento — ${itens.length} itens`;
 
+  // Piso por item (custo real do lote + taxas) para avisar quando o desconto leva abaixo do custo.
+  useEffect(() => {
+    let cancel = false;
+    if (!params || !itens.length) return undefined;
+    analisarItens(itens, params).then((m) => {
+      if (cancel) return;
+      const o = {}; m.forEach((r, sku) => { o[sku] = r.piso; }); setPisos(o);
+    }).catch(() => {}); // sem piso: não trava, só não avisa
+    return () => { cancel = true; };
+  }, [itens, params]);
+  const violacoes = abaixoDoPiso(snapshotItens(itens), Number(form.desconto) || 0, pisos);
+
   const copiar = async () => {
     if (!dados) return;
     try {
@@ -70,6 +86,7 @@ export default function AnuncioModal({ itens = [], user, onClose }) {
   };
   const salvar = async () => {
     setErroSalvar(null);
+    if (violacoes.length && !autorizaPiso) { setErroSalvar("Há itens abaixo do piso: marque a autorização para continuar."); return; }
     try {
       const orc = await criarOrcamento(itens, { clienteNome: form.cliente, clienteWhatsapp: form.whats, descontoPct: Number(form.desconto) || 0 }, user);
       setSalvo(orc);
@@ -133,6 +150,12 @@ export default function AnuncioModal({ itens = [], user, onClose }) {
                 <input value={form.desconto} onChange={(e) => setForm({ ...form, desconto: e.target.value })} placeholder="Desconto % (opcional)" inputMode="decimal" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
                 <button onClick={salvar} className="rounded-lg bg-orange-500 text-white text-sm font-bold">Salvar orçamento</button>
               </div>
+              {violacoes.length > 0 && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2 space-y-1">
+                  <p><b>{violacoes.length} item(ns) abaixo do piso</b> (não cobre custo e taxas): {violacoes.slice(0, 3).map((v) => `${v.sku} ${fmtBRL(v.valor)} < ${fmtBRL(v.piso)}`).join(" · ")}{violacoes.length > 3 ? "…" : ""}</p>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={autorizaPiso} onChange={(e) => setAutorizaPiso(e.target.checked)} className="accent-red-600" /> Autorizo vender abaixo do piso</label>
+                </div>
+              )}
               {erroSalvar && <p className="text-xs text-red-600">{erroSalvar}</p>}
             </>
           )}

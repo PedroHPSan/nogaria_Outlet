@@ -50,7 +50,9 @@ export function marcaGated(it) {
 
 // Gate completo. ok = todos os checks BLOQUEANTES passam (preco, banda, gtin).
 // Avisos (foto, marca) não afetam ok. idProduto = o identificador a usar no payload.
-export function preflightAmazon(it) {
+// `piso` (opcional) = preço de equilíbrio do motor de preço (custo real do lote + taxas): quando
+// informado, publicar abaixo dele BLOQUEIA (nunca anunciar com prejuízo).
+export function preflightAmazon(it, { piso = null } = {}) {
   const gv = gtinValido(it?.gtin);
   const banda = bandaPreco(it);
   const mg = marcaGated(it);
@@ -61,6 +63,11 @@ export function preflightAmazon(it) {
       motivo: temPreco ? null : "Defina o preço de venda (preco_ideal > 0) — não usar sugerido/mínimo." },
     { id: "banda", label: "Preço na faixa de sanidade (0,4×–2,5× do novo)", bloqueante: true, ok: banda.ok,
       motivo: banda.ok ? null : `Preço ${banda.ratio != null ? banda.ratio.toFixed(2) + "×" : ""} a referência (fora de 0,4×–2,5×).` },
+    ...(Number(piso) > 0 ? [{
+      id: "piso", label: "Preço acima do piso (cobre custo e taxas)", bloqueante: true,
+      ok: !temPreco || num(it?.preco_ideal) >= Number(piso),
+      motivo: !temPreco || num(it?.preco_ideal) >= Number(piso) ? null : `Preço abaixo do piso (R$ ${Number(piso).toFixed(2)}): venderia com prejuízo.`,
+    }] : []),
     { id: "gtin", label: "GTIN/EAN/UPC ou ASIN válido", bloqueante: true, ok: gv.ok,
       motivo: gv.ok ? null : "Informe um GTIN/EAN (13), UPC (12), GTIN-14 ou ASIN." },
     { id: "foto", label: "Tem foto", bloqueante: false, ok: it?.foto_feita === true,

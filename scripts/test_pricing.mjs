@@ -1,7 +1,7 @@
 // Teste do motor de precificação (pricing.js é JS puro, sem dependências).
 // Rode: node scripts/test_pricing.mjs   (ou: npm run test:pricing)
 import assert from "node:assert/strict";
-import { precificar, estadoToCondicao } from "../src/lib/pricing.js";
+import { precificar, estadoToCondicao, gerarTitulo } from "../src/lib/pricing.js";
 import { precoVenda } from "../src/lib/export.js";
 
 let passou = 0;
@@ -60,5 +60,14 @@ eq(precoVenda({ preco_ideal: 150 }), 150, "com preco_ideal → usa ele");
 eq(precoVenda({ preco_sugerido: 99 }), null, "só preco_sugerido → null (não usa o campo quebrado)");
 eq(precoVenda({ preco_min: 80, preco_novo_est: 200 }), null, "só preco_min/novo_est → null");
 eq(precoVenda({ preco_ideal: 0 }), null, "preco_ideal 0 → null");
+
+console.log("\nTítulo: o selo \"Testado\" não pode ser falso");
+const base = { marca: "Acme", produto: "Fone", modelo: "X1" };
+eq(gerarTitulo({ ...base, estado: "Novo" }), "Acme Fone X1 — Novo", "Novo → selo Novo");
+eq(gerarTitulo({ ...base, estado: "Usado" }), "Acme Fone X1 — Outlet Testado", "Usado → Outlet Testado");
+eq(gerarTitulo({ ...base, estado: "Usado sem teste" }), "Acme Fone X1 — Outlet", "Usado sem teste → sem 'Testado'");
+eq(gerarTitulo({ ...base, estado: "Avariado" }), "Acme Fone X1 — Outlet", "Avariado → sem 'Testado'");
+eq(gerarTitulo({ ...base, estado: "Usado sem teste", funciona: true }), "Acme Fone X1 — Outlet Testado", "funciona=true → Testado");
+eq(gerarTitulo({ ...base, estado: "Embalagem aberta/avariada" }), "Acme Fone X1 — Caixa aberta", "Caixa aberta → selo próprio");
 
 console.log(`\n${passou} asserções OK`);

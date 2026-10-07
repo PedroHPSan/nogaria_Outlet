@@ -17,6 +17,8 @@ const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
 const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
 const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
 const PrecoRapidoModal = React.lazy(() => import("../components/PrecoRapidoModal"));
+const RevisaoPrecosModal = React.lazy(() => import("../components/RevisaoPrecosModal"));
+const RateioLoteModal = React.lazy(() => import("../components/RateioLoteModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
@@ -64,6 +66,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [orcamento, setOrcamento] = useState(null); // itens do orçamento em prévia
   const [catalogoSkus, setCatalogoSkus] = useState(null); // SKUs do catálogo rápido (seleção)
   const [precoRapido, setPrecoRapido] = useState(null); // itens do preço rápido em massa
+  const [revisaoPrecos, setRevisaoPrecos] = useState(null); // itens da revisão de preços (motor v2)
+  const [rateioLote, setRateioLote] = useState(null); // lote aberto no rateio (pesos)
   const [boxPicker, setBoxPicker] = useState(false);
   const [catalogarPicker, setCatalogarPicker] = useState(false);
   const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
@@ -113,6 +117,10 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   };
 
   // Preço rápido de TODOS os selecionados (desconto por idade + arredondamento, sem passar do piso).
+  const revisarPrecosSelecionados = () => {
+    const escolhidos = selecionados(selected, itens);
+    if (escolhidos.length) setRevisaoPrecos(escolhidos);
+  };
   const precificarSelecionados = () => {
     const escolhidos = selecionados(selected, itens);
     if (escolhidos.length) setPrecoRapido(escolhidos);
@@ -276,6 +284,11 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               <option value={LOTE_SEM}>Sem lote</option>
               {lotes.map((l) => <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>)}
             </select>
+            {fLote && fLote !== LOTE_SEM && (
+              <button onClick={() => setRateioLote(Number(fLote))} className="w-full rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-sm font-semibold py-2">
+                Rateio e custo do lote {fLote} (pesos)
+              </button>
+            )}
             <div className="flex gap-2">
               <select value={fClasse} onChange={(e) => setFClasse(e.target.value)} className={inputCls}>
                 <option value="">Todas as classes</option>
@@ -511,6 +524,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                 sub="PDF, link, WhatsApp e Instagram" desativado={selected.size === 0} onClick={catalogarSelecionados} />
               <BotaoAcao cor="bg-blue-600" icone={Tag} titulo={`Preço rápido (${selected.size})`}
                 sub="desconto por tempo parado" desativado={selected.size === 0} onClick={precificarSelecionados} />
+              <BotaoAcao cor="bg-purple-600" icone={Tag} titulo={`Revisar preços (${selected.size})`}
+                sub="custo real, lucro e validar" desativado={selected.size === 0} onClick={revisarPrecosSelecionados} />
               <BotaoAcao cor="bg-emerald-600" icone={FileText}
                 titulo={selected.size > LIMITE_ORCAMENTO ? `Orçamento (máx. ${LIMITE_ORCAMENTO})` : `Orçamento (${selected.size})`}
                 sub="proposta para o cliente" desativado={selected.size === 0 || selected.size > LIMITE_ORCAMENTO} onClick={orcarSelecionados} />
@@ -550,13 +565,25 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
       {orcamento && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <AnuncioModal itens={orcamento} user={user} onClose={() => setOrcamento(null)} />
+          <AnuncioModal itens={orcamento} user={user} params={params} onClose={() => setOrcamento(null)} />
         </Suspense>
       )}
 
       {precoRapido && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <PrecoRapidoModal itens={precoRapido} params={params} user={user} onClose={() => setPrecoRapido(null)} onAplicado={() => buscar(true)} />
+        </Suspense>
+      )}
+
+      {revisaoPrecos && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <RevisaoPrecosModal itens={revisaoPrecos} params={params} user={user} onClose={() => setRevisaoPrecos(null)} onAplicado={() => buscar(true)} />
+        </Suspense>
+      )}
+
+      {rateioLote != null && (
+        <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <RateioLoteModal lote={rateioLote} params={params} user={user} onClose={() => setRateioLote(null)} onAlterado={() => buscar(true)} />
         </Suspense>
       )}
 
