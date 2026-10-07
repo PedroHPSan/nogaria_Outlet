@@ -96,7 +96,11 @@ begin
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end $$;
-grant usage, select on sequence item_peso_rateio_log_id_seq to authenticated;
+-- Grants explícitos (não depender dos privilégios padrão do ambiente): o RLS acima é quem restringe linhas.
+grant select, insert, update, delete on public.item_peso_rateio_log, public.item_custo_snapshot,
+  public.pricing_v2_param, public.pricing_v2_canal to authenticated;
+grant all on public.item_peso_rateio_log, public.item_custo_snapshot, public.pricing_v2_param, public.pricing_v2_canal to service_role;
+grant usage, select on sequence item_peso_rateio_log_id_seq to authenticated, service_role;
 
 -- ROLLBACK (se necessário):
 --   drop table if exists item_peso_rateio_log, item_custo_snapshot, pricing_v2_param, pricing_v2_canal;

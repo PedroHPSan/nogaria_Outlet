@@ -1,8 +1,7 @@
 -- Testes de comportamento da migration 20261008120000_motor_preco_v2.sql + backfill + rollback.
 -- Rode via scripts/test_motor_docker.sh (Postgres descartável; não toca nenhum banco real).
 \set QUIET on
-grant all on all tables in schema public to anon, authenticated;
-grant usage on all sequences in schema public to anon, authenticated;
+-- (sem grants globais aqui: o que authenticated/anon podem fazer vem SÓ da migration)
 create temp table res (teste text, ok boolean, detalhe text);
 grant all on res to anon, authenticated;
 
@@ -42,10 +41,12 @@ end $$;
 
 -- 5) RLS: anon não vê nada das tabelas novas; authenticated tem acesso total
 set role anon;
-insert into res select 'M5 anon não lê pricing_v2_param', (select count(*) from pricing_v2_param) = 0, '';
-insert into res select 'M5 anon não lê pricing_v2_canal', (select count(*) from pricing_v2_canal) = 0, '';
-do $$ begin begin insert into item_custo_snapshot (sku, lote, custo_alocado) values ('A', 3, 1); insert into res values ('M5 anon não grava snapshot', false, ''); exception when others then insert into res values ('M5 anon não grava snapshot', true, ''); end; end $$;
-do $$ begin begin insert into item_peso_rateio_log (sku, valor_depois, motivo) values ('A', 2, 'x'); insert into res values ('M5 anon não grava log de peso', false, ''); exception when others then insert into res values ('M5 anon não grava log de peso', true, ''); end; end $$;
+do $$ begin
+  begin perform count(*) from pricing_v2_param; insert into res values ('M5 anon não lê pricing_v2_param', false, 'leu'); exception when insufficient_privilege then insert into res values ('M5 anon não lê pricing_v2_param', true, ''); end;
+  begin perform count(*) from pricing_v2_canal; insert into res values ('M5 anon não lê pricing_v2_canal', false, 'leu'); exception when insufficient_privilege then insert into res values ('M5 anon não lê pricing_v2_canal', true, ''); end;
+  begin insert into item_custo_snapshot (sku, lote, custo_alocado) values ('A', 3, 1); insert into res values ('M5 anon não grava snapshot', false, ''); exception when others then insert into res values ('M5 anon não grava snapshot', true, ''); end;
+  begin insert into item_peso_rateio_log (sku, valor_depois, motivo) values ('A', 2, 'x'); insert into res values ('M5 anon não grava log de peso', false, ''); exception when others then insert into res values ('M5 anon não grava log de peso', true, ''); end;
+end $$;
 reset role;
 set role authenticated;
 insert into res select 'M5 authenticated lê parâmetros (seed)', (select count(*) from pricing_v2_param) = 8 and (select count(*) from pricing_v2_canal) = 8, '';
