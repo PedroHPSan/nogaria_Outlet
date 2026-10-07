@@ -5,11 +5,13 @@ import { X, Loader2, AlertTriangle, Check } from "lucide-react";
 import { derivarPreco } from "../lib/precoView";
 import { planoEmMassa } from "../lib/precoRapido";
 import { carregarFaixas, carregarCustos, aplicarPlano } from "../lib/precoRapidoDb";
+import { analisarItens } from "../lib/motorPrecoDb";
 import { fmtBRL } from "../lib/model";
 
 export default function PrecoRapidoModal({ itens, params, user, onClose, onAplicado }) {
   const [faixas, setFaixas] = useState(null);
   const [custos, setCustos] = useState(null);
+  const [v2, setV2] = useState(null); // piso do motor novo (custo real do lote + taxas) — trava extra
   const [arredondar, setArredondar] = useState(true);
   const [markdown, setMarkdown] = useState(true);
   const [aplicando, setAplicando] = useState(false);
@@ -20,13 +22,21 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
     Promise.all([carregarFaixas(), carregarCustos(itens.map((i) => i.sku))]).then(([f, c]) => {
       if (!cancel) { setFaixas(f); setCustos(c); }
     });
+    // Piso do motor novo: se falhar, o preço rápido segue só com o piso antigo (não trava a tela).
+    analisarItens(itens, params).then((m) => { if (!cancel) setV2(m); }).catch(() => { if (!cancel) setV2(new Map()); });
     return () => { cancel = true; };
-  }, [itens]);
+  }, [itens, params]);
 
   const plano = useMemo(() => {
-    if (!faixas) return null;
-    return planoEmMassa(itens, (it) => derivarPreco(it, params?.grupos?.[it.grupo] || {}, params, custos?.[it.sku] ?? null), { faixas, arredondar, markdown });
-  }, [itens, params, faixas, custos, arredondar, markdown]);
+    if (!faixas || !v2) return null;
+    // Piso efetivo = o MAIOR entre o antigo e o do motor novo: nunca aplica preço abaixo de nenhum dos dois.
+    const derivadoDe = (it) => {
+      const d = derivarPreco(it, params?.grupos?.[it.grupo] || {}, params, custos?.[it.sku] ?? null);
+      const pisoV2 = v2.get(it.sku)?.piso;
+      return Number.isFinite(pisoV2) && pisoV2 > (d.piso || 0) ? { ...d, piso: pisoV2 } : d;
+    };
+    return planoEmMassa(itens, derivadoDe, { faixas, arredondar, markdown });
+  }, [itens, params, faixas, custos, v2, arredondar, markdown]);
 
   const aplicar = async () => {
     setAplicando(true);
@@ -45,7 +55,7 @@ export default function PrecoRapidoModal({ itens, params, user, onClose, onAplic
           <h2 className="font-bold text-gray-900">Preço rápido ({itens.length})</h2>
           <button onClick={onClose} aria-label="Fechar"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
-        <p className="text-xs text-gray-500 -mt-1">Aplica desconto por tempo parado e arredonda (…9). Só baixa preço e nunca passa do piso.</p>
+        <p className="text-xs text-gray-500 -mt-1">Aplica desconto por tempo parado e arredonda (…9). Só baixa preço e nunca passa do piso (o maior entre o piso antigo e o do motor novo).</p>
         {!plano ? (
           <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Calculando…</p>
         ) : (

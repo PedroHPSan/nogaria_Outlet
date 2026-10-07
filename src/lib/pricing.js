@@ -141,7 +141,11 @@ export function precificar(inp, P = DEFAULT_PARAMS) {
 export function gerarTitulo(item, canalCod = "ML") {
   const partes = [item.marca, item.produto, item.modelo].filter(Boolean);
   let t = partes.join(" ").replace(/\s+/g, " ").trim();
-  const selo = item.estado === "Novo" ? "Novo" : "Outlet Testado";
+  // "Testado" só quando de fato foi testado/funciona (a promessa não pode ser falsa).
+  const testado = item.estado === "Usado" || item.estado === "Usado funcionando" || item.funciona === true;
+  const selo = item.estado === "Novo" ? "Novo"
+    : item.estado === "Embalagem aberta/avariada" ? "Caixa aberta"
+    : testado ? "Outlet Testado" : "Outlet";
   t = `${t} — ${selo}`;
   // Produto novo com caixa avariada: declarar a avaria da embalagem vira sinal de confiança.
   const novo = item.estado === "Novo" || item.estado === "Embalagem aberta/avariada";

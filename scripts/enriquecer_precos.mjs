@@ -22,6 +22,7 @@
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { precificar, estadoToCondicao, normalizarCanal, DEFAULT_PARAMS } from "../src/lib/pricing.js";
+import { usarCliente, analisarItens } from "../src/lib/motorPrecoDb.js";
 
 // --- env (.env.local não é auto-carregado pelo Node) ---
 const env = {};
@@ -53,6 +54,7 @@ const CLASSES = classesIdx >= 0
   : ["A+", "A", "B", "C"];
 
 const supabase = createClient(URL_, SECRET, { auth: { persistSession: false } });
+usarCliente(supabase); // motor de preço v2 (trava de piso) usa o mesmo cliente service-role
 const brl = (v) => v == null ? "—" : `R$${Number(v).toFixed(0)}`;
 
 // Carrega os parâmetros do motor das tabelas pricing_* (mesmo shape de pricingParams.js),
@@ -145,7 +147,7 @@ async function main() {
   console.log(`${itens.length} itens elegíveis (classe ${CLASSES.join("/")} sem preco_ref_novo)\n`);
   if (!itens.length) return;
 
-  let ok = 0, semPreco = 0, falhou = 0, gravados = 0;
+  let ok = 0, semPreco = 0, falhou = 0, gravados = 0, semPisoOk = 0;
 
   async function processar(it) {
     const body = {
@@ -205,6 +207,22 @@ async function main() {
       if (vazio(it.medidas_fonte)) patch.medidas_fonte = "IA (estimado)";
     }
 
+    // TRAVA DE PISO: o preço de venda só é gravado se cobrir o piso do motor v2 (custo real do lote
+    // + taxas). Sem conseguir calcular o piso, também NÃO grava preço (os demais campos seguem).
+    if (patch.preco_ideal) {
+      try {
+        const merged = { ...it, preco_ref_novo: novo, preco_ref_usado: data.preco_ref_usado ?? it.preco_ref_usado };
+        const r2 = (await analisarItens([merged], params)).get(it.sku);
+        if (!r2 || !(r2.piso > 0) || patch.preco_ideal < r2.piso) {
+          console.log(`     ! ${it.sku}: preço ${brl(patch.preco_ideal)} NÃO gravado — ${r2 ? `abaixo do piso ${brl(r2.piso)} (custo do lote + taxas)` : "piso indisponível"}`);
+          delete patch.preco_ideal; semPisoOk++;
+        }
+      } catch (e) {
+        console.log(`     ! ${it.sku}: piso indisponível (${e.message}) — preço não gravado`);
+        delete patch.preco_ideal; semPisoOk++;
+      }
+    }
+
     if (novo == null) { semPreco++; }
     else { ok++; }
     const extras = [
@@ -230,7 +248,7 @@ async function main() {
   async function worker() { while (i < itens.length) { await processar(itens[i++]); } }
   await Promise.all(Array.from({ length: Math.min(CONC, itens.length) }, worker));
 
-  console.log(`\nResumo: ${ok} com preço · ${semPreco} sem preço da IA · ${falhou} falhas${APPLY ? ` · ${gravados} gravados` : " · (dry-run, nada gravado)"}`);
+  console.log(`\nResumo: ${ok} com preço · ${semPreco} sem preço da IA · ${falhou} falhas · ${semPisoOk} preços barrados pelo piso${APPLY ? ` · ${gravados} gravados` : " · (dry-run, nada gravado)"}`);
   if (!APPLY && ok) console.log("Rode com --apply para gravar preco_ref_* nos itens.");
 }
 

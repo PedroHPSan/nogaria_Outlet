@@ -14,6 +14,7 @@ import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import PricingCard from "../components/PricingCard";
+import SugestaoPrecoCard from "../components/SugestaoPrecoCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
 import FotoInputs from "../components/FotoInputs";
@@ -999,6 +1000,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
 
         {/* Precificação & venda — card único (motor + preço final + anúncio + destino + venda) */}
+        <SugestaoPrecoCard item={it} params={params} user={user} onValidado={(patch) => set(patch)} />
         <div className="mb-4">
           <PricingCard
             item={it}
@@ -1009,7 +1011,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
 
         {/* Publicar em marketplace (Amazon) — após revisão; gate de preço/GTIN no PublishPanel */}
-        <PublishPanel item={it} />
+        <PublishPanel item={it} params={params} />
 
         {/* Venda — detalhe da venda real (a partir de Triado, p/ vendas diretas) p/ apurar o lucro líquido */}
         {statusIdx(it.status) >= statusIdx("TRIADO") && (
@@ -1148,7 +1150,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       )}
       {anuncio && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <AnuncioModal itens={itensAnuncio} onClose={() => setAnuncio(false)} />
+          <AnuncioModal itens={itensAnuncio} params={params} onClose={() => setAnuncio(false)} />
         </Suspense>
       )}
 

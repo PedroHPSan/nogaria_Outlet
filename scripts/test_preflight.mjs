@@ -54,4 +54,13 @@ eq(payAsin.attributes.merchant_suggested_asin[0].value, "B07XJ8C8F5", "ASIN → 
 eq(condicaoAmazonListings("Novo", "LEVE"), "used_like_new", "Novo + caixa avariada → used_like_new");
 eq(condicaoAmazonListings("Usado"), "used_good", "Usado → used_good");
 
+console.log("\ntrava de piso (motor de preço)");
+const itPiso = { preco_ideal: 100, preco_ref_novo: 120, gtin: "7891234567895" };
+eq(preflightAmazon(itPiso).checks.some((c) => c.id === "piso"), false, "sem piso informado: não cria o check");
+eq(preflightAmazon(itPiso, { piso: 90 }).ok, true, "preço acima do piso: passa");
+const abaixo = preflightAmazon(itPiso, { piso: 130 });
+eq(abaixo.ok, false, "preço abaixo do piso: bloqueia");
+eq(abaixo.checks.find((c) => c.id === "piso").bloqueante, true, "check de piso é bloqueante");
+eq(preflightAmazon(itPiso, { piso: 100 }).ok, true, "preço igual ao piso: passa");
+
 console.log(`\n${passou} asserções OK`);

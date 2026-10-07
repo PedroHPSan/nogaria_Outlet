@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { preflightAmazon } from "../lib/marketplace/preflight";
+import { analisarItens } from "../lib/motorPrecoDb";
 import { getAdapter } from "../lib/marketplace/adapter";
 import { Upload, CheckCircle2, XCircle, AlertTriangle, Loader2, ShoppingBag } from "lucide-react";
 
@@ -16,7 +17,8 @@ const ESTADO_BADGE = {
 
 // Seção "Publicar" da ficha: checklist do pre-flight + botão por canal. O gate aqui é UX;
 // a Edge re-valida tudo no servidor. Lê/atualiza listing_state do SKU.
-export default function PublishPanel({ item }) {
+export default function PublishPanel({ item, params }) {
+  const [piso, setPiso] = useState(null); // piso do motor novo (trava de prejuízo)
   const [listing, setListing] = useState(null);
   const [publicando, setPublicando] = useState(null); // canal em publicação
   const [result, setResult] = useState(null);
@@ -29,7 +31,14 @@ export default function PublishPanel({ item }) {
   }, [item?.sku]);
   useEffect(() => { carregar(); }, [carregar]);
 
-  const pf = preflightAmazon(item);
+  useEffect(() => {
+    let cancel = false;
+    if (!item?.sku || !params) return undefined;
+    analisarItens([item], params).then((m) => { if (!cancel) setPiso(m.get(item.sku)?.piso ?? null); }).catch(() => { if (!cancel) setPiso(null); });
+    return () => { cancel = true; };
+  }, [item?.sku, item?.lote, item?.estado, item?.cond_embalagem, item?.preco_ref_novo, item?.canal_principal, params]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pf = preflightAmazon(item, { piso });
   const jaPublicado = listing?.estado === "publicado";
 
   const publicar = async (canal) => {
