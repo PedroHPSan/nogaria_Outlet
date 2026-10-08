@@ -6,6 +6,7 @@ import { analisarItens, validarPreco } from "../lib/motorPrecoDb";
 import { lucroEm, canalV2, REGRAS } from "../lib/motorPreco";
 import PriceRuler from "./pricing/PriceRuler";
 import MemoriaCalculoV2 from "./pricing/MemoriaCalculoV2";
+import PesquisaWebCard from "./pricing/PesquisaWebCard";
 import { STATUS_V2 } from "./pricing/statusV2";
 import { aoTrocarCategoria } from "../lib/categoriaTroca";
 import Ajuda from "./pricing/Ajuda";
@@ -254,6 +255,9 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onCha
 
           {/* Memória de cálculo: como chegamos neste preço (no canal escolhido e no preço avaliado) */}
           <MemoriaCalculoV2 r={{ ...r, canal: r.canalEscolhido, piso: pisoE, minimo: minE }} preco={precoVenda} fmtBRL={fmtBRL} />
+
+          {/* Pesquisa de preço na web: anúncios reais, descartados e como a mediana foi calculada */}
+          <PesquisaWebCard item={item} />
         </>
       )}
 
