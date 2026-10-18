@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge 7be6978 (2026-07-10, catálogo leve + link 30d + foto da galeria). Parte do catálogo foi **substituída pelo motor novo de catálogo de 03/10** (15cfcf2 F0 … fc1570d F4; 70b046f remove o motor antigo).
+
 # Catálogo leve + link compartilhável + foto da galeria no mobile
 
 **Data:** 2026-07-10

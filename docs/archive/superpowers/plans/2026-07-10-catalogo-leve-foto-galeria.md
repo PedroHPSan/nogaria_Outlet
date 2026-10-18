@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge 7be6978 (2026-07-10, catálogo leve + link 30d + foto da galeria). Parte do catálogo foi **substituída pelo motor novo de catálogo de 03/10** (15cfcf2 F0 … fc1570d F4; 70b046f remove o motor antigo).
+
 # Catálogo leve + link compartilhável + foto da galeria — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

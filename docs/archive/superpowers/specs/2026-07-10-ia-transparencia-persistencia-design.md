@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge a2597c1 (2026-07-10) · migration 20260710130000_itens_ia_analise.sql.
+
 # Transparência e persistência do preenchimento por IA
 
 **Data:** 2026-07-10

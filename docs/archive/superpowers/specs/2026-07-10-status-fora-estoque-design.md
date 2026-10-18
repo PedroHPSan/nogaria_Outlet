@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: feat ea85b9a (2026-07-10, VENDIDO/ENTREGUE/DESCARTE fora do estoque e das caixas).
+
 # VENDIDO/ENTREGUE/DESCARTE fora do estoque e das caixas
 
 Data: 2026-07-10

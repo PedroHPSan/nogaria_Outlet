@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge f4d1f5a (2026-07-11) · migration 20260711120000_salas.sql.
+
 # Salas — armazenamento estruturado de caixas e itens
 
 **Data:** 2026-07-11

@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: feat 76e244e (2026-07-10, escolher a foto principal do item). Absorvida pelo catálogo leve/motor novo de 03/10.
+
 # Escolher a foto principal do item
 
 Data: 2026-07-10

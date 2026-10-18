@@ -1,3 +1,5 @@
+> **SUPERADO pelo Hub (#154/#155/#156/#157/#162/#163)** — issues do repositório PedroHPSan/nogaria-supply-hub. As integrações (Amazon, Mercado Livre, Shopee, TikTok Shop) e a exportação ERPX passam a ser tocadas no Hub; este plano é histórico (2026-10-18).
+
 # Plano — Preparar o NOGÁRIA OUTLET para integrações (Amazon · Mercado Livre · TikTok Shop · Hiper ERP)
 
 > **Princípio:** este trabalho é **aditivo**. Não altera o catálogo, o checklist, a máquina de estados nem os 3.121 itens já carregados. Só acrescenta colunas (todas `nullable`) e telas de captura. Nada do que já funciona é tocado.

@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge 02de68b (2026-07-10, catalogar por lote + reabrir caixa + visibilidade de caixa).
+
 # Melhorias de operação: catalogar por lote, reabrir caixa e visibilidade de caixa
 
 **Data:** 2026-07-10

@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge 9815872 (2026-07-08, gerador de orçamento/anúncio por item) · src/lib/orcamentos.js.
+
 # Gerador de Orçamento por Item — PDF de venda (layout "Conversão / Marketplace")
 
 **Data:** 2026-07-08

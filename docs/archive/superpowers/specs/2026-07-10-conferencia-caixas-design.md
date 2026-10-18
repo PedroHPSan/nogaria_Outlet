@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge ac4e003 (2026-07-10) e 9ffa1db (conferência por checkbox + QR contínuo) · migration 20260710120000_caixas_chegada_conferencia.sql.
+
 # Conferência e armazenamento de caixas
 
 **Data:** 2026-07-10

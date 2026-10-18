@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge ac4e003 (2026-07-10) e 9ffa1db (conferência por checkbox + QR contínuo) · migration 20260710120000_caixas_chegada_conferencia.sql.
+
 # Conferência e armazenamento de caixas — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

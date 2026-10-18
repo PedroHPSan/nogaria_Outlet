@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18). Evidência: merge b22192f (2026-08-03) · PR #26 (orçamento de múltiplos produtos).
+
 # Orçamento de múltiplos produtos — design
 
 Data: 2026-08-03

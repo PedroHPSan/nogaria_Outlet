@@ -1,3 +1,5 @@
+> **Status: concluído** (arquivado em 2026-10-18; o "Status: proposta" abaixo é o estado de 03/10 antes da implementação). Evidência (03/10): F0 15cfcf2, F1a 245979a, F1b/F1c 9f32358, F2 preço rápido 49d9ecd, F3 venda assistida 54e6e1c, F4 divulgação fc1570d, merge c1cfe5b; migrations 20260801130000_orcamentos.sql, 20260801140000_catalogo_publico_v2.sql, 20260801150000_catalogo_config.sql.
+
 # Plano — Catálogo PDF, divulgação e venda assistida
 
 Data: 2026-10-03 · Status: proposta (nada implementado) · Autor: análise assistida
