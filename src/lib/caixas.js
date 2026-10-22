@@ -22,7 +22,7 @@ export async function proximoCodigoCaixa(tipo) {
 }
 
 // Cria uma caixa (status ABERTA) com código auto-gerado; resolve colisão por retry.
-export async function criarCaixa({ tipo, destino, sala_id, referencia }, user) {
+export async function criarCaixa({ tipo, destino, sala_id, referencia, apelido }, user) {
   const t = tipo === CAIXA_TIPO.MALA ? CAIXA_TIPO.MALA : CAIXA_TIPO.CAIXA;
   let codigo = await proximoCodigoCaixa(t);
   let criada = null, lastErr = null;
@@ -31,6 +31,7 @@ export async function criarCaixa({ tipo, destino, sala_id, referencia }, user) {
       codigo, tipo: t,
       destino: destino || null, sala_id: sala_id || null,
       referencia: referencia?.trim() || null,
+      apelido: apelido?.trim() || null,
       status: CAIXA_STATUS.ABERTA, criado_por: user?.email,
     }).select().single();
     if (!error) { criada = data; break; }
@@ -105,6 +106,41 @@ export async function listarCaixas({ status } = {}) {
   if (status) q = q.eq("status", status);
   const { data } = await q.order("criado_em", { ascending: false });
   return data || [];
+}
+
+// Define/limpa o apelido (designação) da caixa. Evento `caixa:apelido`.
+export async function definirApelidoCaixa(codigo, apelido, user) {
+  const v = String(apelido || "").trim() || null;
+  const { data, error } = await supabase.from("caixas").update({ apelido: v }).eq("codigo", codigo).select().single();
+  if (error) throw error;
+  await supabase.from("eventos").insert({ sku: codigo, acao: "caixa:apelido", detalhe: v || "removido", usuario: user?.email });
+  return data;
+}
+
+// Nº de itens em estoque por caixa: { [codigo]: n } (pagina por causa do corte de 1.000 do PostgREST).
+export async function contarItensPorCaixa() {
+  const PAGE = 1000, out = {};
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase.from("itens").select("caixa_id")
+      .not("caixa_id", "is", null).not("status", "in", STATUS_FORA_ESTOQUE_IN)
+      .order("sku").range(from, from + PAGE - 1);
+    for (const r of data || []) out[r.caixa_id] = (out[r.caixa_id] || 0) + 1;
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
+// "Onde está?": acha o item por SKU ou GTIN e devolve { item, caixa } (caixa=null → solto).
+export async function localizarItem(codigo) {
+  const c = String(codigo || "").trim();
+  if (!c) return null;
+  const m = c.match(/[?&]item=([^&]+)/i);
+  const sku = (m ? decodeURIComponent(m[1]) : c).trim().toUpperCase();
+  let item = (await supabase.from("itens").select("*").eq("sku", sku).maybeSingle()).data;
+  if (!item) item = (await supabase.from("itens").select("*").eq("gtin", c).limit(1)).data?.[0];
+  if (!item) return null;
+  const caixa = item.caixa_id ? await buscarCaixa(item.caixa_id) : null;
+  return { item, caixa };
 }
 
 // Busca uma caixa pelo código (ex.: ao escanear o QR da etiqueta). null se não existir.

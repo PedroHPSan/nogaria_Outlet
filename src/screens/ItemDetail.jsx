@@ -587,6 +587,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             </h3>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-sm font-bold text-gray-900">{it.caixa_id}</span>
+              {caixaInfo?.apelido && <span className="text-sm font-semibold text-gray-700">{caixaInfo.apelido}</span>}
               {caixaInfo && (
                 <span className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${caixaInfo.status === CAIXA_STATUS.FECHADA ? "bg-gray-200 text-gray-600" : "bg-emerald-100 text-emerald-700"}`}>
                   {caixaInfo.status === CAIXA_STATUS.FECHADA ? "Fechada" : "Aberta"}

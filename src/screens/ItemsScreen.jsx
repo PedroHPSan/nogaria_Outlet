@@ -636,7 +636,7 @@ function BoxPicker({ onClose, onPick, params }) {
   };
 
   const filtrados = q.trim()
-    ? caixas.filter((c) => c.codigo.toLowerCase().includes(q.trim().toLowerCase()))
+    ? caixas.filter((c) => `${c.codigo} ${c.apelido || ""}`.toLowerCase().includes(q.trim().toLowerCase()))
     : caixas;
 
   return (
@@ -651,7 +651,7 @@ function BoxPicker({ onClose, onPick, params }) {
         </button>
       </div>
       <div className="px-4 py-3">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar caixa/mala (ex.: CX-001)…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar caixa/mala (código ou apelido)…"
           className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
       </div>
       <div className="flex-1 overflow-auto px-3 pb-6 space-y-1.5">
@@ -668,8 +668,11 @@ function BoxPicker({ onClose, onPick, params }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
-                {c.status === CAIXA_STATUS.FECHADA && <span className="text-[10px] font-bold uppercase bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">Fechada</span>}
+                {c.status === CAIXA_STATUS.FECHADA
+                  ? <span className="text-[10px] font-bold uppercase bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">Fechada</span>
+                  : <span className="text-[10px] font-bold uppercase bg-emerald-600 text-white rounded px-1.5 py-0.5">Aberta</span>}
               </div>
+              {c.apelido && <p className="text-sm font-semibold text-gray-800 truncate">{c.apelido}</p>}
               <p className="text-xs text-gray-500">{c.destino || "—"}{c.local_fisico ? ` · ${c.local_fisico}` : ""}</p>
             </div>
             {busy === c.codigo ? <Loader2 className="w-4 h-4 animate-spin text-gray-400 flex-shrink-0" /> : <Printer className="w-4 h-4 text-gray-300 flex-shrink-0" />}

@@ -13,10 +13,11 @@ import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, BookOpen, DoorOpen, Table2 } from "lucide-react";
+import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, BookOpen, DoorOpen, Table2, MapPin } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixasScreen from "./screens/CaixasScreen";
 import SalasScreen from "./screens/SalasScreen";
+import OndeEstaModal from "./components/OndeEstaModal";
 
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
 const eventoLabel = (e) => {
@@ -36,6 +37,7 @@ const eventoLabel = (e) => {
   if (a === "caixa:fechada") return "caixa fechada";
   if (a === "caixa:reaberta") return "caixa reaberta";
   if (a === "caixa:chegada") return "chegada registrada" + (e.detalhe ? ` (${e.detalhe})` : "");
+  if (a === "caixa:apelido") return "apelido → " + (e.detalhe || "");
   if (a === "caixa:local") return "armazenamento" + (e.detalhe ? ` → ${e.detalhe}` : "");
   if (a === "caixa:conferida") return "caixa conferida ✓";
   if (a === "caixa:item_avaria") return "item avariado na conferência";
@@ -51,6 +53,7 @@ export default function App() {
   const [showNew, setShowNew] = useState(false);
   const [showFotoQr, setShowFotoQr] = useState(false);
   const [showCaixaQr, setShowCaixaQr] = useState(false);
+  const [showOndeEsta, setShowOndeEsta] = useState(false);
   const [showSalas, setShowSalas] = useState(false);
   const [preFilter, setPreFilter] = useState(null);
   // Alguma tela está mostrando a própria barra de ação inferior (etiquetas /
@@ -199,12 +202,16 @@ export default function App() {
 
       {/* Botões flutuantes: caixa por QR + foto por QR + criar novo item
           (somem com modal aberto ou com a barra de ação da tela ativa) */}
-      {!openItem && !showNew && !showFotoQr && !showCaixaQr && !showSalas && !barraAcao && (
+      {!openItem && !showNew && !showFotoQr && !showCaixaQr && !showSalas && !showOndeEsta && !barraAcao && (
         <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none">
           <div className="max-w-lg mx-auto px-4 flex justify-end items-center gap-2.5">
             <button onClick={() => setShowSalas(true)} aria-label="Salas"
               className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">
               <DoorOpen className="w-5 h-5" /> Salas
+            </button>
+            <button onClick={() => setShowOndeEsta(true)} aria-label="Onde está o produto?"
+              className="pointer-events-auto h-12 w-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center justify-center active:bg-gray-800">
+              <MapPin className="w-5 h-5" />
             </button>
             <button onClick={() => setShowCaixaQr(true)} aria-label="Caixa por QR"
               className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">
@@ -235,6 +242,12 @@ export default function App() {
           params={params} user={user}
           onClose={() => setShowCaixaQr(false)}
           onOpenItem={(it) => { setShowCaixaQr(false); setOpenItem(it); }}
+        />
+      )}
+      {showOndeEsta && (
+        <OndeEstaModal
+          onClose={() => setShowOndeEsta(false)}
+          onOpenItem={(it) => { setShowOndeEsta(false); setOpenItem(it); }}
         />
       )}
       {showSalas && (
