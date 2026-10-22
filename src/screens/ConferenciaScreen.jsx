@@ -8,8 +8,9 @@ import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definir
 import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
 import {
   CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
-  fecharCaixa, reabrirCaixa, listarCaixas, itensDaCaixa,
+  fecharCaixa, reabrirCaixa, listarCaixas, itensDaCaixa, definirApelidoCaixa, contarItensPorCaixa,
 } from "../lib/caixas";
+import OndeEstaModal from "../components/OndeEstaModal";
 import { buildBoxLabel } from "../lib/labels";
 import { buscarViasImpressaoCaixa } from "../lib/printLog";
 import { primeirasFotos } from "../lib/fotos";
@@ -20,7 +21,7 @@ import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
   PackageCheck, RotateCcw, Camera, ChevronRight, ChevronDown, Tags, Sparkles, ArrowLeftRight,
-  Package, Printer, FileDown, Lock, Plus, Trash2, ArrowLeft,
+  Package, Printer, FileDown, Lock, Plus, Trash2, ArrowLeft, MapPin, Pencil,
 } from "lucide-react";
 
 const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -529,6 +530,9 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
   const [tipo, setTipo] = useState(CAIXA_TIPO.CAIXA);
   const [destino, setDestino] = useState(DESTINOS[0]);
   const [salaId, setSalaId] = useState("");
+  const [apelido, setApelido] = useState("");
+  const [contagem, setContagem] = useState({}); // { [codigo]: nº de itens }
+  const [ondeEsta, setOndeEsta] = useState(false);
   const [salas, setSalas] = useState([]);
   const [scanInput, setScanInput] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -543,6 +547,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
     ]);
     setAbertas(ab);
     setFechadas(fe);
+    contarItensPorCaixa().then(setContagem).catch(() => {});
   }, []);
   useEffect(() => { loadAbertas(); }, [loadAbertas, refreshKey]);
   useEffect(() => { listarSalas().then(setSalas).catch(() => setSalas([])); }, []);
@@ -556,8 +561,8 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
   const criar = async () => {
     setBusy(true); setMsg(null);
     try {
-      const c = await criarCaixa({ tipo, destino, sala_id: salaId || null }, user);
-      setNova(false); setSalaId("");
+      const c = await criarCaixa({ tipo, destino, sala_id: salaId || null, apelido }, user);
+      setNova(false); setSalaId(""); setApelido("");
       onChanged?.(); await loadAbertas(); await abrirCaixa(c);
     } catch (e) {
       setMsg({ tipo: "erro", texto: e.message || String(e) });
@@ -620,6 +625,13 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
     } finally { setBusy(false); }
   };
 
+  const editarApelido = async () => {
+    const v = window.prompt(`Apelido da caixa ${caixa.codigo} (ex.: Material de construção):`, caixa.apelido || "");
+    if (v === null) return;
+    try { setCaixa(await definirApelidoCaixa(caixa.codigo, v, user)); loadAbertas(); }
+    catch (e) { setMsg({ tipo: "erro", texto: e.message || String(e) }); }
+  };
+
   const imprimir = () => setPrintLabels([buildBoxLabel(caixa, itens, params)]);
   const baixarLista = () => {
     if (!itens.length) return;
@@ -644,7 +656,11 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
                 <span className="font-mono font-bold">{caixa.codigo}</span>
                 <span className="text-[10px] font-bold uppercase bg-gray-700 rounded px-1.5 py-0.5">{isMala ? "Mala" : "Caixa"}</span>
               </div>
-              <p className="text-xs text-gray-400 mt-1">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
+              <button onClick={editarApelido} className="flex items-center gap-1.5 mt-1 text-left active:opacity-70">
+                <span className={`text-base font-bold ${caixa.apelido ? "text-white" : "text-gray-500"}`}>{caixa.apelido || "Dar um apelido"}</span>
+                <Pencil className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+              <p className="text-xs text-gray-400 mt-0.5">{caixa.destino || "sem destino"}{caixa.local_fisico ? ` · ${caixa.local_fisico}` : ""}</p>
             </div>
             <button onClick={voltar} className="flex items-center gap-1 text-xs text-gray-300 bg-gray-800 rounded-lg px-2.5 py-1.5 active:bg-gray-700">
               <ArrowLeft className="w-3.5 h-3.5" /> Trocar
@@ -755,6 +771,8 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
               </button>
             ))}
           </div>
+          <input value={apelido} onChange={(e) => setApelido(e.target.value)} maxLength={60}
+            placeholder="Apelido (ex.: Material de construção)" className={inputCls} />
           <select value={destino} onChange={(e) => setDestino(e.target.value)} className={inputCls}>
             {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
@@ -771,26 +789,41 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
           </div>
         </div>
       ) : (
-        <button onClick={() => { setNova(true); setMsg(null); }}
-          className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-sm active:bg-orange-600">
-          <Plus className="w-5 h-5" /> Nova caixa / mala
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => { setNova(true); setMsg(null); }}
+            className="flex-1 flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-sm active:bg-orange-600">
+            <Plus className="w-5 h-5" /> Nova caixa / mala
+          </button>
+          <button onClick={() => setOndeEsta(true)}
+            className="flex items-center justify-center gap-1.5 bg-gray-900 text-white rounded-2xl px-4 font-bold shadow-sm active:bg-gray-800">
+            <MapPin className="w-5 h-5" /> Onde está?
+          </button>
+        </div>
       )}
 
       {abertas === null ? <Carregando /> : !abertas.length ? (
         <Vazio icon={Package} texto="Nenhuma caixa aberta. Crie uma para começar." />
       ) : (
         <>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-1">Caixas abertas ({abertas.length})</p>
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Caixas abertas ({abertas.length})
+            </p>
+          </div>
           <div className="space-y-1.5">
             {abertas.map((c) => (
               <button key={c.codigo} onClick={() => abrirCaixa(c)}
-                className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
-                <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
+                className="w-full text-left bg-emerald-50 rounded-xl border border-emerald-300 border-l-4 border-l-emerald-500 px-3 py-2.5 flex items-center gap-3 active:bg-emerald-100">
+                <span className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
                   {c.tipo === CAIXA_TIPO.MALA ? <Inbox className="w-4 h-4" /> : <Package className="w-4 h-4" />}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
+                    <span className="text-[10px] font-bold uppercase bg-emerald-600 text-white rounded px-1.5 py-0.5">aberta</span>
+                    <span className="ml-auto text-xs font-semibold text-emerald-800">{contagem[c.codigo] || 0} item(ns)</span>
+                  </div>
+                  {c.apelido && <p className="text-sm font-semibold text-gray-800 truncate">{c.apelido}</p>}
                   <p className="text-xs text-gray-500">{c.destino || "sem destino"}{c.local_fisico ? ` · ${c.local_fisico}` : ""}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
@@ -799,6 +832,8 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
           </div>
         </>
       )}
+
+      {ondeEsta && <OndeEstaModal onClose={() => setOndeEsta(false)} />}
 
       {/* Caixas fechadas: consulta de conteúdo e destino (somente leitura). */}
       {fechadas && fechadas.length > 0 && (
@@ -867,6 +902,7 @@ function CaixaFechadaItem({ caixa, params, user, onReabrir }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-bold text-gray-900">{caixa.codigo}</span>
+              {caixa.apelido && <span className="text-sm font-semibold text-gray-700 truncate">{caixa.apelido}</span>}
               <span className="text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Fechada</span>
               {vias?.vias > 0 && (
                 <span className="flex items-center gap-0.5 text-[10px] font-bold text-gray-500" title={`Etiqueta impressa · ${vias.vias} via(s)`}>

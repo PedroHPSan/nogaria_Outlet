@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import {
   listarCaixas, buscarCaixa, itensDaCaixa,
-  registrarChegada, conferirCaixa,
+  registrarChegada, conferirCaixa, definirApelidoCaixa,
   marcarItemAvariado, marcarItemFaltando, historicoCaixa,
 } from "../lib/caixas";
 import { marcarConferido, limparConferencia } from "../lib/conferencia";
@@ -13,7 +13,7 @@ import { listarSalas } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import {
   X, Loader2, ScanLine, ArrowRight, AlertTriangle, Boxes, Package, ChevronRight,
-  ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode, Printer,
+  ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode, Printer, Pencil,
 } from "lucide-react";
 
 const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -34,7 +34,7 @@ const eventoCaixaLabel = (a) => ({
   "caixa:criada": "caixa criada", "caixa:item_add": "item encaixotado",
   "caixa:item_remove": "item removido", "caixa:fechada": "caixa fechada",
   "caixa:reaberta": "caixa reaberta", "caixa:chegada": "chegada registrada",
-  "caixa:local": "armazenamento", "caixa:conferida": "caixa conferida",
+  "caixa:local": "armazenamento", "caixa:apelido": "apelido alterado", "caixa:conferida": "caixa conferida",
   "caixa:item_avaria": "item avariado", "caixa:item_faltando": "item faltando",
 }[a] || a);
 
@@ -166,15 +166,17 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
           <div className="space-y-1.5">
             {filtradas.map((c) => (
               <button key={c.codigo} onClick={() => abrir(c.codigo)}
-                className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                className={`w-full text-left rounded-xl border px-3 py-2.5 flex items-center gap-3 active:bg-gray-100 ${c.status !== "FECHADA" ? "bg-emerald-50 border-emerald-300 border-l-4 border-l-emerald-500" : "bg-white border-gray-200"}`}>
                 {c.tipo === "MALA" ? <Boxes className="w-5 h-5 text-gray-400" /> : <Package className="w-5 h-5 text-gray-400" />}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
+                    {c.status !== "FECHADA" && <span className="text-[10px] font-bold uppercase bg-emerald-600 text-white rounded px-1.5 py-0.5">aberta</span>}
                     {c.conferida_em
                       ? <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">conferida</span>
                       : <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">a conferir</span>}
                   </div>
+                  {c.apelido && <p className="text-sm font-semibold text-gray-800 truncate">{c.apelido}</p>}
                   <p className="text-xs text-gray-500 truncate">{c.sala_id || "sem sala"}{c.chegou_em ? ` · chegou ${new Date(c.chegou_em).toLocaleDateString("pt-BR")}` : ""}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
@@ -227,6 +229,13 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
     try { await registrarChegada(caixa.codigo, { chegou_em: dataChegada, destino, sala_id: salaId || null }, user); await onChanged(); }
     catch (e) { setErro(e.message || String(e)); }
     finally { setSalvando(null); }
+  };
+  const editarApelido = async () => {
+    const v = window.prompt(`Apelido da caixa ${caixa.codigo} (ex.: Material de construção):`, caixa.apelido || "");
+    if (v === null) return;
+    setErro(null);
+    try { await definirApelidoCaixa(caixa.codigo, v, user); await onChanged(); }
+    catch (e) { setErro(e.message || String(e)); }
   };
   const doConferir = async () => {
     setSalvando("conferir"); setErro(null);
@@ -285,8 +294,14 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
         <div className="mt-2 flex items-center gap-2">
           <span className="font-mono text-lg font-bold text-orange-400">{caixa.codigo}</span>
           {caixa.conferida_em && <span className="text-[10px] font-bold uppercase bg-emerald-600 rounded px-1.5 py-0.5">conferida</span>}
-          {caixa.status === "FECHADA" && <span className="text-[10px] font-bold uppercase bg-gray-700 rounded px-1.5 py-0.5">fechada</span>}
+          {caixa.status === "FECHADA"
+            ? <span className="text-[10px] font-bold uppercase bg-gray-700 rounded px-1.5 py-0.5">fechada</span>
+            : <span className="text-[10px] font-bold uppercase bg-emerald-600 rounded px-1.5 py-0.5">aberta</span>}
         </div>
+        <button onClick={editarApelido} className="flex items-center gap-1.5 mt-1 active:opacity-70">
+          <span className={`text-base font-bold ${caixa.apelido ? "text-white" : "text-gray-500"}`}>{caixa.apelido || "Dar um apelido"}</span>
+          <Pencil className="w-3.5 h-3.5 text-gray-400" />
+        </button>
         <div className="flex items-end justify-between mt-2">
           <p className="text-3xl font-bold">{itens.length} <span className="text-base text-gray-400">item(ns)</span></p>
           <div className="flex items-end gap-4">
