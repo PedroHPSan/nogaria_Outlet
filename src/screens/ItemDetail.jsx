@@ -13,9 +13,7 @@ import { buscarViasImpressao } from "../lib/printLog";
 import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
-import { publicarOferta } from "../lib/ofertaPublica";
-import { textoGrupo } from "../lib/ofertaCore";
-import { carregarContato } from "../lib/empresaConfig";
+import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -361,11 +359,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const gerarLinkWpp = async () => {
     setLinkWpp("gerando");
     try {
-      const c = await carregarContato();
-      const r = await publicarOferta([it], { contato: { whatsapp: c.whatsapp, label: c.whatsappLabel } });
-      const texto = textoGrupo(r.payload, r.url);
-      try { await navigator.clipboard.writeText(texto); } catch { window.prompt("Copie o link:", texto); }
-      setLinkWpp({ texto, semImagem: r.semImagem });
+      const r = await gerarLinkGrupo(it);
+      if (!r.copiado) window.prompt("Copie o link:", r.texto);
+      setLinkWpp({ texto: r.texto, semImagem: r.semImagem });
     } catch (e) { console.error(e); setLinkWpp("erro"); }
     setTimeout(() => setLinkWpp(null), 4000);
   };

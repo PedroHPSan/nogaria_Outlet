@@ -93,23 +93,42 @@ export function textoGrupo(payload, url) {
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export const escaparHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
-// HTML mínimo servido SÓ aos robôs de preview (WhatsApp etc.) em /p/<slug> e /c/<slug>;
-// o vercel.json separa por user-agent, então pessoas continuam recebendo a SPA.
-export function montarHtmlOg({ titulo, descricao, imagem, url }) {
+// Tags de preview (og:*) de uma oferta/catálogo. `imagem` e `url` são opcionais.
+export function tagsOg({ titulo, descricao, imagem, url }) {
   const t = escaparHtml(titulo || "Nogária Outlet");
   const d = escaparHtml(descricao || "Ofertas da Nogária Outlet.");
-  const tags = [
+  return [
+    `<meta name="description" content="${d}">`,
     `<meta property="og:type" content="website">`,
     `<meta property="og:site_name" content="Nogária Outlet">`,
+    `<meta property="og:locale" content="pt_BR">`,
     `<meta property="og:title" content="${t}">`,
     `<meta property="og:description" content="${d}">`,
     url ? `<meta property="og:url" content="${escaparHtml(url)}">` : "",
     imagem ? `<meta property="og:image" content="${escaparHtml(imagem)}">` : "",
+    imagem ? `<meta property="og:image:secure_url" content="${escaparHtml(imagem)}">` : "",
+    imagem ? `<meta property="og:image:type" content="image/jpeg">` : "",
     imagem ? `<meta property="og:image:width" content="800"><meta property="og:image:height" content="800">` : "",
     `<meta name="twitter:card" content="summary">`,
+    imagem ? `<meta name="twitter:image" content="${escaparHtml(imagem)}">` : "",
   ].filter(Boolean).join("\n");
+}
+
+// Injeta o preview no index.html da SPA (vale para qualquer visitante: não depende do
+// user-agent do robô). Troca <title> e <meta name="description"> existentes.
+export function injetarOg(indexHtml, meta) {
+  const t = escaparHtml(meta.titulo || "Nogária Outlet");
+  const limpo = String(indexHtml)
+    .replace(/<title>[\s\S]*?<\/title>/i, "")
+    .replace(/<meta\s+name=["']description["'][^>]*>/i, "");
+  const bloco = `<title>${t}</title>\n${tagsOg(meta)}\n`;
+  return /<\/head>/i.test(limpo) ? limpo.replace(/<\/head>/i, `${bloco}</head>`) : `${bloco}${limpo}`;
+}
+
+// HTML mínimo de contingência (index.html indisponível): só o preview.
+export function montarHtmlOg(meta) {
+  const t = escaparHtml(meta.titulo || "Nogária Outlet");
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${t}</title>
-<meta name="description" content="${d}">
-${tags}
-</head><body><h1>${t}</h1><p>${d}</p></body></html>`;
+${tagsOg(meta)}
+</head><body><h1>${t}</h1></body></html>`;
 }

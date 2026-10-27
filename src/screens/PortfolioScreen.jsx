@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
-import { Loader2, Search, Filter, Boxes, BookOpen } from "lucide-react";
+import { Loader2, Search, Filter, Boxes, BookOpen, MessageCircle } from "lucide-react";
+import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import { listarItensCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
 import { ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
 import { precoVenda } from "../lib/export";
@@ -42,7 +43,22 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
   const [fotos, setFotos] = useState({});       // { sku: url }
   const [loading, setLoading] = useState(true);
   const [caixas, setCaixas] = useState([]);
+  const [wpp, setWpp] = useState(null); // { sku, estado: "gerando" | "ok" | "erro", msg }
   const [catalogoAberto, setCatalogoAberto] = useState(false);
+
+  // Card → publica /p/<slug> e copia "Produto — R$ X + link" para colar no grupo.
+  const compartilharNoGrupo = async (it) => {
+    setWpp({ sku: it.sku, estado: "gerando" });
+    try {
+      const r = await gerarLinkGrupo(it);
+      if (!r.copiado) window.prompt("Copie o link:", r.texto);
+      setWpp({ sku: it.sku, estado: "ok", msg: r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio)." : "Link copiado — cole no grupo do WhatsApp." });
+    } catch (e) {
+      console.error(e);
+      setWpp({ sku: it.sku, estado: "erro", msg: "Não consegui gerar o link. Tente de novo." });
+    }
+    setTimeout(() => setWpp((w) => (w?.estado === "gerando" ? w : null)), 4000);
+  };
   const agrupar = "categoria"; // a galeria agrupa por categoria; o PDF tem o seu próprio agrupamento
   const debounce = useRef();
 
@@ -220,8 +236,9 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
                   const preco = precoVenda(it);
                   const badge = CATALOGO_ESTADO_BADGE[(it.estado || "").trim()];
                   return (
-                    <button key={it.sku} onClick={() => onOpen?.(it)}
-                      className="text-left bg-white rounded-xl border border-gray-200 overflow-hidden active:opacity-80 flex flex-col">
+                    <div key={it.sku} className="relative flex flex-col">
+                    <button onClick={() => onOpen?.(it)}
+                      className="text-left bg-white rounded-xl border border-gray-200 overflow-hidden active:opacity-80 flex flex-col flex-1">
                       <div className="aspect-square bg-gray-100 relative">
                         {fotos[it.sku] ? (
                           <img src={fotos[it.sku]} alt="" loading="lazy" className="w-full h-full object-cover" />
@@ -236,6 +253,12 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
                         <p className="text-sm font-extrabold text-emerald-600 mt-auto pt-1">{preco != null ? fmtBRL(preco) : "—"}</p>
                       </div>
                     </button>
+                    <button onClick={() => compartilharNoGrupo(it)} disabled={wpp?.sku === it.sku && wpp.estado === "gerando"}
+                      aria-label="Gerar link para o grupo de WhatsApp" title="Link com foto e preço para o grupo de WhatsApp"
+                      className="absolute top-1.5 right-1.5 w-8 h-8 rounded-full bg-emerald-600 text-white shadow flex items-center justify-center active:bg-emerald-700 disabled:opacity-70">
+                      {wpp?.sku === it.sku && wpp.estado === "gerando" ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -254,6 +277,9 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
             </button>
           </div>
         </div>
+      )}
+      {wpp?.msg && (
+        <div role="status" className={`fixed bottom-32 inset-x-0 z-50 mx-auto w-fit max-w-[90%] rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg ${wpp.estado === "erro" ? "bg-red-600" : "bg-emerald-700"}`}>{wpp.msg}</div>
       )}
       {catalogoAberto && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>

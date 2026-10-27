@@ -3,7 +3,8 @@
 // A lógica pura está em ofertaCore.js / cardCore.js.
 import { supabase } from "./supabase.js";
 import { gerarSlug, fotosAssinadas } from "./catalogoPublico.js";
-import { montarPayloadOferta, MAX_ITENS_OFERTA } from "./ofertaCore.js";
+import { montarPayloadOferta, textoGrupo, MAX_ITENS_OFERTA } from "./ofertaCore.js";
+import { carregarContato } from "./empresaConfig.js";
 
 const LIMITE_OG = 300 * 1024; // acima disso o WhatsApp pode ignorar a imagem
 
@@ -56,4 +57,15 @@ export async function skusIndisponiveis(slug) {
     const { data, error } = await supabase.rpc("oferta_indisponiveis", { p_slug: slug });
     return error ? [] : (data || []);
   } catch { return []; }
+}
+
+// Publica 1 produto com o contato da empresa e copia a mensagem pronta para o grupo.
+// Retorna { texto, url, semImagem, copiado }. Sem clipboard, `copiado` é false (a tela mostra o texto).
+export async function gerarLinkGrupo(item) {
+  const c = await carregarContato();
+  const r = await publicarOferta([item], { contato: { whatsapp: c.whatsapp, label: c.whatsappLabel } });
+  const texto = textoGrupo(r.payload, r.url);
+  let copiado = true;
+  try { await navigator.clipboard.writeText(texto); } catch { copiado = false; }
+  return { texto, url: r.url, semImagem: r.semImagem, copiado };
 }

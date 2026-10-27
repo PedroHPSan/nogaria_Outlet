@@ -1,6 +1,6 @@
 // Teste da oferta pública (preview WhatsApp). Rode: npm run test:oferta
 import assert from "node:assert/strict";
-import { tituloOg, descricaoOg, medidasTexto, montarPayloadOferta, linkInteresseOferta, textoGrupo, escaparHtml, montarHtmlOg, MAX_ITENS_OFERTA } from "../src/lib/ofertaCore.js";
+import { tituloOg, descricaoOg, medidasTexto, montarPayloadOferta, linkInteresseOferta, textoGrupo, escaparHtml, montarHtmlOg, injetarOg, tagsOg, MAX_ITENS_OFERTA } from "../src/lib/ofertaCore.js";
 import { cardOgProduto, cardOgOferta, OG_LADO } from "../src/lib/cardCore.js";
 
 const ok = (c, m) => { assert.ok(c, m); console.log(`  ok  ${m}`); };
@@ -44,6 +44,16 @@ const h = montarHtmlOg({ titulo: 'A "B" <script>', descricao: "d", imagem: "http
 ok(h.includes('og:title" content="A &quot;B&quot; &lt;script&gt;"') && !h.includes("<script>"), "título escapado (sem injeção)");
 ok(h.includes('og:image" content="https://x/og.jpg"') && h.includes('og:url'), "og:image e og:url");
 ok(!montarHtmlOg({ titulo: "t" }).includes("og:image"), "sem imagem → sem og:image");
+
+console.log("injeção no index.html");
+const idx = '<!doctype html><html><head><meta charset="utf-8"><title>NOGÁRIA OUTLET</title><meta name="description" content="velho"></head><body><div id="root"></div></body></html>';
+const inj = injetarOg(idx, { titulo: "Poltrona — R$ 650", descricao: "d", imagem: "https://x/og.jpg", url: "https://app/p/abc" });
+ok(inj.includes('<div id="root"></div>') && inj.includes('<meta charset="utf-8">'), "mantém a SPA intacta");
+ok((inj.match(/<title>/g) || []).length === 1 && inj.includes("<title>Poltrona — R$ 650</title>"), "troca o <title>");
+ok(!inj.includes("velho") && inj.includes('og:image" content="https://x/og.jpg"'), "troca a description e injeta og:image");
+ok(inj.indexOf("og:title") < inj.indexOf("</head>"), "tags dentro do <head>");
+ok(tagsOg({ titulo: "t", imagem: "https://x/i.jpg" }).includes("og:image:secure_url"), "og:image:secure_url");
+ok(injetarOg("<div></div>", { titulo: "t" }).startsWith("<title>t</title>"), "sem </head> → prefixa");
 
 console.log("cards og");
 const cp = cardOgProduto(it(1), { foto: "data:image/jpeg;base64,AA" });

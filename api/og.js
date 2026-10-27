@@ -1,7 +1,8 @@
-// Preview (og:*) para robôs de link (WhatsApp, Telegram…): o vercel.json só direciona
-// para cá requisições com user-agent de robô em /p/<slug> e /c/<slug>. Pessoas
-// recebem a SPA normalmente. Lê 1 linha via RPC anônima e devolve HTML mínimo.
-import { montarHtmlOg } from "../src/lib/ofertaCore.js";
+// Preview (og:*) de /p/<slug> e /c/<slug>. O vercel.json direciona TODO acesso a essas
+// rotas para cá (o robô do WhatsApp/desktop/web pode usar qualquer user-agent): o handler
+// lê 1 linha via RPC anônima, pega o index.html do deploy e injeta as tags no <head>.
+// Pessoas recebem a mesma SPA de sempre, com o preview embutido.
+import { injetarOg, montarHtmlOg } from "../src/lib/ofertaCore.js";
 
 export default async function handler(req, res) {
   const slug = String(req.query.slug || "").replace(/[^a-z0-9]/gi, "").slice(0, 40);
@@ -28,7 +29,14 @@ export default async function handler(req, res) {
       }
     }
   } catch { /* sem preview: cai no texto padrão */ }
+  meta.url = `${origem}/${prefixo}/${slug}`;
+
+  let html;
+  try {
+    const r = await fetch(`${origem}/index.html`);
+    html = r.ok ? injetarOg(await r.text(), meta) : montarHtmlOg(meta);
+  } catch { html = montarHtmlOg(meta); }
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=3600");
-  res.status(200).send(montarHtmlOg({ ...meta, url: `${origem}/${prefixo}/${slug}` }));
+  res.status(200).send(html);
 }
