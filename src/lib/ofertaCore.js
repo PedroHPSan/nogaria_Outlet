@@ -116,13 +116,14 @@ export function tagsOg({ titulo, descricao, imagem, url }) {
 
 // Injeta o preview no index.html da SPA (vale para qualquer visitante: não depende do
 // user-agent do robô). Troca <title> e <meta name="description"> existentes.
+// O replace usa FUNÇÃO: texto de substituição interpretaria `$&`, `$'`, `$$` do título.
 export function injetarOg(indexHtml, meta) {
   const t = escaparHtml(meta.titulo || "Nogária Outlet");
   const limpo = String(indexHtml)
     .replace(/<title>[\s\S]*?<\/title>/i, "")
     .replace(/<meta\s+name=["']description["'][^>]*>/i, "");
   const bloco = `<title>${t}</title>\n${tagsOg(meta)}\n`;
-  return /<\/head>/i.test(limpo) ? limpo.replace(/<\/head>/i, `${bloco}</head>`) : `${bloco}${limpo}`;
+  return /<\/head>/i.test(limpo) ? limpo.replace(/<\/head>/i, () => `${bloco}</head>`) : `${bloco}${limpo}`;
 }
 
 // HTML mínimo de contingência (index.html indisponível): só o preview.
