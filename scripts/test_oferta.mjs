@@ -53,6 +53,9 @@ ok((inj.match(/<title>/g) || []).length === 1 && inj.includes("<title>Poltrona �
 ok(!inj.includes("velho") && inj.includes('og:image" content="https://x/og.jpg"'), "troca a description e injeta og:image");
 ok(inj.indexOf("og:title") < inj.indexOf("</head>"), "tags dentro do <head>");
 ok(tagsOg({ titulo: "t", imagem: "https://x/i.jpg" }).includes("og:image:secure_url"), "og:image:secure_url");
+const perigoso = injetarOg(idx, { titulo: "Cadeira $& $' $$ $1 $`", descricao: "US$$ 5 $&" });
+ok((perigoso.match(/<\/head>/g) || []).length === 1, "título com $& / $' não reinsere </head>");
+ok(perigoso.includes("Cadeira $&amp; $&#39; $$ $1 $`") && perigoso.includes("US$$ 5 $&amp;"), "$ literais preservados no título e na descrição");
 ok(injetarOg("<div></div>", { titulo: "t" }).startsWith("<title>t</title>"), "sem </head> → prefixa");
 
 console.log("cards og");
