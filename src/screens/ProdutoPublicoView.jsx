@@ -27,7 +27,7 @@ export default function ProdutoPublicoView({ slug }) {
       if (!d || !Array.isArray(d.payload?.itens)) { setEstado("indisponivel"); return; }
       setDados(d); setEstado("ok");
       registrarVisualizacao(slug);
-      const v = await skusIndisponiveis(d.payload.itens.map((i) => i.sku));
+      const v = await skusIndisponiveis(slug);
       if (vivo) setVendidos(v);
     });
     return () => { vivo = false; };

@@ -50,10 +50,10 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
   return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, expira_em: data.expira_em, semImagem: !imagem };
 }
 
-// SKUs da oferta que já foram vendidos/entregues (RPC anônima; falha → nenhum).
-export async function skusIndisponiveis(skus) {
+// SKUs desta oferta que já foram vendidos/entregues (RPC anônima por slug; falha → nenhum).
+export async function skusIndisponiveis(slug) {
   try {
-    const { data, error } = await supabase.rpc("oferta_indisponiveis", { p_skus: skus });
+    const { data, error } = await supabase.rpc("oferta_indisponiveis", { p_slug: slug });
     return error ? [] : (data || []);
   } catch { return []; }
 }
