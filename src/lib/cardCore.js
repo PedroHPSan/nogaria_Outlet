@@ -93,3 +93,60 @@ export function montarCarrossel(itens, titulo, formato, ctxPorSku = {}, ctx = {}
     cardChamada(formato, ctx),
   ];
 }
+
+// ── Preview de oferta (og:image) ──────────────────────────────────────────────
+// Quadrado 800×800: o WhatsApp exibe como miniatura quadrada ao lado do título, então o
+// selo de preço fica DENTRO da imagem (nada é cortado). Foto em data URI (sem taint).
+export const OG_LADO = 800;
+
+function faixaPreco(ops, preco, rotulo) {
+  const y = OG_LADO - 170;
+  ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 170, fill: "#0b162d" });
+  ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 8, fill: "#52ff7f" });
+  if (preco > 0) ops.push({ k: "text", x: 40, y: y + 112, s: brl(preco), size: 92, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  else ops.push({ k: "text", x: 40, y: y + 104, s: rotulo || "Consulte", size: 64, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  ops.push({ k: "text", x: 40, y: y + 150, s: "NOGÁRIA OUTLET", size: 22, bold: true, color: "#52ff7f" });
+}
+
+export function cardOgProduto(it, ctx = {}) {
+  const ops = [{ k: "rect", x: 0, y: 0, w: OG_LADO, h: OG_LADO, fill: "#f6f9fb" }];
+  if (ctx.foto) ops.push({ k: "img", x: 30, y: 30, w: OG_LADO - 60, h: OG_LADO - 170 - 60, src: ctx.foto, fit: "contain" });
+  else ops.push({ k: "text", x: 40, y: 330, s: it.produto || it.sku, size: 56, bold: true, color: "#0b162d", maxW: OG_LADO - 80, maxLines: 4, lineH: 68 });
+  const badge = CATALOGO_ESTADO_BADGE[(it.estado || "").trim()];
+  if (badge) {
+    const [bg, fg] = COR_BADGE[badge.cls];
+    ops.push({ k: "rect", x: 30, y: 30, w: badge.txt.length * 15 + 40, h: 44, fill: bg, r: 22 });
+    ops.push({ k: "text", x: 50, y: 61, s: badge.txt.toUpperCase(), size: 22, bold: true, color: fg });
+  }
+  faixaPreco(ops, ctx.mostrarPreco === false ? 0 : precoVenda(it));
+  return { formato: "og", w: OG_LADO, h: OG_LADO, ops };
+}
+
+// Oferta com vários itens: grade 2×2 com a foto e o preço de cada um + faixa "a partir de".
+export function cardOgOferta(itens, ctx = {}) {
+  const lista = (itens || []).slice(0, 4);
+  const ops = [{ k: "rect", x: 0, y: 0, w: OG_LADO, h: OG_LADO, fill: "#f6f9fb" }];
+  const topo = OG_LADO - 170;
+  const cel = (OG_LADO - 3 * 14) / 2;
+  const altura = (topo - 3 * 14) / 2;
+  lista.forEach((it, i) => {
+    const x = 14 + (i % 2) * (cel + 14);
+    const y = 14 + Math.floor(i / 2) * (altura + 14);
+    ops.push({ k: "rect", x, y, w: cel, h: altura, fill: "#ffffff", r: 16 });
+    const foto = ctx.fotos?.[it.sku];
+    if (foto) ops.push({ k: "img", x: x + 8, y: y + 8, w: cel - 16, h: altura - 16, src: foto, fit: "contain" });
+    const p = ctx.mostrarPreco === false ? null : precoVenda(it);
+    if (p > 0) {
+      ops.push({ k: "rect", x: x + 10, y: y + altura - 62, w: Math.min(cel - 20, brl(p).length * 24 + 30), h: 50, fill: "#0b162d", r: 25 });
+      ops.push({ k: "text", x: x + 26, y: y + altura - 26, s: brl(p), size: 32, bold: true, color: "#52ff7f" });
+    }
+  });
+  const precos = (itens || []).map((i) => precoVenda(i)).filter((p) => p > 0);
+  const minimo = ctx.mostrarPreco === false || !precos.length ? 0 : Math.min(...precos);
+  const y = OG_LADO - 170;
+  ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 170, fill: "#0b162d" });
+  ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 8, fill: "#52ff7f" });
+  ops.push({ k: "text", x: 40, y: y + 70, s: `${(itens || []).length} OFERTAS${minimo ? " · a partir de" : ""}`, size: 34, bold: true, color: "#52ff7f" });
+  ops.push({ k: "text", x: 40, y: y + 140, s: minimo ? brl(minimo) : "NOGÁRIA OUTLET", size: 76, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  return { formato: "og", w: OG_LADO, h: OG_LADO, ops };
+}

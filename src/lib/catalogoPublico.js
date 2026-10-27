@@ -54,7 +54,7 @@ export function gerarSlug() {
 
 // Gera signed URLs de longa validade (30d) das fotos representativas. Retorna
 // { [sku]: url }. Best-effort: foto que falhar fica de fora (card sem foto).
-async function fotosAssinadas(cards) {
+export async function fotosAssinadas(cards) {
   const skus = cards.map((c) => c.rep.sku);
   if (!skus.length) return {};
   // 1ª foto (menor ordem) de cada SKU.
