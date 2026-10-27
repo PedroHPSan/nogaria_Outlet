@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMeta, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
 import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
-import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText } from "lucide-react";
+import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag } from "lucide-react";
 
 const OrcamentosScreen = React.lazy(() => import("./OrcamentosScreen"));
+const SacolasScreen = React.lazy(() => import("./SacolasScreen"));
 
 const PAGE = 50;
 
@@ -21,6 +22,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
   const [aba, setAba] = useState("entregar"); // "entregar" | "entregues"
   const [marcando, setMarcando] = useState(null); // sku em entrega
   const [orcamentosOpen, setOrcamentosOpen] = useState(false);
+  const [sacolasOpen, setSacolasOpen] = useState(false);
 
   const refLote = useCallback((lote) => {
     const l = lotes.find((x) => String(x.lote) === String(lote));
@@ -94,6 +96,15 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
+      <button onClick={() => setSacolasOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
+        <ShoppingBag className="w-4 h-4 text-orange-500" /> Sacolas do WhatsApp
+      </button>
+      {sacolasOpen && (
+        <Suspense fallback={null}>
+          <SacolasScreen user={user} onClose={() => setSacolasOpen(false)} />
+        </Suspense>
+      )}
       <button onClick={() => setOrcamentosOpen(true)}
         className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
         <FileText className="w-4 h-4 text-orange-500" /> Orçamentos (venda assistida)

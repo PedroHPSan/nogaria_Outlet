@@ -2,14 +2,17 @@
 // mensagem para o cliente. Sem rede — importável em testes Node.
 import { precoVenda } from "./export.js";
 
-export const STATUS_ORC = ["RASCUNHO", "ENVIADO", "RESERVADO", "VENDIDO", "CANCELADO", "EXPIRADO"];
+export const STATUS_ORC = ["RASCUNHO", "ENVIADO", "RESERVADO", "ABERTA", "VENDIDO", "ENTREGUE", "CANCELADO", "EXPIRADO"];
 export const HORAS_VALIDADE = 48;
+// Sacola de WhatsApp (status ABERTA): prazo para o cliente pagar.
+export const DIAS_PRAZO_SACOLA = 3;
 
 const TRANSICOES = {
   RASCUNHO: ["ENVIADO", "RESERVADO", "CANCELADO"],
   ENVIADO: ["RESERVADO", "VENDIDO", "CANCELADO", "EXPIRADO"],
   RESERVADO: ["VENDIDO", "CANCELADO", "EXPIRADO"],
-  VENDIDO: [], CANCELADO: [], EXPIRADO: [],
+  ABERTA: ["VENDIDO", "CANCELADO", "EXPIRADO"],
+  VENDIDO: ["ENTREGUE"], ENTREGUE: [], CANCELADO: [], EXPIRADO: [],
 };
 export const podeTransitar = (de, para) => (TRANSICOES[de] || []).includes(para);
 export const terminal = (status) => (TRANSICOES[status] || []).length === 0;
@@ -25,9 +28,12 @@ export function proximoSeq(ultimoCodigo) {
 export const validadeEm = (agora = new Date(), horas = HORAS_VALIDADE) =>
   new Date(new Date(agora).getTime() + horas * 3600000).toISOString();
 
-// ENVIADO/RESERVADO vencidos passam a EXPIRADO só na leitura (sem job).
+export const prazoSacola = (agora = new Date(), dias = DIAS_PRAZO_SACOLA) =>
+  new Date(new Date(agora).getTime() + dias * 86400000).toISOString();
+
+// ENVIADO/RESERVADO/ABERTA vencidos passam a EXPIRADO só na leitura (sem job).
 export function statusEfetivo(orc, agora = new Date()) {
-  if (["ENVIADO", "RESERVADO"].includes(orc?.status) && orc.validade && new Date(orc.validade) < new Date(agora)) return "EXPIRADO";
+  if (["ENVIADO", "RESERVADO", "ABERTA"].includes(orc?.status) && orc.validade && new Date(orc.validade) < new Date(agora)) return "EXPIRADO";
   return orc?.status;
 }
 

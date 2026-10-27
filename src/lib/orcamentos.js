@@ -42,7 +42,7 @@ export async function listarOrcamentos({ status, q } = {}) {
   return data || [];
 }
 
-async function mudarStatus(orc, para, extra = {}) {
+export async function mudarStatus(orc, para, extra = {}) {
   if (!podeTransitar(orc.status, para)) throw new Error(`Orçamento ${orc.codigo}: ${orc.status} → ${para} não é permitido.`);
   const { data, error } = await supabase.from("orcamentos")
     .update({ status: para, atualizado_em: new Date().toISOString(), ...extra }).eq("id", orc.id).select("*").single();
