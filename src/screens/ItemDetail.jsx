@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
-  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images, Star, Globe, Wand2, MessageCircle
+  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images, Star, Globe, Wand2, MessageCircle, ShoppingBag
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto, definirFotoPrincipal } from "../lib/fotos";
@@ -14,6 +14,7 @@ import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
+import SepararModal from "../components/SepararModal";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -355,6 +356,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   // Identidade estável: sem isso o useEffect do modal de orçamento refaria a busca de fotos a cada render.
   const itensAnuncio = useMemo(() => [it], [it]);
 
+  const [separando, setSeparando] = useState(false);
   // Publica /p/<slug> (preview com foto e preço no WhatsApp) e copia a mensagem pronta.
   const gerarLinkWpp = async () => {
     setLinkWpp("gerando");
@@ -569,6 +571,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               title="Link com foto e preço para colar no grupo de WhatsApp">
               {linkWpp === "gerando" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
               {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem foto)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
+            </button>
+            <button onClick={() => setSeparando(true)}
+              className="flex items-center gap-1 bg-orange-600 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white"
+              title="Separar este item para um cliente do WhatsApp">
+              <ShoppingBag className="w-3.5 h-3.5" /> Separar
             </button>
             <button onClick={() => setAnuncio(true)}
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100"
@@ -1164,6 +1171,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           />
         </Suspense>
       )}
+      {separando && <SepararModal item={it} user={user} onClose={() => setSeparando(false)} onFeito={() => onSaved?.()} />}
       {anuncio && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <AnuncioModal itens={itensAnuncio} params={params} onClose={() => setAnuncio(false)} />

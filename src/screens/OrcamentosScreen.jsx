@@ -10,7 +10,7 @@ import { fmtBRL } from "../lib/model";
 
 const COR = {
   RASCUNHO: "bg-gray-100 text-gray-700", ENVIADO: "bg-sky-100 text-sky-700", RESERVADO: "bg-amber-100 text-amber-700",
-  VENDIDO: "bg-emerald-100 text-emerald-700", CANCELADO: "bg-red-100 text-red-700", EXPIRADO: "bg-gray-200 text-gray-500",
+  VENDIDO: "bg-emerald-100 text-emerald-700", ENTREGUE: "bg-sky-100 text-sky-700", ABERTA: "bg-amber-100 text-amber-700", CANCELADO: "bg-red-100 text-red-700", EXPIRADO: "bg-gray-200 text-gray-500",
 };
 
 export default function OrcamentosScreen({ user, onClose, onMudou }) {
@@ -22,7 +22,7 @@ export default function OrcamentosScreen({ user, onClose, onMudou }) {
   const [copiado, setCopiado] = useState(null);
 
   const carregar = useCallback(async () => {
-    try { setErro(null); setLista(await listarOrcamentos({ status, q })); }
+    try { setErro(null); setLista((await listarOrcamentos({ status, q })).filter((o) => o.origem !== "whatsapp")); }
     catch (e) { setErro(e.message || String(e)); setLista([]); }
   }, [status, q]);
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t); }, [carregar]);
@@ -53,7 +53,7 @@ export default function OrcamentosScreen({ user, onClose, onMudou }) {
             className="w-full rounded-lg bg-gray-800 text-sm pl-9 pr-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
         <div className="mt-2 flex gap-1.5 overflow-x-auto">
-          {["", ...STATUS_ORC].map((s) => (
+          {["", ...STATUS_ORC.filter((x) => x !== "ABERTA" && x !== "ENTREGUE")].map((s) => (
             <button key={s || "todos"} onClick={() => setStatus(s)}
               className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${status === s ? "bg-orange-500 text-white" : "bg-gray-800 text-gray-300"}`}>
               {s ? s[0] + s.slice(1).toLowerCase() : "Todos"}
