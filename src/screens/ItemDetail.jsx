@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
-  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images, Star, Globe, Wand2
+  ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images, Star, Globe, Wand2, MessageCircle
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto, definirFotoPrincipal } from "../lib/fotos";
@@ -13,6 +13,7 @@ import { buscarViasImpressao } from "../lib/printLog";
 import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
+import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -85,6 +86,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const [scanning, setScanning] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [anuncio, setAnuncio] = useState(false);
+  const [linkWpp, setLinkWpp] = useState(null); // null | "gerando" | { texto, semImagem } | "erro"
   const [custoItem, setCustoItem] = useState(null); // custo_proporcional do rateio do lote (vw_precificacao)
   const [viaInfo, setViaInfo] = useState(null); // { vias, ultima } — controle de impressão
   const [caixaInfo, setCaixaInfo] = useState(null); // dados da caixa em que o item está
@@ -352,6 +354,17 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const sugestaoClasse = useMemo(() => classificarItem(it, params), [it, params]);
   // Identidade estável: sem isso o useEffect do modal de orçamento refaria a busca de fotos a cada render.
   const itensAnuncio = useMemo(() => [it], [it]);
+
+  // Publica /p/<slug> (preview com foto e preço no WhatsApp) e copia a mensagem pronta.
+  const gerarLinkWpp = async () => {
+    setLinkWpp("gerando");
+    try {
+      const r = await gerarLinkGrupo(it);
+      if (!r.copiado) window.prompt("Copie o link:", r.texto);
+      setLinkWpp({ texto: r.texto, semImagem: r.semImagem });
+    } catch (e) { console.error(e); setLinkWpp("erro"); }
+    setTimeout(() => setLinkWpp(null), 4000);
+  };
   const aplicarClasse = async () => {
     const s = sugestaoClasse;
     if (!s?.classe) return;
@@ -550,6 +563,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             <button onClick={() => setPrinting(true)}
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100">
               <Printer className="w-3.5 h-3.5" /> Etiqueta
+            </button>
+            <button onClick={gerarLinkWpp} disabled={linkWpp === "gerando"}
+              className="flex items-center gap-1 bg-emerald-700 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              title="Link com foto e preço para colar no grupo de WhatsApp">
+              {linkWpp === "gerando" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+              {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem foto)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
             </button>
             <button onClick={() => setAnuncio(true)}
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100"

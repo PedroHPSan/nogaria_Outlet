@@ -36,7 +36,8 @@ function caminho(ctx, x, y, w, h, r) {
 }
 
 // card: { w, h, ops } de cardCore. Retorna Promise<Blob PNG>.
-export async function renderizarCard(card) {
+// `tipo`/`qualidade`: PNG por padrão; JPEG (ex.: preview og:image ≤ 300 KB) quando pedido.
+export async function renderizarCard(card, { tipo = "image/png", qualidade } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = card.w; canvas.height = card.h;
   const ctx = canvas.getContext("2d");
@@ -66,5 +67,5 @@ export async function renderizarCard(card) {
       ctx.strokeStyle = op.color; ctx.lineWidth = op.lw || 2; ctx.stroke();
     }
   }
-  return new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("falha ao gerar PNG"))), "image/png"));
+  return new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("falha ao gerar imagem"))), tipo, qualidade));
 }

@@ -8,6 +8,8 @@ import { gerarCatalogoPdfDeItens, gerarCardsDivulgacao } from "../lib/catalogoGe
 import { compartilharArquivo, compartilharArquivos, compartilharTexto, baixarArquivo } from "../lib/compartilhar";
 import { dedupCatalogo, agruparCatalogo, linkInteresseItem } from "../lib/catalogo";
 import { publicarCatalogo } from "../lib/catalogoPublico";
+import { publicarOferta } from "../lib/ofertaPublica";
+import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, csvCatalogo } from "../lib/divulgacao";
 import { FORMATOS } from "../lib/cardCore";
 import { normalizarSpec } from "../lib/catalogoSpec";
@@ -35,6 +37,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   const [aviso, setAviso] = useState(null);
   const [formatoCard, setFormatoCard] = useState("feed");
   const [link, setLink] = useState(null);
+  const [ofertas, setOfertas] = useState([]); // links /p com preview: [{ sku, titulo, url, texto }]
   const [contatoBase, setContatoBase] = useState(null);   // empresa_config (ou EMPRESA)
   const [contatoAberto, setContatoAberto] = useState(false);
   const [predefs, setPredefs] = useState([]);
@@ -134,6 +137,30 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     setLink(res.url); registrar("link");
     try { await navigator.clipboard.writeText(res.url); } catch { /* sem clipboard */ }
     setAviso("Link copiado (vale 30 dias).");
+  });
+
+  // Links com preview no WhatsApp (/p/<slug>): lote em 1 link ou 1 link por produto.
+  const dadosOferta = () => { const c = contato(); return { contato: { nome: c.nome, whatsapp: c.whatsapp, label: c.whatsappLabel }, mostrarPreco }; };
+  const copiar = async (t) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
+
+  const ofertaLote = () => executar(async () => {
+    const r = await publicarOferta(itens.slice(0, MAX_ITENS_OFERTA), { titulo, ...dadosOferta() });
+    const texto = textoGrupo(r.payload, r.url);
+    setOfertas([{ sku: "lote", titulo: r.payload.titulo, url: r.url, texto }]); registrar("link");
+    await copiar(texto);
+    setAviso(`${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
+  });
+
+  const ofertasPorProduto = () => executar(async () => {
+    const lista = itens.slice(0, MAX_ITENS_OFERTA);
+    const saida = [];
+    for (let i = 0; i < lista.length; i++) {
+      setProgresso({ feitas: i, total: lista.length });
+      const r = await publicarOferta([lista[i]], dadosOferta());
+      saida.push({ sku: lista[i].sku, titulo: r.payload.titulo, url: r.url, texto: textoGrupo(r.payload, r.url) });
+    }
+    setOfertas(saida); registrar("link");
+    setAviso(`${saida.length} links gerados — copie e cole um por mensagem no grupo (cada link mostra o seu produto).`);
   });
 
   const textoWpp = () => executar(async () => {
@@ -257,6 +284,20 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
                 </select>
                 <button onClick={cardsPng} disabled={gerando || !itens.length} className="rounded-lg bg-gray-900 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">Cards (PNG)</button>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={ofertaLote} disabled={gerando || !itens.length} className="rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"><Link2 className="w-4 h-4" /> Oferta (1 link)</button>
+                <button onClick={ofertasPorProduto} disabled={gerando || !itens.length} className="rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"><MessageCircle className="w-4 h-4" /> 1 link por produto</button>
+              </div>
+              {ofertas.length > 0 && (
+                <ul className="space-y-1 max-h-40 overflow-y-auto">
+                  {ofertas.map((o) => (
+                    <li key={o.url} className="flex items-center gap-2 text-xs">
+                      <span className="flex-1 truncate text-gray-700">{o.titulo}</span>
+                      <button onClick={async () => setAviso((await copiar(o.texto)) ? "Copiado — cole no grupo." : "Não consegui copiar.")} className="rounded border border-gray-300 px-2 py-1 font-semibold">Copiar</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {link && <p className="text-xs text-gray-500 break-all">{link}</p>}
             </div>
             {historico.length > 0 && (
