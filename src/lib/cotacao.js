@@ -11,7 +11,7 @@ async function proprio() {
   if (!r.ok) throw new Error(`api ${r.status}`);
   const d = await r.json();
   if (!(d?.taxa > 0)) throw new Error("api sem cotação");
-  return { taxa: Number(d.taxa), em: Number(d.em) || Date.now() };
+  return { taxa: Number(d.taxa), em: Number(d.em) || Date.now(), fonte: d.fonte || null };
 }
 
 async function awesome() {
@@ -20,7 +20,7 @@ async function awesome() {
   const d = (await r.json()).EURBRL;
   const taxa = Number(d?.bid);
   if (!(taxa > 0)) throw new Error("awesomeapi sem cotação");
-  return { taxa, em: d.timestamp ? Number(d.timestamp) * 1000 : Date.now() };
+  return { taxa, em: d.timestamp ? Number(d.timestamp) * 1000 : Date.now(), fonte: "awesomeapi" };
 }
 
 async function frankfurter() {
@@ -29,7 +29,7 @@ async function frankfurter() {
   const d = await r.json();
   const taxa = Number(d?.rates?.BRL);
   if (!(taxa > 0)) throw new Error("frankfurter sem cotação");
-  return { taxa, em: Date.parse(`${d.date}T12:00:00Z`) || Date.now() };
+  return { taxa, em: Date.parse(`${d.date}T12:00:00Z`) || Date.now(), fonte: "frankfurter" };
 }
 
 // soProprio: só /api/cotacao (página pública: o navegador do cliente não consulta terceiros).
@@ -40,6 +40,7 @@ export async function cotacaoEuro({ forcar = false, soProprio = false } = {}) {
     if (soProprio) throw e;
     try { valor = await awesome(); } catch { valor = await frankfurter(); }
   }
+  valor = { ...valor, consultadaEm: Date.now() }; // instante da consulta (a fonte pode ter publicado antes)
   cache = { valor, buscadoEm: Date.now() };
   return valor;
 }

@@ -75,7 +75,7 @@ eq(precoMisto(1000, null), { brl: 1200, eur: null }, "sem cotação → só reai
 eq(precoMisto(0, 6), null, "sem preço → null");
 const pe = montarPayloadOferta([it(1)], { euro: { taxa: 6, em: Date.UTC(2026, 9, 30, 17, 5) }, og: { imagem: "x" } });
 ok(pe.euro === true && pe.itens[0].preco === 1299, "payload euro guarda o R$ base");
-eq(pe.og.titulo, "Produto 1 — 259,80 € · R$ 1.299,00", "título do preview: € (com acréscimo) e R$ base, sem mencionar +20%");
+eq(pe.og.titulo, "Produto 1 — R$ 1.299,00 · 259,80 €", "título do preview: € (com acréscimo) e R$ base, sem mencionar +20%");
 ok(pe.og.descricao.includes("Price updates on click") && pe.og.descricao.length <= 160, "descrição do preview avisa em 3 idiomas");
 const imgE = JSON.stringify(cardOgProduto(it(1), { euro: { taxa: 6, em: 0 } }));
 ok(imgE.includes("259,80 €") && imgE.includes("R$ 1.299") && !imgE.includes("1.558"), "imagem do preview com os dois valores");
@@ -83,7 +83,7 @@ eq(montarPayloadOferta([it(1)], { euro: { taxa: 6, em: 0 }, mostrarPreco: false 
 const cot = { taxa: 6, em: Date.UTC(2026, 9, 30, 17, 5) };
 eq(textoCotacao(cot), "Cotação: 1 € = R$ 6,00 (30/10/2026 17:05 UTC)", "cotação com data e fuso explícito (UTC)");
 const tg = textoGrupoEuro(pe, "https://app/p/abc", cot);
-ok(tg.includes("259,80 €* · R$ 1.299,00") && !tg.includes("20%") && tg.includes("🇬🇧") && tg.includes("🇪🇸") && tg.includes("🇧🇷") && tg.includes(fmtEUR(259.8)) && tg.includes("Valor em € atualizado ao abrir o link") && tg.includes("Precio en € actualizado") && tg.length < 330, "mensagem do grupo com R$, €, cotação e aviso");
+ok(tg.includes("R$ 1.299,00 · 259,80 €") && !tg.includes("20%") && tg.includes("🇬🇧") && tg.includes("🇪🇸") && tg.includes("🇧🇷") && tg.includes(fmtEUR(259.8)) && tg.includes("Valor em € atualizado ao abrir o link") && tg.includes("Precio en € actualizado") && tg.length < 330, "mensagem do grupo com R$, €, cotação e aviso");
 const { mensagemInteresseEuro, idiomaDoNavegador } = await import("../src/lib/precoEuro.js");
 ok(mensagemInteresseEuro(pe.itens[0], cot, "u", "es").startsWith("¡Hola! Me interesa") && mensagemInteresseEuro(pe.itens[0], cot, "u", "en").includes("€259.80") && !mensagemInteresseEuro(pe.itens[0], cot, "u", "en").includes("R$ 1"), "mensagem do pedido recalculada, em es/en");
 eq([idiomaDoNavegador("es-AR"), idiomaDoNavegador("pt-PT"), idiomaDoNavegador("de-DE")], ["es", "pt", "en"], "idioma pelo navegador (padrão en)");
@@ -135,3 +135,8 @@ let todas = false;
 try { await cotacaoEuro({ forcar: true }); } catch { todas = true; }
 ok(todas, "nenhuma fonte → erro (a tela trata)");
 globalThis.fetch = realFetch;
+const { fonteCotacao, horaConsulta } = await import("../src/lib/precoEuro.js");
+ok(fonteCotacao("awesomeapi").includes("AwesomeAPI") && fonteCotacao("frankfurter").includes("Banco Central Europeu") && fonteCotacao(null).includes("EUR/BRL"), "fonte da cotação por extenso");
+ok(/^\d{2}:\d{2}:\d{2}$/.test(horaConsulta(Date.now())), "hora da consulta com segundos");
+const imgR = cardOgProduto(it(1), { euro: { taxa: 6, em: 0 } }).ops.filter((o) => o.k === "text");
+ok(imgR.find((o) => o.s === "R$ 1.299").size > imgR.find((o) => o.s.endsWith("€")).size, "no cartão o R$ é maior que o €");

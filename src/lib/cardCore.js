@@ -102,9 +102,9 @@ export function montarCarrossel(itens, titulo, formato, ctxPorSku = {}, ctx = {}
 export const OG_LADO = 800;
 
 // Modo euro (ctx.euro = { taxa, em }): o preço vira o € do momento da publicação (R$ +20% ÷ cotação).
-// fmtPreco → texto de uma linha; fmtDupla → { eur, brl } para mostrar os dois valores.
+// fmtPreco → texto de uma linha (R$ primeiro); fmtDupla → { brl, eur }: o R$ é o valor em destaque.
 const fmtDupla = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? { eur: fmtEUR(m.eur), brl: brl(p) } : null; };
-const fmtPreco = (p, euro) => { const d = fmtDupla(p, euro); return d ? `${d.eur} · ${d.brl}` : brl(p); };
+const fmtPreco = (p, euro) => { const d = fmtDupla(p, euro); return d ? `${d.brl} · ${d.eur}` : brl(p); };
 
 function faixaPreco(ops, preco, rotulo, euro) {
   const y = OG_LADO - 170;
@@ -112,8 +112,8 @@ function faixaPreco(ops, preco, rotulo, euro) {
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 8, fill: "#52ff7f" });
   const dupla = preco > 0 ? fmtDupla(preco, euro) : null;
   if (dupla) {
-    ops.push({ k: "text", x: 40, y: y + 82, s: dupla.eur, size: 76, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
-    ops.push({ k: "text", x: 40, y: y + 130, s: dupla.brl, size: 44, bold: true, color: "#52ff7f", maxW: OG_LADO - 80 });
+    ops.push({ k: "text", x: 40, y: y + 84, s: dupla.brl, size: 80, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+    ops.push({ k: "text", x: 40, y: y + 130, s: dupla.eur, size: 40, bold: true, color: "#52ff7f", maxW: OG_LADO - 80 });
   } else if (preco > 0) ops.push({ k: "text", x: 40, y: y + 112, s: brl(preco), size: 92, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
   if (preco <= 0) ops.push({ k: "text", x: 40, y: y + 104, s: rotulo || "Consulte", size: 64, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
   ops.push({ k: "text", x: 40, y: y + 158, s: euro && preco > 0 ? `NOGÁRIA OUTLET · cotação ${fmtDataCotacao(euro.em)}` : "NOGÁRIA OUTLET", size: 22, bold: true, color: "#52ff7f" });
