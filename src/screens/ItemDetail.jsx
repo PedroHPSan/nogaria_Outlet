@@ -591,7 +591,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               className="flex items-center gap-1 bg-emerald-700 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
               title="Link com foto e preço para colar no grupo de WhatsApp">
               {linkWpp === "gerando" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-              {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem foto)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
+              {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem preview)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
             </button>
             <button onClick={() => setSeparando(true)}
               className="flex items-center gap-1 bg-orange-600 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white"
