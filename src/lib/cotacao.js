@@ -3,8 +3,19 @@
 let cache = null; // reaproveita por 60 s na mesma sessão
 const TTL_MS = 60 * 1000;
 
+const comTimeout = (url) => fetch(url, { signal: AbortSignal.timeout(4000) });
+
+// Fonte única do app: /api/cotacao (cache na borda). Se cair, tenta as fontes direto.
+async function proprio() {
+  const r = await comTimeout("/api/cotacao");
+  if (!r.ok) throw new Error(`api ${r.status}`);
+  const d = await r.json();
+  if (!(d?.taxa > 0)) throw new Error("api sem cotação");
+  return { taxa: Number(d.taxa), em: Number(d.em) || Date.now() };
+}
+
 async function awesome() {
-  const r = await fetch("https://economia.awesomeapi.com.br/json/last/EUR-BRL");
+  const r = await comTimeout("https://economia.awesomeapi.com.br/json/last/EUR-BRL");
   if (!r.ok) throw new Error(`awesomeapi ${r.status}`);
   const d = (await r.json()).EURBRL;
   const taxa = Number(d?.bid);
@@ -13,7 +24,7 @@ async function awesome() {
 }
 
 async function frankfurter() {
-  const r = await fetch("https://api.frankfurter.app/latest?from=EUR&to=BRL");
+  const r = await comTimeout("https://api.frankfurter.app/latest?from=EUR&to=BRL");
   if (!r.ok) throw new Error(`frankfurter ${r.status}`);
   const d = await r.json();
   const taxa = Number(d?.rates?.BRL);
@@ -21,10 +32,14 @@ async function frankfurter() {
   return { taxa, em: Date.parse(`${d.date}T12:00:00Z`) || Date.now() };
 }
 
-export async function cotacaoEuro({ forcar = false } = {}) {
+// soProprio: só /api/cotacao (página pública: o navegador do cliente não consulta terceiros).
+export async function cotacaoEuro({ forcar = false, soProprio = false } = {}) {
   if (!forcar && cache && Date.now() - cache.buscadoEm < TTL_MS) return cache.valor;
   let valor;
-  try { valor = await awesome(); } catch { valor = await frankfurter(); }
+  try { valor = await proprio(); } catch (e) {
+    if (soProprio) throw e;
+    try { valor = await awesome(); } catch { valor = await frankfurter(); }
+  }
   cache = { valor, buscadoEm: Date.now() };
   return valor;
 }

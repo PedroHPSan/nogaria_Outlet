@@ -121,6 +121,11 @@ function CompactProduct({ label }) {
       <div style={{ fontSize: "8.5pt", fontWeight: 700, marginTop: mm(0.4), lineHeight: 1.2 }}>
         {label.produto}
       </div>
+      {label.tamanho && (
+        <div style={{ fontSize: "11pt", fontWeight: 800, marginTop: mm(0.6), textAlign: "center", border: "0.4mm solid #000", borderRadius: mm(1) }}>
+          TAM {label.tamanho}
+        </div>
+      )}
       <div style={{ fontSize: "7.5pt", marginTop: mm(1.4), lineHeight: 1.45 }}>
         <div style={nowrap}>Caixa <b>{label.caixa_num}</b> · Sala <b>{label.sala}</b></div>
         <div style={nowrap}>Destino <b>{label.destino}</b></div>
@@ -201,6 +206,11 @@ function FullProduct({ label, tall = false }) {
       <div style={{ fontSize: tall ? "11pt" : "9pt", fontWeight: 700, marginTop: mm(1.2), lineHeight: 1.2 }}>
         {label.produto}
       </div>
+      {label.tamanho && (
+        <div style={{ fontSize: tall ? "14pt" : "11pt", fontWeight: 800, marginTop: mm(1), textAlign: "center", border: "0.4mm solid #000", borderRadius: mm(1) }}>
+          TAM {label.tamanho}
+        </div>
+      )}
       {tall && label.medidas && (
         <div style={{ fontSize: "9pt", marginTop: mm(1) }}>
           Medidas: <b>{label.medidas}</b>

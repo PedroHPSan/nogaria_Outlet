@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { ehInternacional } from "../lib/destinos";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx, LOTE_SEM } from "../lib/model";
 import { pendenteMedida } from "../lib/medidas";
@@ -28,7 +29,7 @@ function QueueRow({ icon: Icon, color, label, hint, n, onClick }) {
   );
 }
 
-export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas }) {
+export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas, onOpenDestinos }) {
   const [stats, setStats] = useState(null);
   const [resultado, setResultado] = useState(null); // vw_lote_resultado (lucro realizado por lote)
   const [throughput, setThroughput] = useState(null); // vw_throughput_dia (ritmo)
@@ -244,6 +245,11 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
         </div>
       )}
 
+      <button onClick={() => onOpenDestinos?.()}
+        className="w-full rounded-xl py-2.5 text-sm font-bold bg-white border border-gray-200 text-gray-700 shadow-sm">
+        Destinos e locais de storage
+      </button>
+
       {resultado && resultado.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1.5">
@@ -299,7 +305,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
               <button key={d} onClick={() => onGoFiltered({ destino: d })} className="w-full flex items-center gap-3 active:opacity-70">
                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${aDefinir ? "bg-rose-400" : "bg-orange-400"}`} />
                 <div className="flex-1 text-left min-w-0">
-                  <p className={`text-sm font-semibold ${aDefinir ? "text-rose-700" : "text-gray-800"}`}>{d}</p>
+                  <p className={`text-sm font-semibold ${aDefinir ? "text-rose-700" : "text-gray-800"}`}>{ehInternacional(d) ? "🌍 " : ""}{d}</p>
                   <p className="text-xs text-gray-400">{fmtBRL(v.val)} em catálogo</p>
                 </div>
                 <span className="text-sm font-bold text-gray-700">{v.n.toLocaleString("pt-BR")}</span>

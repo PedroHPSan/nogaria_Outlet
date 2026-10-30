@@ -5,6 +5,7 @@ import { supabase } from "./supabase.js";
 import { gerarSlug, fotosAssinadas } from "./catalogoPublico.js";
 import { montarPayloadOferta, textoGrupo, MAX_ITENS_OFERTA } from "./ofertaCore.js";
 import { cotacaoEuro } from "./cotacao.js";
+import { textoGrupoEuro } from "./precoEuro.js";
 import { carregarContato } from "./empresaConfig.js";
 
 const LIMITE_OG = 300 * 1024; // acima disso o WhatsApp pode ignorar a imagem
@@ -32,7 +33,7 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
   if (!lista.length) throw new Error("Selecione ao menos 1 item.");
   const slug = gerarSlug();
   // euro: true → busca a cotação agora; ela vai estampada no preview (a página busca outra a cada visita).
-  const cotacao = euro && mostrarPreco ? await cotacaoEuro() : null;
+  const cotacao = euro && mostrarPreco ? await cotacaoEuro().catch(() => null) : null; // sem cotação: o link sai só em reais
 
   let imagem = null;
   try {
@@ -45,6 +46,7 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
 
   const fotos = await fotosAssinadas(lista.map((i) => ({ rep: i })));
   const payload = montarPayloadOferta(lista, { titulo, contato, mostrarPreco, euro: cotacao, fotos, og: { imagem } });
+  if (cotacao) payload.cotacao = { taxa: cotacao.taxa, em: cotacao.em }; // auditoria do preview
   const { data: sess } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from("catalogos_publicos")
@@ -52,7 +54,7 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
     .select("slug, expira_em")
     .single();
   if (error) throw error;
-  return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, expira_em: data.expira_em, semImagem: !imagem };
+  return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, expira_em: data.expira_em, semImagem: !imagem, cotacao, semCotacao: euro && mostrarPreco && !cotacao };
 }
 
 // SKUs desta oferta que já foram vendidos/entregues (RPC anônima por slug; falha → nenhum).
@@ -65,11 +67,12 @@ export async function skusIndisponiveis(slug) {
 
 // Publica 1 produto com o contato da empresa e copia a mensagem pronta para o grupo.
 // Retorna { texto, url, semImagem, copiado }. Sem clipboard, `copiado` é false (a tela mostra o texto).
-export async function gerarLinkGrupo(item) {
+// euro (padrão): um link para os dois públicos — cartão com € e R$, página com seletor BR/EU.
+export async function gerarLinkGrupo(item, { euro = true } = {}) {
   const c = await carregarContato();
-  const r = await publicarOferta([item], { contato: { whatsapp: c.whatsapp, label: c.whatsappLabel } });
-  const texto = textoGrupo(r.payload, r.url);
+  const r = await publicarOferta([item], { contato: { whatsapp: c.whatsapp, label: c.whatsappLabel }, euro });
+  const texto = r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao) : textoGrupo(r.payload, r.url);
   let copiado = true;
   try { await navigator.clipboard.writeText(texto); } catch { copiado = false; }
-  return { texto, url: r.url, semImagem: r.semImagem, copiado };
+  return { texto, url: r.url, semImagem: r.semImagem, semCotacao: r.semCotacao, copiado };
 }

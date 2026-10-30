@@ -22,6 +22,8 @@ const RateioLoteModal = React.lazy(() => import("../components/RateioLoteModal")
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
+import { DESTINO_INTL } from "../lib/catalogoCore";
+import { destinosInternacionais } from "../lib/destinos";
 const DESTINO_SEM = "__sem__"; // sentinela: itens sem destino definido (campo nulo)
 
 export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params, user, onBarraAcao }) {
@@ -168,6 +170,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     else query = query.not("status", "in", STATUS_FORA_ESTOQUE_IN);
     if (fGrupo) query = query.eq("grupo", fGrupo);
     if (fDestino === DESTINO_SEM) query = query.is("destino", null);
+    else if (fDestino === DESTINO_INTL) query = query.in("destino", destinosInternacionais());
     else if (fDestino) query = query.eq("destino", fDestino);
     // Pendente de medição = nunca confirmado fisicamente (null ou ≠ MEDIDO).
     if (fPendMedida) query = query.or("medidas_fonte.is.null,medidas_fonte.neq.MEDIDO");
@@ -308,6 +311,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             <select value={fDestino} onChange={(e) => setFDestino(e.target.value)} className={inputCls}>
               <option value="">Todos os destinos</option>
               {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
+              {destinosInternacionais().length > 0 && <option value={DESTINO_INTL}>🌍 Somente internacionais</option>}
               <option value={DESTINO_SEM}>Sem destino definido</option>
             </select>
             <select value={fCaixa} onChange={(e) => setFCaixa(e.target.value)} className={inputCls}>

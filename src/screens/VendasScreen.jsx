@@ -6,6 +6,7 @@ import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Stor
 
 const OrcamentosScreen = React.lazy(() => import("./OrcamentosScreen"));
 const SacolasScreen = React.lazy(() => import("./SacolasScreen"));
+const PedidosEuroScreen = React.lazy(() => import("./PedidosEuroScreen"));
 
 const PAGE = 50;
 
@@ -23,6 +24,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
   const [marcando, setMarcando] = useState(null); // sku em entrega
   const [orcamentosOpen, setOrcamentosOpen] = useState(false);
   const [sacolasOpen, setSacolasOpen] = useState(false);
+  const [pedidosEuroOpen, setPedidosEuroOpen] = useState(false);
 
   const refLote = useCallback((lote) => {
     const l = lotes.find((x) => String(x.lote) === String(lote));
@@ -100,6 +102,15 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
         className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
         <ShoppingBag className="w-4 h-4 text-orange-500" /> Sacolas do WhatsApp
       </button>
+      <button onClick={() => setPedidosEuroOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
+        <Receipt className="w-4 h-4 text-orange-500" /> Pedidos em euros (Europa)
+      </button>
+      {pedidosEuroOpen && (
+        <Suspense fallback={null}>
+          <PedidosEuroScreen onClose={() => setPedidosEuroOpen(false)} />
+        </Suspense>
+      )}
       {sacolasOpen && (
         <Suspense fallback={null}>
           <SacolasScreen user={user} onClose={() => setSacolasOpen(false)} />

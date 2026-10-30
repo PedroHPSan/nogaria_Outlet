@@ -1,7 +1,7 @@
 // Catálogo rápido: gera o PDF de catálogo a partir de uma seleção (skus) ou de
 // uma sala (salaId), sem passar pelos filtros da aba Catálogo. Só entram itens
 // com preço de venda, condição mapeada e em estoque (regra do catálogo).
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Loader2, AlertTriangle, Share2, Download, Link2, MessageCircle, Instagram, FileSpreadsheet } from "lucide-react";
 import { listarItensCatalogo, resumoSelecao } from "../lib/catalogo";
 import { gerarCatalogoPdfDeItens, gerarCardsDivulgacao } from "../lib/catalogoGerar";
@@ -9,8 +9,8 @@ import { compartilharArquivo, compartilharArquivos, compartilharTexto, baixarArq
 import { dedupCatalogo, agruparCatalogo, linkInteresseItem } from "../lib/catalogo";
 import { publicarCatalogo } from "../lib/catalogoPublico";
 import { publicarOferta } from "../lib/ofertaPublica";
+import { destinosInternacionais } from "../lib/destinos";
 import { textoGrupoEuro } from "../lib/precoEuro";
-import { cotacaoEuro } from "../lib/cotacao";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, csvCatalogo } from "../lib/divulgacao";
 import { FORMATOS } from "../lib/cardCore";
@@ -24,13 +24,18 @@ const edicaoAtual = () =>
   new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
 export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos, titulo: tituloInicial = "Catálogo de Produtos", user, onClose }) {
-  const [itens, setItens] = useState(null);
+  const [todos, setItens] = useState(null);
+  const [soIntl, setSoIntl] = useState(false); // restringe aos destinos internacionais
+  const itens = useMemo(
+    () => (todos && soIntl ? todos.filter((i) => destinosInternacionais().includes(i.destino)) : todos),
+    [todos, soIntl],
+  );
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState(null);
   const [titulo, setTitulo] = useState(tituloInicial);
   const [comFoto, setComFoto] = useState(true);
   const [mostrarPreco, setMostrarPreco] = useState(true);
-  const [precoEuro, setPrecoEuro] = useState(false); // links de oferta com R$ +20% e € ao vivo
+  const [precoEuro, setPrecoEuro] = useState(true); // links de oferta com R$ +20% e € ao vivo
   const [comQr, setComQr] = useState(true);
   const [modelo, setModelo] = useState("catalogo");
   const [tema, setTema] = useState("noite");
@@ -144,15 +149,15 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   // Links com preview no WhatsApp (/p/<slug>): lote em 1 link ou 1 link por produto.
   const dadosOferta = () => { const c = contato(); return { contato: { nome: c.nome, whatsapp: c.whatsapp, label: c.whatsappLabel }, mostrarPreco, euro: precoEuro }; };
-  const textoOferta = async (payload, url) => (payload.euro ? textoGrupoEuro(payload, url, await cotacaoEuro()) : textoGrupo(payload, url));
+  const textoOferta = (r) => (r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao) : textoGrupo(r.payload, r.url));
   const copiar = async (t) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
 
   const ofertaLote = () => executar(async () => {
     const r = await publicarOferta(itens.slice(0, MAX_ITENS_OFERTA), { titulo, ...dadosOferta() });
-    const texto = await textoOferta(r.payload, r.url);
+    const texto = textoOferta(r);
     setOfertas([{ sku: "lote", titulo: r.payload.titulo, url: r.url, texto }]); registrar("link");
     await copiar(texto);
-    setAviso(`${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
+    setAviso(`${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}${r.semCotacao ? "Cotação do euro indisponível: link só em reais. " : ""}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
   });
 
   const ofertasPorProduto = () => executar(async () => {
@@ -161,7 +166,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     for (let i = 0; i < lista.length; i++) {
       setProgresso({ feitas: i, total: lista.length });
       const r = await publicarOferta([lista[i]], dadosOferta());
-      saida.push({ sku: lista[i].sku, titulo: r.payload.titulo, url: r.url, texto: await textoOferta(r.payload, r.url) });
+      saida.push({ sku: lista[i].sku, titulo: r.payload.titulo, url: r.url, texto: textoOferta(r) });
     }
     setOfertas(saida); registrar("link");
     setAviso(`${saida.length} links gerados — copie e cole um por mensagem no grupo (cada link mostra o seu produto).`);
@@ -220,6 +225,9 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
             <p className="text-sm text-gray-700">
               <b>{itens.length}</b> {itens.length === 1 ? "item entra" : "itens entram"} no catálogo.
             </p>
+            {destinosInternacionais().length > 0 && (
+              <Opcao valor={soIntl} onChange={setSoIntl}>🌍 Somente destinos internacionais{soIntl && todos ? ` (${itens.length} de ${todos.length})` : ""}</Opcao>
+            )}
             {resumo?.fora.length > 0 && (
               <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 flex gap-1.5">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -235,7 +243,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
             <div className="space-y-1.5">
               <Opcao valor={comFoto} onChange={setComFoto}>Incluir fotos</Opcao>
               <Opcao valor={mostrarPreco} onChange={setMostrarPreco}>Mostrar preço</Opcao>
-              {mostrarPreco && <Opcao valor={precoEuro} onChange={setPrecoEuro}>Links com preço em euros (+20%, cotação ao vivo)</Opcao>}
+              {mostrarPreco && <Opcao valor={precoEuro} onChange={setPrecoEuro}>Links com € e R$ (um link para BR e Europa)</Opcao>}
               <Opcao valor={comQr} onChange={setComQr}>QR de WhatsApp em cada item</Opcao>
             </div>
 

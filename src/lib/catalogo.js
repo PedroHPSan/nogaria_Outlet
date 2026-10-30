@@ -3,11 +3,12 @@
 // catalogoCore.js (testáveis em Node); aqui fica só a query no supabase.
 import { supabase } from "./supabase.js";
 import { LOTE_SEM } from "./model.js";
-import { DESTINO_SEM, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE } from "./catalogoCore.js";
+import { DESTINO_SEM, DESTINO_INTL, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE } from "./catalogoCore.js";
+import { destinosInternacionais } from "./destinos.js";
 
 // Reexporta o núcleo puro para os consumidores antigos (PortfolioScreen, template).
 export {
-  DESTINO_SEM, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE,
+  DESTINO_SEM, DESTINO_INTL, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE,
   dedupCatalogo, agruparCatalogo, fraseCondicao, linkInteresseItem, resumoSelecao,
 } from "./catalogoCore.js";
 
@@ -48,6 +49,7 @@ export async function listarItensCatalogo(filtros = {}) {
     else if (statusPadrao) query = query.not("status", "in", excluirStatus);
     if (grupo) query = query.eq("grupo", grupo);
     if (destino === DESTINO_SEM) query = query.is("destino", null);
+    else if (destino === DESTINO_INTL) query = query.in("destino", destinosInternacionais());
     else if (destino) query = query.eq("destino", destino);
     if (caixaId) query = query.eq("caixa_id", caixaId);
     if (skus) query = query.in("sku", skus);

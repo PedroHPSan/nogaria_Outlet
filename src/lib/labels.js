@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { fmtKg } from "./model";
 import { estimarPesoCaixa } from "./classificacao";
 import { salaLabelTexto } from "./salasFormat";
+import { tamanhoEtiqueta } from "./tamanhos.js";
 
 // Rolos DK compatíveis com a Brother QL-800. Dimensões em milímetros.
 // width = largura visual da etiqueta; height = comprimento (sentido de avanço do papel).
@@ -135,6 +136,7 @@ export function buildProductLabel(item, sala) {
     estadoCodigo: estado.codigo,
     destino: item?.destino || "—",
     medidas: fmtMedidas(item),
+    tamanho: tamanhoEtiqueta(item),
     aviso: atencao ? "NÃO ANUNCIAR ANTES DE TESTAR" : null,
     checkboxes: CHECKBOXES,
     qrText: item?.sku || "",

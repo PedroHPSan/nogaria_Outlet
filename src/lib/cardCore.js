@@ -1,6 +1,7 @@
 // Layout PURO dos cards de divulgação (px): Feed 4:5, Story 9:16 e Status. Devolve
 // listas de operações de desenho (mesmo modelo do PDF) para o renderizador de canvas.
 import { precoVenda } from "./export.js";
+import { tamanhoExibicao } from "./tamanhos.js";
 import { precoMisto, fmtEUR, fmtDataCotacao } from "./precoEuro.js";
 import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogoCore.js";
 import { TEMAS } from "./catalogoSpec.js";
@@ -102,7 +103,7 @@ export const OG_LADO = 800;
 
 // Modo euro (ctx.euro = { taxa, em }): o preço vira o € do momento da publicação (R$ +20% ÷ cotação).
 // fmtPreco → texto de uma linha; fmtDupla → { eur, brl } para mostrar os dois valores.
-const fmtDupla = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? { eur: fmtEUR(m.eur), brl: brl(m.brl) } : null; };
+const fmtDupla = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? { eur: fmtEUR(m.eur), brl: brl(p) } : null; };
 const fmtPreco = (p, euro) => { const d = fmtDupla(p, euro); return d ? `${d.eur} · ${d.brl}` : brl(p); };
 
 function faixaPreco(ops, preco, rotulo, euro) {
@@ -133,8 +134,8 @@ export function cardOgProduto(it, ctx = {}) {
     ops.push({ k: "rect", x: OG_LADO - 30 - w, y: 30, w, h: 44, fill: "#0b162d", r: 22 });
     ops.push({ k: "text", x: OG_LADO - 30 - w + 20, y: 61, s: it.sku, size: 26, bold: true, color: "#52ff7f" });
   }
-  if (it.tamanho) {
-    const s = `TAM ${it.tamanho}`;
+  if (tamanhoExibicao(it)) {
+    const s = `TAM ${tamanhoExibicao(it)}`;
     const w = s.length * 22 + 44;
     ops.push({ k: "rect", x: OG_LADO - 30 - w, y: 86, w, h: 60, fill: "#52ff7f", r: 30 });
     ops.push({ k: "text", x: OG_LADO - 30 - w + 22, y: 130, s, size: 36, bold: true, color: "#0b162d" });
@@ -160,8 +161,8 @@ export function cardOgOferta(itens, ctx = {}) {
       ops.push({ k: "rect", x: x + 10, y: y + 10, w: it.sku.length * 12 + 24, h: 34, fill: "#0b162d", r: 17 });
       ops.push({ k: "text", x: x + 22, y: y + 34, s: it.sku, size: 20, bold: true, color: "#52ff7f" });
     }
-    if (it.tamanho) {
-      const s = `TAM ${it.tamanho}`;
+    if (tamanhoExibicao(it)) {
+      const s = `TAM ${tamanhoExibicao(it)}`;
       ops.push({ k: "rect", x: x + 10, y: y + 52, w: s.length * 15 + 28, h: 38, fill: "#52ff7f", r: 19 });
       ops.push({ k: "text", x: x + 24, y: y + 79, s, size: 24, bold: true, color: "#0b162d" });
     }

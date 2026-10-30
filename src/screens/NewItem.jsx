@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { tamanhoEU } from "../lib/tamanhos";
 import { supabase } from "../lib/supabase";
 import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
 import { DEFAULT_PARAMS } from "../lib/pricing";
@@ -249,6 +250,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
             <Field label="Tamanho / numeração (opcional)">
               <input className={inputCls} value={tamanho} onChange={(e) => setTamanho(e.target.value)}
                 placeholder="ex.: 42, 38 BR, M" />
+              {tamanhoEU(tamanho) && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoEU(tamanho)}</b> nas telas, etiquetas e imagens.</p>}
             </Field>
           )}
           <Field label="Quantidade de unidades">

@@ -41,7 +41,9 @@ export const CLASSE_STYLE = {
 };
 
 export const ESTADOS = ["Novo", "Embalagem aberta/avariada", "Usado", "Avariado", "Usado sem teste"];
-export const DESTINOS = ["Belém", "SP storage", "Venda local SP", "A definir"];
+// Lista padrão (reserva). DESTINOS é VIVA: lib/destinos.js a atualiza no lugar com o cadastro do banco.
+export const DESTINOS_PADRAO = ["Belém", "SP storage", "Venda local SP", "A definir"];
+export const DESTINOS = [...DESTINOS_PADRAO];
 
 // Condição da EMBALAGEM (eixo independente do Estado do produto). Pares [código, label]:
 // itens.cond_embalagem guarda o CÓDIGO (a view casa pricing_factor_embalagem.codigo).

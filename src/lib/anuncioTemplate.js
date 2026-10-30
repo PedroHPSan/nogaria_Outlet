@@ -2,6 +2,7 @@
 // PURO (sem rede): recebe as fotos já como dataURI e o QR já como dataURL — testável
 // em Node. Reaproveita helpers de escape/preço/formatos e os selos de condição.
 import { escapeHtml } from "./html.js";
+import { tamanhoExibicao } from "./tamanhos.js";
 import { precoVenda } from "./export.js";
 import { fmtBRL, fmtKg, embalagemLabel } from "./model.js";
 import { CATALOGO_ESTADO_BADGE } from "./catalogoCore.js";
@@ -29,7 +30,7 @@ function specRows(it) {
     ["Marca", it.marca],
     ["Modelo", it.modelo],
     ["Cor", it.cor],
-    ["Tamanho", it.tamanho],
+    ["Tamanho", tamanhoExibicao(it) || null],
     ["Voltagem", it.voltagem && it.voltagem !== "N/A" ? it.voltagem : null],
     ["Peso", peso != null && peso !== "" ? fmtKg(peso) : null],
     ["Dimensões", dims],
