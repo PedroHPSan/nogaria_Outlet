@@ -36,8 +36,9 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
     const blob = await gerarImagemPreview(lista, mostrarPreco);
     const path = `${slug}.jpg`;
     const { error } = await supabase.storage.from("og-previews").upload(path, blob, { contentType: "image/jpeg", upsert: false });
-    if (!error) imagem = supabase.storage.from("og-previews").getPublicUrl(path).data.publicUrl;
-  } catch { /* sem preview: o link ainda funciona */ }
+    if (error) console.error("upload do preview falhou", error);
+    else imagem =supabase.storage.from("og-previews").getPublicUrl(path).data.publicUrl;
+  } catch (e) { console.error("preview da oferta falhou", e); /* sem preview: o link ainda funciona */ }
 
   const fotos = await fotosAssinadas(lista.map((i) => ({ rep: i })));
   const payload = montarPayloadOferta(lista, { titulo, contato, mostrarPreco, fotos, og: { imagem } });

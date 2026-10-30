@@ -118,6 +118,17 @@ export function cardOgProduto(it, ctx = {}) {
     ops.push({ k: "rect", x: 30, y: 30, w: badge.txt.length * 15 + 40, h: 44, fill: bg, r: 22 });
     ops.push({ k: "text", x: 50, y: 61, s: badge.txt.toUpperCase(), size: 22, bold: true, color: fg });
   }
+  if (it.sku) {
+    const w = it.sku.length * 17 + 40;
+    ops.push({ k: "rect", x: OG_LADO - 30 - w, y: 30, w, h: 44, fill: "#0b162d", r: 22 });
+    ops.push({ k: "text", x: OG_LADO - 30 - w + 20, y: 61, s: it.sku, size: 26, bold: true, color: "#52ff7f" });
+  }
+  if (it.tamanho) {
+    const s = `TAM ${it.tamanho}`;
+    const w = s.length * 22 + 44;
+    ops.push({ k: "rect", x: OG_LADO - 30 - w, y: 86, w, h: 60, fill: "#52ff7f", r: 30 });
+    ops.push({ k: "text", x: OG_LADO - 30 - w + 22, y: 130, s, size: 36, bold: true, color: "#0b162d" });
+  }
   faixaPreco(ops, ctx.mostrarPreco === false ? 0 : precoVenda(it));
   return { formato: "og", w: OG_LADO, h: OG_LADO, ops };
 }
@@ -135,6 +146,15 @@ export function cardOgOferta(itens, ctx = {}) {
     ops.push({ k: "rect", x, y, w: cel, h: altura, fill: "#ffffff", r: 16 });
     const foto = ctx.fotos?.[it.sku];
     if (foto) ops.push({ k: "img", x: x + 8, y: y + 8, w: cel - 16, h: altura - 16, src: foto, fit: "contain" });
+    if (it.sku) {
+      ops.push({ k: "rect", x: x + 10, y: y + 10, w: it.sku.length * 12 + 24, h: 34, fill: "#0b162d", r: 17 });
+      ops.push({ k: "text", x: x + 22, y: y + 34, s: it.sku, size: 20, bold: true, color: "#52ff7f" });
+    }
+    if (it.tamanho) {
+      const s = `TAM ${it.tamanho}`;
+      ops.push({ k: "rect", x: x + 10, y: y + 52, w: s.length * 15 + 28, h: 38, fill: "#52ff7f", r: 19 });
+      ops.push({ k: "text", x: x + 24, y: y + 79, s, size: 24, bold: true, color: "#0b162d" });
+    }
     const p = ctx.mostrarPreco === false ? null : precoVenda(it);
     if (p > 0) {
       ops.push({ k: "rect", x: x + 10, y: y + altura - 62, w: Math.min(cel - 20, brl(p).length * 24 + 30), h: 50, fill: "#0b162d", r: 25 });
