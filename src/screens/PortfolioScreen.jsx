@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } fr
 import { Loader2, Search, Filter, Boxes, BookOpen, MessageCircle } from "lucide-react";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import { listarItensCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
-import { ordenarTamanhos, tamanhoLabel } from "../lib/portfolio";
+import { ordenarTamanhos, tamanhoLabel, tamanhoEU } from "../lib/portfolio";
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
 import { listarCaixas } from "../lib/caixas";
@@ -52,7 +52,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
     try {
       const r = await gerarLinkGrupo(it);
       if (!r.copiado) window.prompt("Copie o link:", r.texto);
-      setWpp({ sku: it.sku, estado: "ok", msg: r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio)." : "Link copiado — cole no grupo do WhatsApp." });
+      setWpp({ sku: it.sku, estado: "ok", msg: r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio)." : r.semCotacao ? "Link copiado só em reais (cotação do euro indisponível)." : "Link copiado — cole no grupo do WhatsApp." });
     } catch (e) {
       console.error(e);
       setWpp({ sku: it.sku, estado: "erro", msg: "Não consegui gerar o link. Tente de novo." });
@@ -98,7 +98,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
   const grupos = useMemo(() => {
     const lista = itens || [];
     const chaveDe = (it) =>
-      agrupar === "tamanho" ? tamanhoLabel(it.tamanho)
+      agrupar === "tamanho" ? tamanhoLabel(tamanhoEU(it.tamanho) || it.tamanho)
       : agrupar === "lote" ? (it.lote != null ? String(it.lote) : "Sem lote")
       : agrupar === "marca" ? ((it.marca || "").trim() || "Sem marca")
       : ((it.grupo || "").trim() || "Sem categoria");

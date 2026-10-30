@@ -2,7 +2,7 @@
 // status excluídos. Separado de catalogo.js (que faz a query no supabase) para ser
 // importável em testes Node sem puxar a cadeia do cliente. catalogo.js reexporta.
 import { precoVenda } from "./export.js";
-import { ordenarTamanhos, tamanhoLabel } from "./tamanhos.js";
+import { ordenarTamanhos, tamanhoLabel, tamanhoExibicao } from "./tamanhos.js";
 import { STATUS_FORA_ESTOQUE, embalagemLabel } from "./model.js";
 import { waLink } from "./empresa.js";
 
@@ -91,7 +91,7 @@ const precoCard = (c) => precoRep(c) * c.qtd;
 // dimensao: "categoria" | "tamanho" | "lote" | "marca".
 export function agruparCatalogo(cards, dimensao = "categoria") {
   const chaveDe = (c) => {
-    if (dimensao === "tamanho") return tamanhoLabel(c.rep.tamanho);
+    if (dimensao === "tamanho") return tamanhoLabel(tamanhoExibicao(c.rep));
     if (dimensao === "lote") return c.rep.lote != null ? String(c.rep.lote) : "Sem lote";
     if (dimensao === "marca") return (c.rep.marca || "").trim() || "Sem marca";
     return (c.rep.grupo || "").trim() || "Sem categoria";

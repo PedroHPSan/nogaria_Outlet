@@ -10,7 +10,6 @@ import { dedupCatalogo, agruparCatalogo, linkInteresseItem } from "../lib/catalo
 import { publicarCatalogo } from "../lib/catalogoPublico";
 import { publicarOferta } from "../lib/ofertaPublica";
 import { textoGrupoEuro } from "../lib/precoEuro";
-import { cotacaoEuro } from "../lib/cotacao";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, csvCatalogo } from "../lib/divulgacao";
 import { FORMATOS } from "../lib/cardCore";
@@ -30,7 +29,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   const [titulo, setTitulo] = useState(tituloInicial);
   const [comFoto, setComFoto] = useState(true);
   const [mostrarPreco, setMostrarPreco] = useState(true);
-  const [precoEuro, setPrecoEuro] = useState(false); // links de oferta com R$ +20% e € ao vivo
+  const [precoEuro, setPrecoEuro] = useState(true); // links de oferta com R$ +20% e € ao vivo
   const [comQr, setComQr] = useState(true);
   const [modelo, setModelo] = useState("catalogo");
   const [tema, setTema] = useState("noite");
@@ -144,15 +143,15 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   // Links com preview no WhatsApp (/p/<slug>): lote em 1 link ou 1 link por produto.
   const dadosOferta = () => { const c = contato(); return { contato: { nome: c.nome, whatsapp: c.whatsapp, label: c.whatsappLabel }, mostrarPreco, euro: precoEuro }; };
-  const textoOferta = async (payload, url) => (payload.euro ? textoGrupoEuro(payload, url, await cotacaoEuro()) : textoGrupo(payload, url));
+  const textoOferta = (r) => (r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao) : textoGrupo(r.payload, r.url));
   const copiar = async (t) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
 
   const ofertaLote = () => executar(async () => {
     const r = await publicarOferta(itens.slice(0, MAX_ITENS_OFERTA), { titulo, ...dadosOferta() });
-    const texto = await textoOferta(r.payload, r.url);
+    const texto = textoOferta(r);
     setOfertas([{ sku: "lote", titulo: r.payload.titulo, url: r.url, texto }]); registrar("link");
     await copiar(texto);
-    setAviso(`${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
+    setAviso(`${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}${r.semCotacao ? "Cotação do euro indisponível: link só em reais. " : ""}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
   });
 
   const ofertasPorProduto = () => executar(async () => {
@@ -161,7 +160,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     for (let i = 0; i < lista.length; i++) {
       setProgresso({ feitas: i, total: lista.length });
       const r = await publicarOferta([lista[i]], dadosOferta());
-      saida.push({ sku: lista[i].sku, titulo: r.payload.titulo, url: r.url, texto: await textoOferta(r.payload, r.url) });
+      saida.push({ sku: lista[i].sku, titulo: r.payload.titulo, url: r.url, texto: textoOferta(r) });
     }
     setOfertas(saida); registrar("link");
     setAviso(`${saida.length} links gerados — copie e cole um por mensagem no grupo (cada link mostra o seu produto).`);
@@ -235,7 +234,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
             <div className="space-y-1.5">
               <Opcao valor={comFoto} onChange={setComFoto}>Incluir fotos</Opcao>
               <Opcao valor={mostrarPreco} onChange={setMostrarPreco}>Mostrar preço</Opcao>
-              {mostrarPreco && <Opcao valor={precoEuro} onChange={setPrecoEuro}>Links com preço em euros (+20%, cotação ao vivo)</Opcao>}
+              {mostrarPreco && <Opcao valor={precoEuro} onChange={setPrecoEuro}>Links com € e R$ (um link para BR e Europa)</Opcao>}
               <Opcao valor={comQr} onChange={setComQr}>QR de WhatsApp em cada item</Opcao>
             </div>
 

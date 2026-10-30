@@ -75,15 +75,63 @@ eq(precoMisto(1000, null), { brl: 1200, eur: null }, "sem cotação → só reai
 eq(precoMisto(0, 6), null, "sem preço → null");
 const pe = montarPayloadOferta([it(1)], { euro: { taxa: 6, em: Date.UTC(2026, 9, 30, 17, 5) }, og: { imagem: "x" } });
 ok(pe.euro === true && pe.itens[0].preco === 1299, "payload euro guarda o R$ base");
-eq(pe.og.titulo, "Produto 1 — € 259,80 · R$ 1.558,80", "título do preview com € e R$ (sem mencionar +20%)");
+eq(pe.og.titulo, "Produto 1 — 259,80 € · R$ 1.299,00", "título do preview: € (com acréscimo) e R$ base, sem mencionar +20%");
 ok(pe.og.descricao.includes("Price updates on click") && pe.og.descricao.length <= 160, "descrição do preview avisa em 3 idiomas");
 const imgE = JSON.stringify(cardOgProduto(it(1), { euro: { taxa: 6, em: 0 } }));
-ok(imgE.includes("€ 259,80") && imgE.includes("R$ 1.558,80"), "imagem do preview com os dois valores");
+ok(imgE.includes("259,80 €") && imgE.includes("R$ 1.299") && !imgE.includes("1.558"), "imagem do preview com os dois valores");
 eq(montarPayloadOferta([it(1)], { euro: { taxa: 6, em: 0 }, mostrarPreco: false }).euro, false, "sem preço → sem euro");
 const cot = { taxa: 6, em: Date.UTC(2026, 9, 30, 17, 5) };
-eq(textoCotacao(cot), "Cotação: 1 € = R$ 6,00 (30/10/2026 14:05)", "cotação com data no fuso de Brasília");
+eq(textoCotacao(cot), "Cotação: 1 € = R$ 6,00 (30/10/2026 17:05 UTC)", "cotação com data e fuso explícito (UTC)");
 const tg = textoGrupoEuro(pe, "https://app/p/abc", cot);
-ok(tg.includes("€ 259,80* · R$ 1.558,80") && !tg.includes("20%") && tg.includes("🇬🇧") && tg.includes("🇪🇸") && tg.includes("🇧🇷") && tg.includes(fmtEUR(259.8)) && tg.includes("é atualizado com a cotação do momento"), "mensagem do grupo com R$, €, cotação e aviso");
+ok(tg.includes("259,80 €* · R$ 1.299,00") && !tg.includes("20%") && tg.includes("🇬🇧") && tg.includes("🇪🇸") && tg.includes("🇧🇷") && tg.includes(fmtEUR(259.8)) && tg.includes("Valor em € atualizado ao abrir o link") && tg.includes("Precio en € actualizado") && tg.length < 330, "mensagem do grupo com R$, €, cotação e aviso");
 const { mensagemInteresseEuro, idiomaDoNavegador } = await import("../src/lib/precoEuro.js");
-ok(mensagemInteresseEuro(pe.itens[0], cot, "u", "es").startsWith("¡Hola! Me interesa") && mensagemInteresseEuro(pe.itens[0], cot, "u", "en").includes("€ 259,80 · R$ 1.558,80"), "mensagem do pedido recalculada, em es/en");
-eq([idiomaDoNavegador("es-AR"), idiomaDoNavegador("en-GB"), idiomaDoNavegador("de-DE")], ["es", "en", "pt"], "idioma pelo navegador (padrão pt)");
+ok(mensagemInteresseEuro(pe.itens[0], cot, "u", "es").startsWith("¡Hola! Me interesa") && mensagemInteresseEuro(pe.itens[0], cot, "u", "en").includes("€259.80") && !mensagemInteresseEuro(pe.itens[0], cot, "u", "en").includes("R$ 1"), "mensagem do pedido recalculada, em es/en");
+eq([idiomaDoNavegador("es-AR"), idiomaDoNavegador("pt-PT"), idiomaDoNavegador("de-DE")], ["es", "pt", "en"], "idioma pelo navegador (padrão en)");
+
+console.log("numeração de calçados → EU");
+const { tamanhoEU, tamanhoExibicao } = await import("../src/lib/tamanhos.js");
+eq(["38", "38 BR", "39Br", "36br"].map(tamanhoEU), ["EU 40", "EU 40", "EU 41", "EU 38"], "BR (com ou sem sufixo, qualquer caixa) → EU = BR + 2");
+eq([tamanhoEU("36/37"), tamanhoEU("40-42"), tamanhoEU("38,5")], ["EU 38/39", "EU 42-44", "EU 40,5"], "faixas e meios números");
+eq([tamanhoEU("US 9"), tamanhoEU("UK 8"), tamanhoEU("US 8 W"), tamanhoEU("EU 41")], ["EU 42", "EU 42", "EU 39", "EU 41"], "US/UK/EU");
+eq([tamanhoEU("M"), tamanhoEU(""), tamanhoEU("17/8"), tamanhoEU(null)], [null, null, null, null], "não convertível → null");
+eq([tamanhoExibicao({ grupo: "Calçados", tamanho: "38 BR" }), tamanhoExibicao({ grupo: "Roupas", tamanho: "42" }), tamanhoExibicao({ grupo: "Calçados", tamanho: "M" })], ["EU 40", "42", "M"], "só calçado é convertido; resto fica como está");
+ok(JSON.stringify(cardOgProduto(it(1, { grupo: "Calçados", tamanho: "38 BR" }))).includes("TAM EU 40"), "imagem do WhatsApp com EU");
+eq(montarPayloadOferta([it(1, { grupo: "Calçados", tamanho: "39 BR" })]).itens[0].tamanho, "39 BR", "payload guarda a numeração crua (a página converte)");
+const { tamanhoEtiqueta } = await import("../src/lib/tamanhos.js");
+eq([tamanhoEtiqueta({ grupo: "Calçados", tamanho: "38 BR" }), tamanhoEtiqueta({ grupo: "Calçados", tamanho: "US 9" })], ["EU 40 · BR 38", "EU 42"], "etiqueta: EU + BR original para conferência");
+const { publicoPadrao } = await import("../src/lib/precoEuro.js");
+eq(["pt-BR", "pt", "pt-PT", "es-ES", "en-GB"].map(publicoPadrao), ["br", "br", "eu", "eu", "eu"], "público padrão: pt-BR → reais; resto → euros");
+const { traduzirBadge, traduzirCondicao, fmtDataCotacao } = await import("../src/lib/precoEuro.js");
+eq([fmtEUR(259.8), fmtEUR(259.8, "es"), fmtEUR(1234.5, "en")], ["259,80 €", "259,80 €", "€1,234.50"], "€ com símbolo depois (pt/es) e antes (en)");
+eq(fmtDataCotacao(Date.UTC(2026, 9, 30, 17, 5), { tz: "America/Sao_Paulo" }), "30/10/2026 14:05 (Brasília)", "data para a equipe em Brasília");
+eq([traduzirBadge({ txt: "Seminovo", cls: "semi" }, "es"), traduzirCondicao("Produto novo · caixa amassada", "en"), traduzirCondicao("Usado, em funcionamento", "pt")], ["Seminuevo", "Brand new · caixa amassada", "Usado, em funcionamento"], "selo e condição traduzidos");
+eq(montarPayloadOferta([it(1)], { euro: cot }).itens[0].calcado, false, "item sem grupo Calçados não é marcado como calçado");
+
+console.log("cotação (fetch simulado)");
+const { cotacaoEuro } = await import("../src/lib/cotacao.js");
+const realFetch = globalThis.fetch;
+const resp = (ok, body, status = 200) => ({ ok, status, json: async () => body });
+globalThis.fetch = async (u) => {
+  if (String(u).includes("/api/cotacao")) return resp(true, { taxa: 6.1, em: 1000 });
+  throw new Error("rede");
+};
+eq((await cotacaoEuro({ forcar: true })).taxa, 6.1, "usa o endpoint próprio");
+globalThis.fetch = async (u) => {
+  if (String(u).includes("/api/cotacao")) return resp(false, {}, 502);
+  if (String(u).includes("awesomeapi")) return resp(true, { EURBRL: { bid: "6.2", timestamp: "2000" } });
+  throw new Error("rede");
+};
+eq((await cotacaoEuro({ forcar: true })).taxa, 6.2, "endpoint cai → AwesomeAPI");
+let falhou = false;
+try { await cotacaoEuro({ forcar: true, soProprio: true }); } catch { falhou = true; }
+ok(falhou, "soProprio não consulta terceiros (página pública)");
+globalThis.fetch = async (u) => {
+  if (String(u).includes("frankfurter")) return resp(true, { date: "2026-10-30", rates: { BRL: 6.3 } });
+  return resp(false, {}, 500);
+};
+eq((await cotacaoEuro({ forcar: true })).taxa, 6.3, "tudo cai → Frankfurter");
+globalThis.fetch = async () => { throw new Error("sem rede"); };
+let todas = false;
+try { await cotacaoEuro({ forcar: true }); } catch { todas = true; }
+ok(todas, "nenhuma fonte → erro (a tela trata)");
+globalThis.fetch = realFetch;

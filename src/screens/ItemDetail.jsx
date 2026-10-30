@@ -15,6 +15,8 @@ import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
+import { tamanhoEU } from "../lib/tamanhos";
+import { cotacaoEuro } from "../lib/cotacao";
 import SepararModal from "../components/SepararModal";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
@@ -358,13 +360,25 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const itensAnuncio = useMemo(() => [it], [it]);
 
   const [separando, setSeparando] = useState(false);
+  // Venda em euros: R$ = € × cotação (arredondado a centavos), para o lucro e os relatórios seguirem em reais.
+  const recalcularVendaEuro = (d) => {
+    const eur = Number(d.valor_vendido_eur), taxa = Number(d.cotacao_eur_brl);
+    return { valor_vendido_eur: d.valor_vendido_eur, cotacao_eur_brl: d.cotacao_eur_brl, cotacao_eur_em: d.cotacao_eur_em,
+      ...(eur > 0 && taxa > 0 ? { valor_vendido: Math.round(eur * taxa * 100) / 100 } : {}) };
+  };
+  const usarCotacaoAgora = async () => {
+    try {
+      const c = await cotacaoEuro({ forcar: true });
+      set(recalcularVendaEuro({ ...it, cotacao_eur_brl: String(c.taxa), cotacao_eur_em: new Date(c.em).toISOString() }));
+    } catch { alert("Não consegui obter a cotação agora. Digite o valor manualmente."); }
+  };
   // Publica /p/<slug> (preview com foto e preço no WhatsApp) e copia a mensagem pronta.
   const gerarLinkWpp = async () => {
     setLinkWpp("gerando");
     try {
       const r = await gerarLinkGrupo(it);
       if (!r.copiado) window.prompt("Copie o link:", r.texto);
-      setLinkWpp({ texto: r.texto, semImagem: r.semImagem });
+      setLinkWpp({ texto: r.texto, semImagem: r.semImagem, semCotacao: r.semCotacao });
     } catch (e) { console.error(e); setLinkWpp("erro"); }
     setTimeout(() => setLinkWpp(null), 4000);
   };
@@ -466,6 +480,10 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       canal_venda: it.canal_venda || null, taxa_venda: it.taxa_venda || null,
       frete_pago: it.frete_pago || null, comprador: it.comprador?.trim() || null,
       pedido_ref: it.pedido_ref?.trim() || null,
+      // Venda em euros (transferência na Espanha): valor recebido, cotação usada e quando.
+      valor_vendido_eur: it.valor_vendido_eur || null,
+      cotacao_eur_brl: it.valor_vendido_eur ? it.cotacao_eur_brl || null : null,
+      cotacao_eur_em: it.valor_vendido_eur ? it.cotacao_eur_em || null : null,
       obs: it.obs,
       // Categoria (casa com pricing_grupo p/ a âncora de preço)
       grupo: (it.grupo || "").trim() || null,
@@ -594,7 +612,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               className="flex items-center gap-1 bg-emerald-700 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
               title="Link com foto e preço para colar no grupo de WhatsApp">
               {linkWpp === "gerando" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-              {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem preview)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
+              {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem preview)" : linkWpp.semCotacao ? "Copiado (sem €)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
             </button>
             <button onClick={() => setSeparando(true)}
               className="flex items-center gap-1 bg-orange-600 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white"
@@ -1022,6 +1040,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           {/cal[çc]ado/i.test(it.grupo || "") && (
             <Field label="Tamanho / numeração (opcional)">
               <input className={inputCls} value={it.tamanho ?? ""} onChange={(e) => set({ tamanho: e.target.value })} placeholder="ex.: 42, 38 BR, M" />
+              {tamanhoEU(it.tamanho) && /cal[çc]ado/i.test(it.grupo || "") && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoEU(it.tamanho)}</b> nas telas, etiquetas e imagens.</p>}
             </Field>
           )}
         </div>
@@ -1094,7 +1113,21 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
                 <input className={inputCls} value={it.pedido_ref ?? ""}
                   onChange={(e) => set({ pedido_ref: e.target.value })} placeholder="ref. no canal" />
               </Field>
+              <Field label="Recebido em euros (€) — opcional">
+                <input type="number" inputMode="decimal" className={inputCls} value={it.valor_vendido_eur ?? ""}
+                  onChange={(e) => set(recalcularVendaEuro({ ...it, valor_vendido_eur: e.target.value }))} placeholder="transferência na Espanha" />
+              </Field>
+              <Field label="Cotação usada (R$ por 1 €)">
+                <div className="flex gap-2">
+                  <input type="number" inputMode="decimal" className={inputCls} value={it.cotacao_eur_brl ?? ""}
+                    onChange={(e) => set(recalcularVendaEuro({ ...it, cotacao_eur_brl: e.target.value, cotacao_eur_em: it.cotacao_eur_em || new Date().toISOString() }))} placeholder="ex.: 6,06" />
+                  <button type="button" onClick={usarCotacaoAgora} className="shrink-0 rounded-lg border border-gray-300 px-2 text-xs font-bold text-gray-700">Agora</button>
+                </div>
+              </Field>
             </div>
+            {it.valor_vendido_eur && it.cotacao_eur_brl && (
+              <p className="text-xs text-gray-500 mb-2">€ {Number(it.valor_vendido_eur).toFixed(2)} × {Number(it.cotacao_eur_brl)} = R$ {Number(it.valor_vendido || 0).toFixed(2)} (valor vendido preenchido automaticamente)</p>
+            )}
             <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 mt-1 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Lucro líquido da venda</span>
               <span className={`text-base font-bold ${lucroVenda != null && lucroVenda < 0 ? "text-red-600" : "text-emerald-600"}`}>

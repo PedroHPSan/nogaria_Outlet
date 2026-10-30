@@ -6,11 +6,11 @@
 import { supabase } from "./supabase.js";
 import { precoVenda } from "./export.js";
 import { fmtBRL, STATUS_FORA_ESTOQUE } from "./model.js";
-import { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
+import { tamanhoLabel, ordenarTamanhos, tamanhoEU } from "./tamanhos.js";
 import { escapeHtml } from "./html.js";
 
 // Reexporta os helpers de tamanho (agora em tamanhos.js) para manter a API antiga.
-export { tamanhoLabel, ordenarTamanhos } from "./tamanhos.js";
+export { tamanhoLabel, ordenarTamanhos, tamanhoEU } from "./tamanhos.js";
 
 // Categoria canônica de calçados (definida no motor de precificação / categorizar).
 export const GRUPO_CALCADOS = "Calçados";
@@ -35,7 +35,7 @@ export async function listarCalcados({ incluirIndisponiveis = false } = {}) {
 
 // Lista ordenada de tamanhos distintos presentes nos itens.
 export function tamanhosDisponiveis(itens) {
-  return ordenarTamanhos([...new Set((itens || []).map((it) => tamanhoLabel(it.tamanho)))]);
+  return ordenarTamanhos([...new Set((itens || []).map((it) => tamanhoLabel(tamanhoEU(it.tamanho) || it.tamanho)))]);
 }
 
 // Lista ordenada de marcas distintas (ignora vazias).
@@ -48,7 +48,7 @@ export function marcasDisponiveis(itens) {
 export function agruparPorTamanho(itens) {
   const mapa = new Map();
   for (const it of itens || []) {
-    const t = tamanhoLabel(it.tamanho);
+    const t = tamanhoLabel(tamanhoEU(it.tamanho) || it.tamanho);
     if (!mapa.has(t)) mapa.set(t, []);
     mapa.get(t).push(it);
   }
