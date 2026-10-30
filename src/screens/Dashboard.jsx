@@ -28,7 +28,7 @@ function QueueRow({ icon: Icon, color, label, hint, n, onClick }) {
   );
 }
 
-export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas }) {
+export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas, onOpenDestinos }) {
   const [stats, setStats] = useState(null);
   const [resultado, setResultado] = useState(null); // vw_lote_resultado (lucro realizado por lote)
   const [throughput, setThroughput] = useState(null); // vw_throughput_dia (ritmo)
@@ -243,6 +243,11 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
           </div>
         </div>
       )}
+
+      <button onClick={() => onOpenDestinos?.()}
+        className="w-full rounded-xl py-2.5 text-sm font-bold bg-white border border-gray-200 text-gray-700 shadow-sm">
+        Destinos e locais de storage
+      </button>
 
       {resultado && resultado.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4">

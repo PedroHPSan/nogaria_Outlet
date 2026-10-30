@@ -174,3 +174,14 @@ Decisões do dono que mudaram o plano: conversão **EU = BR + 2** (tabela de mer
 Cotação do pedido: vem da tabela `cotacoes`, gravada só pela Edge Function `cotacao` (service role); a RPC `registrar_interesse` não aceita taxa do cliente (revisão de segurança de 31/10). Exige cotação de até 15 min; sem ela o pedido segue sem código. Nome do produto e cor continuam em português. `og:locale` segue `pt_BR`.
 
 Deploy: aplicar as duas migrations (aprovação Pedro/Bárbara), publicar a Edge Function (`supabase functions deploy cotacao --no-verify-jwt`) e só então `vercel deploy --prod`.
+
+## 8. Destinos e locais de storage cadastráveis (base internacional)
+
+Antes: `DESTINOS` fixo em `model.js` (Belém, SP storage, Venda local SP, A definir) e "Local físico" em texto livre. Agora:
+
+- **Tabelas** `destinos` (nome, `internacional`, país, ativo, ordem) e `locais_storage` (destino, nome, ativo) — migration `20261031140000_destinos_locais.sql`, semeada com os 4 destinos atuais. `itens.destino` segue texto livre (sem FK): desativar ou criar destino não altera itens existentes.
+- **Lista viva**: `carregarDestinos()` (`src/lib/destinos.js`) atualiza `DESTINOS` no lugar e as opções da planilha; as telas que já importam `DESTINOS` (itens, caixas, conferência, planilha, portfólio, novo item, card de preço) passam a refletir o cadastro. Sem a tabela (migration pendente) ou sem rede, vale a lista padrão — o app não quebra.
+- **Tela** "Destinos e locais de storage" (Painel): criar destino (nome, país, marcar **Internacional**), criar locais por destino, desativar/reativar, e contagem de itens por destino. Destinos internacionais aparecem com o ícone de globo. Sugestões de local no campo "Local físico" do card de preço.
+- **Preço**: o destino é informativo no motor de preço v2 (a margem mínima é única), então destinos novos não alteram o preço.
+- **Limites**: salas físicas continuam no módulo Salas; "internacional" ainda não filtra catálogo/links automaticamente (próximo passo: filtro "só destinos internacionais" no catálogo rápido e no painel).
+- **Deploy**: aplicar a migration antes do deploy; sem ela a tela mostra aviso e as listas ficam no padrão.

@@ -9,6 +9,8 @@ import ExportScreen from "./screens/ExportScreen";
 import PlanilhaScreen from "./screens/PlanilhaScreen";
 import ConferenciaScreen from "./screens/ConferenciaScreen";
 import VendasScreen from "./screens/VendasScreen";
+import DestinosModal from "./components/DestinosModal";
+import { carregarDestinos } from "./lib/destinos";
 import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
@@ -49,6 +51,8 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = carregando
   const [lotes, setLotes] = useState([]);
   const [tab, setTab] = useState("painel");
+  const [destKey, setDestKey] = useState(0); // remonta as telas quando a lista de destinos muda
+  const [showDestinos, setShowDestinos] = useState(false);
   const [openItem, setOpenItem] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [showFotoQr, setShowFotoQr] = useState(false);
@@ -99,6 +103,12 @@ export default function App() {
     })();
   }, [session]);
 
+  // destinos cadastráveis (lista viva em DESTINOS); sem tabela/rede, fica a lista padrão
+  useEffect(() => {
+    if (!session) return;
+    carregarDestinos().then((ok) => ok && setDestKey((k) => k + 1));
+  }, [session]);
+
   // dados base + realtime
   useEffect(() => {
     if (!session) return;
@@ -127,7 +137,7 @@ export default function App() {
   const user = session.user;
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto relative">
+    <div key={destKey} className="min-h-screen bg-gray-50 max-w-lg mx-auto relative">
       <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center"><Package className="w-4 h-4 text-white" /></div>
@@ -138,7 +148,7 @@ export default function App() {
         </button>
       </div>
 
-      {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} onOpenSalas={() => setShowSalas(true)} />}
+      {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} onOpenSalas={() => setShowSalas(true)} onOpenDestinos={() => setShowDestinos(true)} />}
       {tab === "itens" && (
         <ItemsScreen
           key={preFilter ? JSON.stringify(preFilter) : "all"}
@@ -252,6 +262,7 @@ export default function App() {
           onOpenItem={(it) => { setShowOndeEsta(false); setOpenItem(it); }}
         />
       )}
+      {showDestinos && <DestinosModal onClose={() => { setShowDestinos(false); setDestKey((k) => k + 1); }} />}
       {showSalas && (
         <SalasScreen
           user={user}

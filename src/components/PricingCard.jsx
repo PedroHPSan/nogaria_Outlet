@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Tag, TrendingUp, AlertTriangle, Check, Copy, Wand2, ChevronDown, Sparkles, Loader2 } from "lucide-react";
+import { locaisDoDestino } from "../lib/destinos";
 import { fmtBRL, DESTINOS, CONDICOES_ANUNCIO, ESTADOS, EMBALAGENS } from "../lib/model";
 import { gerarTitulo, normalizarCanal, DEFAULT_PARAMS } from "../lib/pricing";
 import { analisarItens, validarPreco } from "../lib/motorPrecoDb";
@@ -315,8 +316,11 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onCha
 
         <div className="grid grid-cols-2 gap-2">
           <Campo label="Local físico">
-            <input className={inputCls} value={item.local_fisico ?? ""}
+            <input className={inputCls} value={item.local_fisico ?? ""} list="locais-storage"
               onChange={(e) => onChange?.({ local_fisico: e.target.value })} placeholder="ex.: estante 2" />
+            <datalist id="locais-storage">
+              {locaisDoDestino(item.destino).map((l) => <option key={l} value={l} />)}
+            </datalist>
           </Campo>
           <Campo label="Caixa">
             <div className={`${inputCls} bg-gray-50 flex items-center min-h-[44px]`}>
