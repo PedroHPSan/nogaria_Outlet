@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import {
   listarCaixas, buscarCaixa, itensDaCaixa, itensFaltandoDaCaixa, adicionarItemCaixa,
   registrarChegada, definirApelidoCaixa, localizarItem, reabrirCaixa, fecharCaixa,
-  conferenciaAtual, iniciarConferencia, registrarResultadoItem, limparResultadoItem,
+  conferenciaAtual, contarFaltandoPorCaixa, iniciarConferencia, registrarResultadoItem, limparResultadoItem,
   resumirRodada, concluirConferencia, registrarSobrando, RESULTADO,
   marcarItemAvariado, marcarItemFaltando, historicoCaixa,
 } from "../lib/caixas";
@@ -41,10 +41,11 @@ const eventoCaixaLabel = (a) => ({
 }[a] || a);
 
 // Tela de caixas: lista (com filtro), scan por QR e detalhe/conferência.
-export default function CaixasScreen({ params, user, onClose, onOpenItem, refreshKey }) {
+export default function CaixasScreen({ params, user, onClose, onOpenItem, refreshKey, initialCodigo }) {
   const [fase, setFase] = useState("lista"); // "lista" | "scan" | "buscando" | "detalhe"
-  const [filtro, setFiltro] = useState("pendentes"); // "pendentes" | "conferidas" | "todas"
+  const [filtro, setFiltro] = useState("pendentes"); // "pendentes" | "conferidas" | "faltando" | "todas"
   const [caixas, setCaixas] = useState([]);
+  const [faltandoMap, setFaltandoMap] = useState({});
   const [caixa, setCaixa] = useState(null);
   const [itens, setItens] = useState([]);
   const [hist, setHist] = useState([]);
@@ -55,6 +56,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem, refres
 
   const carregarLista = useCallback(async () => {
     setCaixas(await listarCaixas());
+    setFaltandoMap(await contarFaltandoPorCaixa().catch(() => ({})));
   }, []);
   useEffect(() => { carregarLista(); }, [carregarLista]);
 
@@ -75,6 +77,12 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem, refres
       setErro("Falha ao buscar: " + (e.message || String(e))); setFase("lista");
     }
   };
+
+  // Aberta a partir do menu Conferir: já entra na caixa pedida.
+  useEffect(() => {
+    if (initialCodigo) abrir(initialCodigo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const recarregarDetalhe = async () => {
     if (!caixa) return;
@@ -141,7 +149,10 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem, refres
 
   // ---- Fase: lista ----
   const filtradas = caixas.filter((c) =>
-    filtro === "todas" ? true : filtro === "conferidas" ? !!c.conferida_em : !c.conferida_em
+    filtro === "todas" ? true
+      : filtro === "conferidas" ? !!c.conferida_em
+      : filtro === "faltando" ? !!faltandoMap[c.codigo]
+      : !c.conferida_em
   );
 
   return (
@@ -152,7 +163,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem, refres
           <button onClick={onClose} aria-label="Fechar"><X className="w-6 h-6 text-gray-300" /></button>
         </div>
         <div className="mt-3 flex gap-2">
-          {[["pendentes", "A conferir"], ["conferidas", "Conferidas"], ["todas", "Todas"]].map(([id, label]) => (
+          {[["pendentes", "A conferir"], ["faltando", `Com faltando (${Object.keys(faltandoMap).length})`], ["conferidas", "Conferidas"], ["todas", "Todas"]].map(([id, label]) => (
             <button key={id} onClick={() => setFiltro(id)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold ${filtro === id ? "bg-orange-500 text-white" : "bg-gray-800 text-gray-300"}`}>
               {label}
@@ -177,7 +188,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem, refres
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {erro && <p className="text-sm text-red-600 mb-3 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {erro}</p>}
         {!filtradas.length ? (
-          <p className="text-sm text-gray-400 text-center py-10">Nenhuma caixa {filtro === "conferidas" ? "conferida" : filtro === "pendentes" ? "pendente" : ""}.</p>
+          <p className="text-sm text-gray-400 text-center py-10">Nenhuma caixa {filtro === "conferidas" ? "conferida" : filtro === "pendentes" ? "pendente" : filtro === "faltando" ? "com itens faltando" : ""}.</p>
         ) : (
           <div className="space-y-1.5">
             {filtradas.map((c) => (
@@ -188,6 +199,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem, refres
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
                     {c.status !== "FECHADA" && <span className="text-[10px] font-bold uppercase bg-emerald-600 text-white rounded px-1.5 py-0.5">aberta</span>}
+                    {faltandoMap[c.codigo] > 0 && <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">{faltandoMap[c.codigo]} faltando</span>}
                     {c.conferida_em
                       ? <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">conferida</span>
                       : <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">a conferir</span>}
@@ -444,6 +456,40 @@ function CaixaDetalhe({ caixa, itens, faltando, conf, hist, params, user, onBack
           </div>
         </div>
 
+        {/* Faltando: estavam na caixa e saíram na conferência */}
+        {faltando.length > 0 && (
+          <div>
+            <div className="rounded-xl bg-red-600 text-white px-3 py-2.5 mb-2">
+              <p className="text-sm font-bold flex items-center gap-1.5"><PackageX className="w-4 h-4" /> {faltando.length} item(ns) saíram desta caixa e não voltaram</p>
+              <p className="text-xs text-red-100 mt-0.5">Toque no item para ver o cadastro e onde ele está agora; se encontrar, devolva à caixa.</p>
+            </div>
+            <div className="space-y-1.5">
+              {faltando.map(({ item: it, quando, por }) => {
+                const onde = it.caixa_id ? `agora em ${it.caixa_id}` : it.sala_id ? `solto · ${it.sala_id}` : "solto · localização desconhecida";
+                return (
+                  <div key={it.sku} className="rounded-xl border border-red-200 bg-red-50/50 px-3 py-2.5">
+                    <button onClick={() => onOpenItem?.(it)} className="w-full text-left flex items-center gap-3 active:opacity-70">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                          <span className="text-[10px] font-bold uppercase bg-white border border-red-200 text-red-700 rounded px-1.5 py-0.5">{onde}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                        <p className="text-[11px] text-gray-400">{it.status} · marcado por {por} em {new Date(quando).toLocaleString("pt-BR")}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    </button>
+                    <button onClick={() => doDevolver(it.sku)} disabled={!!busy[it.sku]}
+                      className="mt-2 w-full flex items-center justify-center gap-1 rounded-lg border border-emerald-300 text-emerald-700 py-1.5 text-xs font-semibold active:bg-emerald-50 disabled:opacity-50">
+                      {busy[it.sku] === "devolver" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />} Achei — devolver à caixa
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Itens */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -512,39 +558,6 @@ function CaixaDetalhe({ caixa, itens, faltando, conf, hist, params, user, onBack
             </div>
           )}
         </div>
-
-        {/* Faltando: estavam na caixa e saíram na conferência */}
-        {faltando.length > 0 && (
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-red-600 mb-2 flex items-center gap-1.5">
-              <PackageX className="w-3.5 h-3.5" /> Faltando na caixa · {faltando.length}
-            </p>
-            <div className="space-y-1.5">
-              {faltando.map(({ item: it, quando, por }) => {
-                const onde = it.caixa_id ? `agora em ${it.caixa_id}` : it.sala_id ? `solto · ${it.sala_id}` : "solto · localização desconhecida";
-                return (
-                  <div key={it.sku} className="rounded-xl border border-red-200 bg-red-50/50 px-3 py-2.5">
-                    <button onClick={() => onOpenItem?.(it)} className="w-full text-left flex items-center gap-3 active:opacity-70">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
-                          <span className="text-[10px] font-bold uppercase bg-white border border-red-200 text-red-700 rounded px-1.5 py-0.5">{onde}</span>
-                        </div>
-                        <p className="text-sm text-gray-600 truncate">{it.produto}</p>
-                        <p className="text-[11px] text-gray-400">{it.status} · marcado por {por} em {new Date(quando).toLocaleString("pt-BR")}</p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                    </button>
-                    <button onClick={() => doDevolver(it.sku)} disabled={!!busy[it.sku]}
-                      className="mt-2 w-full flex items-center justify-center gap-1 rounded-lg border border-emerald-300 text-emerald-700 py-1.5 text-xs font-semibold active:bg-emerald-50 disabled:opacity-50">
-                      {busy[it.sku] === "devolver" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />} Achei — devolver à caixa
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Sobrando: lidos na rodada mas que pertencem a outra caixa */}
         {sobrando.length > 0 && (
