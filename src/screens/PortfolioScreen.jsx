@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { Loader2, Search, Filter, Boxes, BookOpen, MessageCircle } from "lucide-react";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
-import { listarItensCatalogo, DESTINO_SEM, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
+import { listarItensCatalogo, DESTINO_SEM, DESTINO_INTL, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
+import { destinosInternacionais } from "../lib/destinos";
 import { ordenarTamanhos, tamanhoLabel, tamanhoEU } from "../lib/portfolio";
 import { precoVenda } from "../lib/export";
 import { primeirasFotos } from "../lib/fotos";
@@ -171,6 +172,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
             <div className="flex gap-2">
               <select value={fDestino} onChange={(e) => setFDestino(e.target.value)} className={inputCls}>
                 <option value="">Todos os destinos</option>
+                {destinosInternacionais().length > 0 && <option value={DESTINO_INTL}>🌍 Somente internacionais</option>}
                 <option value={DESTINO_SEM}>Sem destino</option>
                 {DESTINOS.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>

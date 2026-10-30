@@ -2,9 +2,10 @@
 // identificam o estoque que vai para a base internacional (Europa). Nada é apagado: desativar
 // só tira o destino/local das listas de escolha; itens que já o usam não mudam.
 import React, { useCallback, useEffect, useState } from "react";
-import { X, Loader2, Globe, Plus } from "lucide-react";
+import { X, Loader2, Globe, Plus, Pencil, ChevronUp, ChevronDown } from "lucide-react";
 import {
-  destinosCadastrados, criarDestino, atualizarDestino, criarLocal, atualizarLocal, contarItensPorDestino, carregarDestinos,
+  destinosCadastrados, criarDestino, atualizarDestino, renomearDestino, moverDestino, criarLocal, atualizarLocal,
+  contarItensPorDestino, carregarDestinos,
 } from "../lib/destinos";
 import { supabase } from "../lib/supabase";
 
@@ -17,6 +18,7 @@ export default function DestinosModal({ onClose }) {
   const [erro, setErro] = useState(null);
   const [ocupado, setOcupado] = useState(false);
   const [semTabela, setSemTabela] = useState(false);
+  const [editando, setEditando] = useState(null); // { id, nome } em renomeação
 
   const recarregar = useCallback(async () => {
     const ok = await carregarDestinos();
@@ -36,6 +38,12 @@ export default function DestinosModal({ onClose }) {
   };
 
   const ordenados = [...destinos].sort((a, b) => a.ordem - b.ordem);
+  const nInternacionais = destinos.filter((d) => d.ativo && d.internacional).length;
+  const renomear = () => {
+    const n = contagem[destinos.find((d) => d.id === editando.id)?.nome] ?? 0;
+    if (n > 0 && !window.confirm(`Renomear para "${editando.nome.trim()}"? Os ${n} itens deste destino (e suas caixas) serão atualizados.`)) return;
+    rodar(async () => { await renomearDestino(editando.id, editando.nome); setEditando(null); });
+  };
   return (
     <div className="fixed inset-0 z-[80] bg-black/50 flex items-end sm:items-center justify-center">
       <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto">
@@ -46,16 +54,31 @@ export default function DestinosModal({ onClose }) {
         {semTabela && <p className="text-xs text-amber-800 bg-amber-50 rounded-lg p-2">Cadastro ainda não disponível no banco (migration pendente). Mostrando a lista padrão.</p>}
         {erro && <p className="text-xs text-red-600">{erro}</p>}
 
-        {ordenados.map((d) => {
+        <p className="text-xs text-gray-500">
+          {nInternacionais > 0 ? `${nInternacionais} destino(s) internacional(is): use o filtro "Somente internacionais" em Itens, Catálogo e no catálogo rápido.` : "Marque um destino como Internacional para separar o estoque da base europeia."}
+        </p>
+        {ordenados.map((d, idx) => {
           const meus = locais.filter((l) => l.destino === d.nome);
           return (
             <div key={d.nome} className={`rounded-xl border p-3 space-y-2 ${d.ativo ? "border-gray-200" : "border-gray-100 bg-gray-50 opacity-70"}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-bold text-gray-900 truncate flex items-center gap-1.5">
-                    {d.internacional && <Globe className="w-4 h-4 text-sky-600 shrink-0" />}{d.nome}
-                    {d.pais && <span className="text-xs font-normal text-gray-500">· {d.pais}</span>}
-                  </p>
+                  {editando?.id === d.id ? (
+                    <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); renomear(); }}>
+                      <input autoFocus className="rounded-lg border border-gray-300 px-2 py-1 text-sm w-40" value={editando.nome}
+                        onChange={(e) => setEditando({ id: d.id, nome: e.target.value })} />
+                      <button disabled={ocupado} className="rounded-lg bg-gray-800 text-white text-xs px-2">OK</button>
+                      <button type="button" onClick={() => setEditando(null)} className="text-xs text-gray-500">Cancelar</button>
+                    </form>
+                  ) : (
+                    <p className="font-bold text-gray-900 truncate flex items-center gap-1.5">
+                      {d.internacional && <Globe className="w-4 h-4 text-sky-600 shrink-0" />}{d.nome}
+                      {d.pais && <span className="text-xs font-normal text-gray-500">· {d.pais}</span>}
+                      {d.id && d.nome !== "A definir" && (
+                        <button aria-label="Renomear" disabled={ocupado} onClick={() => setEditando({ id: d.id, nome: d.nome })}><Pencil className="w-3.5 h-3.5 text-gray-400" /></button>
+                      )}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500">{contagem[d.nome] ?? "…"} itens</p>
                 </div>
                 {d.id && (
@@ -64,6 +87,10 @@ export default function DestinosModal({ onClose }) {
                       <input type="checkbox" checked={!!d.internacional} disabled={ocupado}
                         onChange={(e) => rodar(() => atualizarDestino(d.id, { internacional: e.target.checked }))} /> Internacional
                     </label>
+                    <span className="flex items-center">
+                      <button aria-label="Subir" disabled={ocupado || idx === 0} onClick={() => rodar(() => moverDestino(d.id, -1))}><ChevronUp className="w-4 h-4 text-gray-400" /></button>
+                      <button aria-label="Descer" disabled={ocupado || idx === ordenados.length - 1} onClick={() => rodar(() => moverDestino(d.id, 1))}><ChevronDown className="w-4 h-4 text-gray-400" /></button>
+                    </span>
                     {d.nome !== "A definir" && (
                       <button disabled={ocupado} onClick={() => rodar(() => atualizarDestino(d.id, { ativo: !d.ativo }))} className="text-gray-500 underline">
                         {d.ativo ? "Desativar" : "Reativar"}

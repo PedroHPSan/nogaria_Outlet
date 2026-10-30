@@ -7,6 +7,7 @@ import { STATUS_FORA_ESTOQUE, embalagemLabel } from "./model.js";
 import { waLink } from "./empresa.js";
 
 export const DESTINO_SEM = "__sem__"; // espelha o sentinela do ItemsScreen
+export const DESTINO_INTL = "__intl__"; // filtro: todos os destinos marcados como internacionais
 
 // Status que tiram o item do estoque vendável: por padrão o catálogo os exclui
 // (em vez de uma allowlist — os status mudam e o catálogo deve mostrar tudo que

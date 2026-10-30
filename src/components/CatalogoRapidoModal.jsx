@@ -1,7 +1,7 @@
 // Catálogo rápido: gera o PDF de catálogo a partir de uma seleção (skus) ou de
 // uma sala (salaId), sem passar pelos filtros da aba Catálogo. Só entram itens
 // com preço de venda, condição mapeada e em estoque (regra do catálogo).
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Loader2, AlertTriangle, Share2, Download, Link2, MessageCircle, Instagram, FileSpreadsheet } from "lucide-react";
 import { listarItensCatalogo, resumoSelecao } from "../lib/catalogo";
 import { gerarCatalogoPdfDeItens, gerarCardsDivulgacao } from "../lib/catalogoGerar";
@@ -9,6 +9,7 @@ import { compartilharArquivo, compartilharArquivos, compartilharTexto, baixarArq
 import { dedupCatalogo, agruparCatalogo, linkInteresseItem } from "../lib/catalogo";
 import { publicarCatalogo } from "../lib/catalogoPublico";
 import { publicarOferta } from "../lib/ofertaPublica";
+import { destinosInternacionais } from "../lib/destinos";
 import { textoGrupoEuro } from "../lib/precoEuro";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, csvCatalogo } from "../lib/divulgacao";
@@ -23,7 +24,12 @@ const edicaoAtual = () =>
   new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
 export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos, titulo: tituloInicial = "Catálogo de Produtos", user, onClose }) {
-  const [itens, setItens] = useState(null);
+  const [todos, setItens] = useState(null);
+  const [soIntl, setSoIntl] = useState(false); // restringe aos destinos internacionais
+  const itens = useMemo(
+    () => (todos && soIntl ? todos.filter((i) => destinosInternacionais().includes(i.destino)) : todos),
+    [todos, soIntl],
+  );
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState(null);
   const [titulo, setTitulo] = useState(tituloInicial);
@@ -219,6 +225,9 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
             <p className="text-sm text-gray-700">
               <b>{itens.length}</b> {itens.length === 1 ? "item entra" : "itens entram"} no catálogo.
             </p>
+            {destinosInternacionais().length > 0 && (
+              <Opcao valor={soIntl} onChange={setSoIntl}>🌍 Somente destinos internacionais{soIntl && todos ? ` (${itens.length} de ${todos.length})` : ""}</Opcao>
+            )}
             {resumo?.fora.length > 0 && (
               <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 flex gap-1.5">
                 <AlertTriangle className="w-4 h-4 shrink-0" />

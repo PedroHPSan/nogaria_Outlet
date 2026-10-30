@@ -11,6 +11,8 @@ let locais = [];
 
 export const destinosCadastrados = () => cadastro;
 export const locaisDoDestino = (destino) => locais.filter((l) => l.ativo && (!destino || l.destino === destino)).map((l) => l.nome);
+// Nomes dos destinos ativos marcados como internacionais (vazio → filtro não encontra nada, por segurança).
+export const destinosInternacionais = () => cadastro.filter((d) => d.ativo && d.internacional).map((d) => d.nome);
 export const ehInternacional = (destino) => !!cadastro.find((d) => d.nome === destino)?.internacional;
 
 function aplicar(linhas) {
@@ -76,4 +78,37 @@ export async function contarItensPorDestino(nomes) {
     out[n] = count ?? 0;
   }));
   return out;
+}
+
+// Renomeia o destino e acompanha itens, caixas e locais que usavam o nome antigo.
+export async function renomearDestino(id, novoNome) {
+  const atual = cadastro.find((d) => d.id === id);
+  const n = limpar(novoNome);
+  if (!atual) throw new Error("Destino não encontrado.");
+  if (!n) throw new Error("Informe o nome.");
+  if (n === atual.nome) return;
+  if (atual.nome === "A definir") throw new Error('"A definir" é o destino padrão e não pode ser renomeado.');
+  if (cadastro.some((d) => d.id !== id && d.nome.toLowerCase() === n.toLowerCase())) throw new Error("Já existe um destino com esse nome.");
+  const { error } = await supabase.from("destinos").update({ nome: n }).eq("id", id);
+  if (error) throw error;
+  for (const [tabela, coluna] of [["itens", "destino"], ["caixas", "destino"], ["locais_storage", "destino"]]) {
+    const r = await supabase.from(tabela).update({ [coluna]: n }).eq(coluna, atual.nome);
+    if (r.error) throw new Error(`Destino renomeado, mas falhou ao atualizar ${tabela}: ${r.error.message}. Renomeie de volta ou repita a operação.`);
+  }
+  await carregarDestinos();
+}
+
+// Troca a posição com o vizinho (sobe/desce na lista de escolha).
+export async function moverDestino(id, direcao) {
+  const ord = [...cadastro].sort((a, b) => a.ordem - b.ordem);
+  const i = ord.findIndex((d) => d.id === id);
+  const j = i + direcao;
+  if (i < 0 || j < 0 || j >= ord.length) return;
+  const [a, b] = [ord[i], ord[j]];
+  const [r1, r2] = await Promise.all([
+    supabase.from("destinos").update({ ordem: b.ordem }).eq("id", a.id),
+    supabase.from("destinos").update({ ordem: a.ordem }).eq("id", b.id),
+  ]);
+  if (r1.error || r2.error) throw r1.error || r2.error;
+  await carregarDestinos();
 }
