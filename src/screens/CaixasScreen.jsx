@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import {
-  listarCaixas, buscarCaixa, itensDaCaixa,
-  registrarChegada, conferirCaixa, definirApelidoCaixa,
+  listarCaixas, buscarCaixa, itensDaCaixa, itensFaltandoDaCaixa, adicionarItemCaixa,
+  registrarChegada, definirApelidoCaixa, localizarItem, reabrirCaixa, fecharCaixa,
+  conferenciaAtual, iniciarConferencia, registrarResultadoItem, limparResultadoItem,
+  resumirRodada, concluirConferencia, registrarSobrando, RESULTADO,
   marcarItemAvariado, marcarItemFaltando, historicoCaixa,
 } from "../lib/caixas";
-import { marcarConferido, limparConferencia } from "../lib/conferencia";
+import { feedback } from "../lib/feedback";
 import { estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
 import { buildBoxLabel, buildProductLabel } from "../lib/labels";
 import { buscarViasImpressaoCaixa } from "../lib/printLog";
-import { CLASSE_STYLE, DESTINOS, fmtBRL, fmtKg } from "../lib/model";
+import { CLASSE_STYLE, DESTINOS, fmtBRL, fmtKg, foraDoEstoque } from "../lib/model";
 import { listarSalas } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import {
@@ -35,17 +37,19 @@ const eventoCaixaLabel = (a) => ({
   "caixa:item_remove": "item removido", "caixa:fechada": "caixa fechada",
   "caixa:reaberta": "caixa reaberta", "caixa:chegada": "chegada registrada",
   "caixa:local": "armazenamento", "caixa:apelido": "apelido alterado", "caixa:conferida": "caixa conferida",
-  "caixa:item_avaria": "item avariado", "caixa:item_faltando": "item faltando",
+  "caixa:item_avaria": "item avariado", "caixa:conferencia_iniciada": "conferência iniciada", "caixa:item_sobrando": "item sobrando", "caixa:item_faltando": "item faltando",
 }[a] || a);
 
 // Tela de caixas: lista (com filtro), scan por QR e detalhe/conferência.
-export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
+export default function CaixasScreen({ params, user, onClose, onOpenItem, refreshKey }) {
   const [fase, setFase] = useState("lista"); // "lista" | "scan" | "buscando" | "detalhe"
   const [filtro, setFiltro] = useState("pendentes"); // "pendentes" | "conferidas" | "todas"
   const [caixas, setCaixas] = useState([]);
   const [caixa, setCaixa] = useState(null);
   const [itens, setItens] = useState([]);
   const [hist, setHist] = useState([]);
+  const [faltando, setFaltando] = useState([]);
+  const [conf, setConf] = useState({ rodada: null, resultados: {}, sobrando: [] });
   const [erro, setErro] = useState(null);
   const [manual, setManual] = useState("");
 
@@ -64,6 +68,8 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
       setCaixa(c);
       setItens(await itensDaCaixa(c.codigo));
       setHist(await historicoCaixa(c.codigo));
+      setFaltando(await itensFaltandoDaCaixa(c.codigo));
+      setConf(await conferenciaAtual(c.codigo));
       setFase("detalhe");
     } catch (e) {
       setErro("Falha ao buscar: " + (e.message || String(e))); setFase("lista");
@@ -76,7 +82,17 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
     setCaixa(c);
     setItens(await itensDaCaixa(c.codigo));
     setHist(await historicoCaixa(c.codigo));
+    setFaltando(await itensFaltandoDaCaixa(c.codigo));
+    setConf(await conferenciaAtual(c.codigo));
   };
+
+  // Realtime: outra pessoa mexeu nos itens → recarrega o detalhe aberto (debounce).
+  useEffect(() => {
+    if (fase !== "detalhe" || !refreshKey) return;
+    const t = setTimeout(() => { recarregarDetalhe().catch(() => {}); }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   const voltarLista = async () => { setCaixa(null); setErro(null); setManual(""); await carregarLista(); setFase("lista"); };
 
@@ -84,7 +100,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
   if (fase === "detalhe" && caixa) {
     return (
       <CaixaDetalhe
-        caixa={caixa} itens={itens} hist={hist} params={params} user={user}
+        caixa={caixa} itens={itens} faltando={faltando} conf={conf} hist={hist} params={params} user={user}
         onBack={voltarLista} onClose={onClose} onOpenItem={onOpenItem}
         onChanged={recarregarDetalhe}
       />
@@ -176,7 +192,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
                       ? <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">conferida</span>
                       : <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">a conferir</span>}
                   </div>
-                  {c.apelido && <p className="text-sm font-semibold text-gray-800 truncate">{c.apelido}</p>}
+                  <p className={`text-sm truncate ${c.apelido ? "font-semibold text-gray-800" : "text-gray-400 italic"}`}>{c.apelido || "sem apelido"}</p>
                   <p className="text-xs text-gray-500 truncate">{c.sala_id || "sem sala"}{c.chegou_em ? ` · chegou ${new Date(c.chegou_em).toLocaleDateString("pt-BR")}` : ""}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
@@ -190,7 +206,7 @@ export default function CaixasScreen({ params, user, onClose, onOpenItem }) {
 }
 
 // Detalhe/conferência de uma caixa: avaliação, chegada+armazenamento, itens e histórico.
-function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpenItem, onChanged }) {
+function CaixaDetalhe({ caixa, itens, faltando, conf, hist, params, user, onBack, onClose, onOpenItem, onChanged }) {
   const { total, semPreco } = estimarValorCaixa(itens, params);
   const { pesoKg, semPeso } = estimarPesoCaixa(itens, params);
 
@@ -211,7 +227,24 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   useEffect(() => { listarSalas().then(setSalas).catch(() => setSalas([])); }, []);
   const salaAtual = salas.find((s) => s.codigo === salaId) || (caixa.sala_id ? { codigo: caixa.sala_id } : null);
 
-  const conferidos = itens.filter((i) => i.conferido_em).length;
+  const { rodada, resultados, sobrando } = conf;
+  const resumo = resumirRodada(itens, resultados);
+  const conferidos = resumo.conferidos;
+  const pct = itens.length ? Math.round((conferidos / itens.length) * 100) : 0;
+  const [filtroItens, setFiltroItens] = useState("todos"); // "todos" | "pendentes" | "conferidos"
+  const itensVisiveis = itens
+    .filter((i) => filtroItens === "todos" || (filtroItens === "conferidos") === !!resultados[i.sku])
+    .sort((a, b) => (resultados[a.sku] ? 1 : 0) - (resultados[b.sku] ? 1 : 0) || String(a.sku).localeCompare(String(b.sku)));
+
+  // Garante uma rodada aberta (a 1ª interação já inicia a conferência).
+  const garantirRodada = async () => rodada || await iniciarConferencia(caixa.codigo, user);
+  // Item devolvido/movido para uma caixa FECHADA exige reabri-la antes.
+  const garantirAberta = async () => {
+    if (caixa.status !== "FECHADA") return true;
+    if (!window.confirm(`A caixa ${caixa.codigo} está fechada. Reabrir para incluir o item?`)) return false;
+    await reabrirCaixa(caixa.codigo, user);
+    return true;
+  };
 
   // Nº de vias já impressas da etiqueta desta caixa (mesmo controle da Conferência).
   const carregarVias = useCallback(async () => {
@@ -237,32 +270,65 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
     try { await definirApelidoCaixa(caixa.codigo, v, user); await onChanged(); }
     catch (e) { setErro(e.message || String(e)); }
   };
-  const doConferir = async () => {
+  const doIniciar = async () => {
     setSalvando("conferir"); setErro(null);
-    try { await conferirCaixa(caixa.codigo, user); await onChanged(); }
+    try { await iniciarConferencia(caixa.codigo, user); await onChanged(); }
     catch (e) { setErro(e.message || String(e)); }
     finally { setSalvando(null); }
   };
+  const doConferir = async () => {
+    const r = resumo;
+    if ((r.pendentes || r.faltando) &&
+      !window.confirm(`${r.pendentes} item(ns) sem conferir e ${r.faltando} faltando. Concluir a rodada mesmo assim?`)) return;
+    setSalvando("conferir"); setErro(null);
+    try { await concluirConferencia(rodada, itens, resultados, user); await onChanged(); }
+    catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(null); }
+  };
+  const doStatus = async () => {
+    const fechada = caixa.status === "FECHADA";
+    if (!window.confirm(fechada ? `Reabrir a caixa ${caixa.codigo}?` : `Fechar a caixa ${caixa.codigo}?`)) return;
+    setErro(null);
+    try { await (fechada ? reabrirCaixa : fecharCaixa)(caixa.codigo, user); await onChanged(); }
+    catch (e) { setErro(e.message || String(e)); }
+  };
   const doAvaria = async (sku) => {
     setBusy((b) => ({ ...b, [sku]: "avaria" })); setErro(null);
-    try { await marcarItemAvariado(sku, user); await onChanged(); }
+    try {
+      const r = await garantirRodada();
+      await marcarItemAvariado(sku, user); await registrarResultadoItem(r.id, sku, RESULTADO.AVARIADO, user); await onChanged();
+    }
+    catch (e) { setErro(e.message || String(e)); }
+    finally { setBusy((b) => { const n = { ...b }; delete n[sku]; return n; }); }
+  };
+  const doDevolver = async (sku) => {
+    setBusy((b) => ({ ...b, [sku]: "devolver" })); setErro(null);
+    try {
+      if (!(await garantirAberta())) return;
+      await adicionarItemCaixa(sku, caixa, user);
+      const r = await garantirRodada();
+      await registrarResultadoItem(r.id, sku, RESULTADO.OK, user); await onChanged();
+    }
     catch (e) { setErro(e.message || String(e)); }
     finally { setBusy((b) => { const n = { ...b }; delete n[sku]; return n; }); }
   };
   const doFaltando = async (sku) => {
     setBusy((b) => ({ ...b, [sku]: "faltando" })); setErro(null);
-    try { await marcarItemFaltando(sku, user); await onChanged(); }
+    try {
+      const r = await garantirRodada();
+      await marcarItemFaltando(sku, caixa.codigo, user); await registrarResultadoItem(r.id, sku, RESULTADO.FALTANDO, user); await onChanged();
+    }
     catch (e) { setErro(e.message || String(e)); }
     finally { setBusy((b) => { const n = { ...b }; delete n[sku]; return n; }); }
   };
 
-  // Alterna a marcação de conferido de um item (checkbox). Reusa a conferência
-  // de inventário já existente (itens.conferido_em/por).
+  // Alterna o OK de um item na rodada atual (a 1ª marcação abre a rodada).
   const doToggleConf = async (it) => {
     setBusy((b) => ({ ...b, [it.sku]: "conf" })); setErro(null);
     try {
-      if (it.conferido_em) await limparConferencia(it.sku);
-      else await marcarConferido(it.sku, user);
+      const r = await garantirRodada();
+      if (resultados[it.sku]) await limparResultadoItem(r.id, it.sku);
+      else await registrarResultadoItem(r.id, it.sku, RESULTADO.OK, user);
       await onChanged();
     } catch (e) { setErro(e.message || String(e)); }
     finally { setBusy((b) => { const n = { ...b }; delete n[it.sku]; return n; }); }
@@ -272,15 +338,26 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
   // desde que ele pertença a esta caixa. Dá feedback e segue lendo o próximo.
   const handleScanItem = async (texto) => {
     const sku = skuDoQR(texto);
-    const it = itens.find((i) => String(i.sku).toUpperCase() === sku);
-    if (!it) { setScanMsg({ tom: "warn", texto: `${sku} não é desta caixa` }); return; }
-    if (it.conferido_em) { setScanMsg({ tom: "dup", texto: `${sku} já estava conferido` }); return; }
+    const msg = (tom, t) => { feedback(tom); setScanMsg({ tom, texto: t }); };
     try {
-      await marcarConferido(it.sku, user);
+      const it = itens.find((i) => String(i.sku).toUpperCase() === sku);
+      if (!it) {
+        const loc = await localizarItem(sku);
+        if (!loc) return msg("err", `${sku} não encontrado`);
+        if (foraDoEstoque(loc.item.status)) return msg("err", `${loc.item.sku} já saiu do estoque (${loc.item.status})`);
+        const r = await garantirRodada();
+        if (resultados[loc.item.sku] === RESULTADO.SOBRANDO) return msg("dup", `${loc.item.sku} já marcado como sobrando`);
+        await registrarSobrando(r, loc.item.sku, user);
+        await onChanged();
+        return msg("warn", `${loc.item.sku} não é desta caixa${loc.caixa ? ` (está em ${loc.caixa.codigo})` : ""} — veja "Sobrando"`);
+      }
+      if (resultados[it.sku] === RESULTADO.OK) return msg("dup", `${sku} já estava conferido`);
+      const r = await garantirRodada();
+      await registrarResultadoItem(r.id, it.sku, RESULTADO.OK, user);
       await onChanged();
-      setScanMsg({ tom: "ok", texto: `${it.sku} conferido ✓` });
+      msg("ok", `${it.sku} conferido ✓`);
     } catch (e) {
-      setScanMsg({ tom: "err", texto: e.message || String(e) });
+      msg("err", e.message || String(e));
     }
   };
 
@@ -294,9 +371,10 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
         <div className="mt-2 flex items-center gap-2">
           <span className="font-mono text-lg font-bold text-orange-400">{caixa.codigo}</span>
           {caixa.conferida_em && <span className="text-[10px] font-bold uppercase bg-emerald-600 rounded px-1.5 py-0.5">conferida</span>}
-          {caixa.status === "FECHADA"
-            ? <span className="text-[10px] font-bold uppercase bg-gray-700 rounded px-1.5 py-0.5">fechada</span>
-            : <span className="text-[10px] font-bold uppercase bg-emerald-600 rounded px-1.5 py-0.5">aberta</span>}
+          <button onClick={doStatus} className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 active:opacity-70 ${caixa.status === "FECHADA" ? "bg-gray-700" : "bg-emerald-600"}`}>
+            {caixa.status === "FECHADA" ? "fechada · reabrir" : "aberta · fechar"}
+          </button>
+          {rodada && <span className="text-[10px] font-bold uppercase bg-sky-600 rounded px-1.5 py-0.5">rodada {rodada.numero}</span>}
         </div>
         <button onClick={editarApelido} className="flex items-center gap-1.5 mt-1 active:opacity-70">
           <span className={`text-base font-bold ${caixa.apelido ? "text-white" : "text-gray-500"}`}>{caixa.apelido || "Dar um apelido"}</span>
@@ -379,17 +457,30 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
               </button>
             )}
           </div>
+          {itens.length > 0 && (
+            <>
+              <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden mb-2">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="flex gap-1.5 mb-2">
+                {[["todos", "Todos"], ["pendentes", `Pendentes (${resumo.pendentes})`], ["conferidos", `Conferidos (${conferidos})`]].map(([k, l]) => (
+                  <button key={k} onClick={() => setFiltroItens(k)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold ${filtroItens === k ? "bg-gray-900 text-white" : "bg-white border border-gray-300 text-gray-600"}`}>{l}</button>
+                ))}
+              </div>
+            </>
+          )}
           {!itens.length ? (
             <p className="text-sm text-gray-400 text-center py-6">Caixa vazia.</p>
           ) : (
             <div className="space-y-1.5">
-              {itens.map((it) => {
+              {itensVisiveis.map((it) => {
                 const v = estimarValorVenda(it, params);
                 const b = busy[it.sku];
                 return (
-                  <div key={it.sku} className={`rounded-xl border px-3 py-2.5 ${it.conferido_em ? "border-emerald-300 bg-emerald-50/50" : "border-gray-200 bg-white"}`}>
+                  <div key={it.sku} className={`rounded-xl border px-3 py-2.5 ${resultados[it.sku] ? "border-emerald-300 bg-emerald-50/50" : "border-gray-200 bg-white"}`}>
                     <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={!!it.conferido_em} disabled={b === "conf"}
+                      <input type="checkbox" checked={!!resultados[it.sku]} disabled={b === "conf"}
                         onChange={() => doToggleConf(it)} aria-label={`Conferido ${it.sku}`}
                         className="w-5 h-5 flex-shrink-0 accent-emerald-600 disabled:opacity-50" />
                       <button onClick={() => onOpenItem?.(it)} className="flex-1 min-w-0 text-left flex items-center gap-3 active:opacity-70">
@@ -397,7 +488,7 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
                             {it.classe && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${CLASSE_STYLE[it.classe] || "bg-gray-400 text-white"}`}>{it.classe}</span>}
-                            {it.estado === "Avariado" && <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">avariado</span>}
+                            {(it.estado === "Avariado" || resultados[it.sku] === RESULTADO.AVARIADO) && <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">avariado</span>}
                             {v != null && <span className="ml-auto text-xs font-semibold text-emerald-600">~{fmtBRL(v)}</span>}
                           </div>
                           <p className="text-sm text-gray-600 truncate">{it.produto}</p>
@@ -422,6 +513,66 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
           )}
         </div>
 
+        {/* Faltando: estavam na caixa e saíram na conferência */}
+        {faltando.length > 0 && (
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-red-600 mb-2 flex items-center gap-1.5">
+              <PackageX className="w-3.5 h-3.5" /> Faltando na caixa · {faltando.length}
+            </p>
+            <div className="space-y-1.5">
+              {faltando.map(({ item: it, quando, por }) => {
+                const onde = it.caixa_id ? `agora em ${it.caixa_id}` : it.sala_id ? `solto · ${it.sala_id}` : "solto · localização desconhecida";
+                return (
+                  <div key={it.sku} className="rounded-xl border border-red-200 bg-red-50/50 px-3 py-2.5">
+                    <button onClick={() => onOpenItem?.(it)} className="w-full text-left flex items-center gap-3 active:opacity-70">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                          <span className="text-[10px] font-bold uppercase bg-white border border-red-200 text-red-700 rounded px-1.5 py-0.5">{onde}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                        <p className="text-[11px] text-gray-400">{it.status} · marcado por {por} em {new Date(quando).toLocaleString("pt-BR")}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    </button>
+                    <button onClick={() => doDevolver(it.sku)} disabled={!!busy[it.sku]}
+                      className="mt-2 w-full flex items-center justify-center gap-1 rounded-lg border border-emerald-300 text-emerald-700 py-1.5 text-xs font-semibold active:bg-emerald-50 disabled:opacity-50">
+                      {busy[it.sku] === "devolver" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />} Achei — devolver à caixa
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Sobrando: lidos na rodada mas que pertencem a outra caixa */}
+        {sobrando.length > 0 && (
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-sky-600 mb-2 flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5" /> Sobrando nesta rodada · {sobrando.length}
+            </p>
+            <div className="space-y-1.5">
+              {sobrando.map((it) => (
+                <div key={it.sku} className="rounded-xl border border-sky-200 bg-sky-50/50 px-3 py-2.5">
+                  <button onClick={() => onOpenItem?.(it)} className="w-full text-left flex items-center gap-3 active:opacity-70">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
+                      <span className="ml-2 text-[10px] font-bold uppercase bg-white border border-sky-200 text-sky-700 rounded px-1.5 py-0.5">{it.caixa_id ? `está em ${it.caixa_id}` : "solto"}</span>
+                      <p className="text-sm text-gray-600 truncate">{it.produto}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </button>
+                  <button onClick={() => doDevolver(it.sku)} disabled={!!busy[it.sku]}
+                    className="mt-2 w-full flex items-center justify-center gap-1 rounded-lg border border-sky-300 text-sky-700 py-1.5 text-xs font-semibold active:bg-sky-50 disabled:opacity-50">
+                    {busy[it.sku] === "devolver" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />} Mover para esta caixa
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Histórico */}
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5"><History className="w-3.5 h-3.5" /> Histórico da caixa</p>
@@ -442,12 +593,19 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
       </div>
 
       <div className="bg-white border-t border-gray-200 px-4 py-3">
-        <button onClick={doConferir} disabled={salvando === "conferir"}
-          className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white rounded-xl py-3 font-bold active:bg-gray-800 disabled:opacity-60">
-          {salvando === "conferir" ? <Loader2 className="w-5 h-5 animate-spin" /> : <ClipboardCheck className="w-5 h-5" />}
-          {caixa.conferida_em ? "Conferir novamente" : "Marcar caixa conferida"}
-          {caixa.conferida_em && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-        </button>
+        {!rodada ? (
+          <button onClick={doIniciar} disabled={salvando === "conferir" || !itens.length}
+            className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white rounded-xl py-3 font-bold active:bg-gray-800 disabled:opacity-60">
+            {salvando === "conferir" ? <Loader2 className="w-5 h-5 animate-spin" /> : <ClipboardCheck className="w-5 h-5" />}
+            {caixa.conferida_em ? "Nova rodada de conferência" : "Iniciar conferência"}
+          </button>
+        ) : (
+          <button onClick={doConferir} disabled={salvando === "conferir"}
+            className={`w-full flex items-center justify-center gap-2 text-white rounded-xl py-3 font-bold disabled:opacity-60 ${resumo.pendentes || resumo.faltando ? "bg-amber-600 active:bg-amber-700" : "bg-emerald-600 active:bg-emerald-700"}`}>
+            {salvando === "conferir" ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+            Concluir rodada {rodada.numero} ({conferidos}/{itens.length})
+          </button>
+        )}
       </div>
 
       {/* Impressão da etiqueta da caixa (reimpressão após corrigir destino/local). */}
@@ -467,6 +625,7 @@ function CaixaDetalhe({ caixa, itens, hist, params, user, onBack, onClose, onOpe
           <div className="fixed inset-x-0 bottom-0 z-[70] px-4 pb-4 pt-3 bg-gradient-to-t from-black/90 to-transparent">
             <div className="max-w-lg mx-auto space-y-2">
               <p className="text-center text-sm font-semibold text-white">{conferidos}/{itens.length} conferidos</p>
+              <div className="h-1.5 rounded-full bg-white/20 overflow-hidden"><div className="h-full bg-emerald-400" style={{ width: `${pct}%` }} /></div>
               {scanMsg && (
                 <p className={`text-center text-sm font-bold rounded-lg py-2 ${
                   scanMsg.tom === "ok" ? "bg-emerald-500 text-white"
