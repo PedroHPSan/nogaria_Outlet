@@ -1,12 +1,14 @@
 // Oferta pública para o grupo de WhatsApp (PURO): payload do link /p/<slug>, metadados
 // do preview (og:*) e mensagem de interesse. Sem rede; testável em Node.
 import { precoVenda } from "./export.js";
+import { precoMisto, fmtEUR, descricaoPreviewEuro } from "./precoEuro.js";
 import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogoCore.js";
 
 export const MAX_ITENS_OFERTA = 12;
 export const LIMITE_TITULO_OG = 70;
 export const LIMITE_DESC_OG = 160;
 
+const brl2 = (v) => `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const brl = (v) => `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const cortar = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`; };
 const num = (v) => { const n = Number(v); return n > 0 ? String(Math.round(n * 10) / 10).replace(".", ",") : null; };
@@ -17,18 +19,22 @@ export function medidasTexto(it) {
 }
 
 // Título do preview: "Produto — R$ 1.299". Sem preço, só o nome.
-export function tituloOg(it, { mostrarPreco = true } = {}) {
+// euro: { taxa } troca o R$ pelo € (R$ +20% ÷ cotação).
+const precoOgTxt = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? `${fmtEUR(m.eur)} · ${brl2(m.brl)}` : brl(p); };
+
+export function tituloOg(it, { mostrarPreco = true, euro = null } = {}) {
   const p = precoVenda(it);
   const nome = it?.produto || it?.sku || "Produto";
   if (!mostrarPreco || !p) return cortar(nome, LIMITE_TITULO_OG);
-  const sufixo = ` — ${brl(p)}`;
+  const sufixo = ` — ${precoOgTxt(p, euro)}`;
   return `${cortar(nome, LIMITE_TITULO_OG - sufixo.length)}${sufixo}`;
 }
 
 // Descrição do preview (≤ 160): condição · marca · medidas · cor.
-export function descricaoOg(it) {
+export function descricaoOg(it, { euro = false } = {}) {
   const partes = [fraseCondicao(it), it?.marca, medidasTexto(it), it?.cor].map((s) => String(s || "").trim()).filter(Boolean);
   const base = partes.length ? partes.join(" · ") : "Produto com preço de outlet.";
+  if (euro) return cortar(`${descricaoPreviewEuro()}. ${base}.`, LIMITE_DESC_OG);
   return cortar(`${base}. Toque e chame no WhatsApp.`, LIMITE_DESC_OG);
 }
 
@@ -49,10 +55,13 @@ export function itemOferta(it, foto = null, { mostrarPreco = true } = {}) {
 }
 
 // itens: linhas de `itens`; fotos: { [sku]: url assinada }; og: { imagem } (URL pública do preview).
-export function montarPayloadOferta(itens, { titulo, contato = null, mostrarPreco = true, fotos = {}, og = {} } = {}) {
+// euro: cotação { taxa, em } do momento da publicação (usada no preview); a página busca a cotação a cada visita.
+export function montarPayloadOferta(itens, { titulo, contato = null, mostrarPreco = true, euro = false, fotos = {}, og = {} } = {}) {
   const lista = (itens || []).slice(0, MAX_ITENS_OFERTA);
   if (!lista.length) throw new Error("Selecione ao menos 1 item.");
   const unico = lista.length === 1;
+  const precoOg = mostrarPreco;
+  const cot = euro && mostrarPreco ? euro : null;
   const wa = String(contato?.whatsapp || "").replace(/\D/g, "");
   const precos = lista.map((i) => precoVenda(i)).filter((p) => p > 0);
   const tituloOferta = cortar(titulo || (unico ? lista[0].produto : "Ofertas Nogária Outlet"), LIMITE_TITULO_OG);
@@ -61,15 +70,16 @@ export function montarPayloadOferta(itens, { titulo, contato = null, mostrarPrec
     tipo: unico ? "produto" : "oferta",
     titulo: tituloOferta,
     mostrarPreco,
+    euro: !!(euro && mostrarPreco),
     totalItens: lista.length,
     contato: wa.length >= 12
       ? { nome: String(contato?.nome || "").slice(0, 60), whatsapp: wa, label: String(contato?.label || "").slice(0, 30) }
       : null,
     og: {
-      titulo: unico ? tituloOg(lista[0], { mostrarPreco }) : tituloOferta,
+      titulo: unico ? tituloOg(lista[0], { mostrarPreco: precoOg, euro: cot }) : tituloOferta,
       descricao: unico
-        ? descricaoOg(lista[0])
-        : cortar(`${lista.length} peças em oferta${mostrarPreco && precos.length ? ` a partir de ${brl(Math.min(...precos))}` : ""}. Toque para ver e chamar no WhatsApp.`, LIMITE_DESC_OG),
+        ? descricaoOg(lista[0], { euro: !!cot })
+        : cortar(`${lista.length} peças em oferta${precoOg && precos.length ? ` a partir de ${precoOgTxt(Math.min(...precos), cot)}` : ""}. ${cot ? `${descricaoPreviewEuro()}.` : "Toque para ver e chamar no WhatsApp."}`, LIMITE_DESC_OG),
       imagem: og.imagem || null,
     },
     itens: lista.map((i) => itemOferta(i, fotos[i.sku] || null, { mostrarPreco })),
@@ -77,10 +87,11 @@ export function montarPayloadOferta(itens, { titulo, contato = null, mostrarPrec
 }
 
 // Mensagem que o cliente envia à Bárbara ao tocar em "Quero este".
+export const linkWa = (numero, texto) => `https://wa.me/${String(numero || "").replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
+
 export function linkInteresseOferta(item, numero, url) {
   const p = item.preco > 0 ? ` — ${brl(item.preco)}` : "";
-  const texto = `Olá! Tenho interesse em ${item.produto} (${item.sku})${p}.${url ? ` ${url}` : ""}`;
-  return `https://wa.me/${String(numero || "").replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
+  return linkWa(numero, `Olá! Tenho interesse em ${item.produto} (${item.sku})${p}.${url ? ` ${url}` : ""}`);
 }
 
 // Mensagem curta para colar no grupo junto do link (um produto por mensagem).

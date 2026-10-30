@@ -4,11 +4,12 @@
 import { supabase } from "./supabase.js";
 import { gerarSlug, fotosAssinadas } from "./catalogoPublico.js";
 import { montarPayloadOferta, textoGrupo, MAX_ITENS_OFERTA } from "./ofertaCore.js";
+import { cotacaoEuro } from "./cotacao.js";
 import { carregarContato } from "./empresaConfig.js";
 
 const LIMITE_OG = 300 * 1024; // acima disso o WhatsApp pode ignorar a imagem
 
-async function gerarImagemPreview(itens, mostrarPreco) {
+async function gerarImagemPreview(itens, mostrarPreco, euro) {
   const [{ cardOgProduto, cardOgOferta }, { renderizarCard }, { prepararFotos }, { primeirasFotos }] = await Promise.all([
     import("./cardCore.js"), import("./cardImagem.js"), import("./catalogoImagens"), import("./fotos"),
   ]);
@@ -17,8 +18,8 @@ async function gerarImagemPreview(itens, mostrarPreco) {
   const entradas = usados.map((i) => ({ sku: i.sku, url: urls[i.sku] })).filter((e) => e.url);
   const fotos = entradas.length ? await prepararFotos(entradas).catch(() => ({})) : {};
   const card = itens.length === 1
-    ? cardOgProduto(itens[0], { foto: fotos[itens[0].sku], mostrarPreco })
-    : cardOgOferta(usados, { fotos, mostrarPreco });
+    ? cardOgProduto(itens[0], { foto: fotos[itens[0].sku], mostrarPreco, euro })
+    : cardOgOferta(usados, { fotos, mostrarPreco, euro });
   let blob = await renderizarCard(card, { tipo: "image/jpeg", qualidade: 0.82 });
   if (blob.size > LIMITE_OG) blob = await renderizarCard(card, { tipo: "image/jpeg", qualidade: 0.6 });
   return blob;
@@ -26,14 +27,16 @@ async function gerarImagemPreview(itens, mostrarPreco) {
 
 // itens: linhas de `itens` (1 → /p de produto; 2..12 → oferta com grade).
 // Retorna { url, slug, payload, expira_em, semImagem }.
-export async function publicarOferta(itens, { titulo, contato, mostrarPreco = true } = {}) {
+export async function publicarOferta(itens, { titulo, contato, mostrarPreco = true, euro = false } = {}) {
   const lista = (itens || []).slice(0, MAX_ITENS_OFERTA);
   if (!lista.length) throw new Error("Selecione ao menos 1 item.");
   const slug = gerarSlug();
+  // euro: true → busca a cotação agora; ela vai estampada no preview (a página busca outra a cada visita).
+  const cotacao = euro && mostrarPreco ? await cotacaoEuro() : null;
 
   let imagem = null;
   try {
-    const blob = await gerarImagemPreview(lista, mostrarPreco);
+    const blob = await gerarImagemPreview(lista, mostrarPreco, cotacao);
     const path = `${slug}.jpg`;
     const { error } = await supabase.storage.from("og-previews").upload(path, blob, { contentType: "image/jpeg", upsert: false });
     if (error) console.error("upload do preview falhou", error);
@@ -41,7 +44,7 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
   } catch (e) { console.error("preview da oferta falhou", e); /* sem preview: o link ainda funciona */ }
 
   const fotos = await fotosAssinadas(lista.map((i) => ({ rep: i })));
-  const payload = montarPayloadOferta(lista, { titulo, contato, mostrarPreco, fotos, og: { imagem } });
+  const payload = montarPayloadOferta(lista, { titulo, contato, mostrarPreco, euro: cotacao, fotos, og: { imagem } });
   const { data: sess } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from("catalogos_publicos")

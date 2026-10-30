@@ -66,3 +66,24 @@ ok(!cardOgProduto(it(1), { mostrarPreco: false }).ops.some((o) => o.s === "R$ 1.
 const co = cardOgOferta([it(1), it(2, { preco_ideal: 90 })], { fotos: {} });
 ok(co.ops.some((o) => o.s === "R$ 90") && co.ops.some((o) => /a partir de/.test(o.s || "")), "grade com preços e 'a partir de'");
 console.log("\nOK");
+
+console.log("preço em euros");
+const { precoMisto, brlComAcrescimo, textoGrupoEuro, textoCotacao, fmtEUR } = await import("../src/lib/precoEuro.js");
+eq(brlComAcrescimo(1000), 1200, "+20% sobre o valor em reais");
+eq(precoMisto(1000, 6), { brl: 1200, eur: 200 }, "euro = reais +20% ÷ cotação");
+eq(precoMisto(1000, null), { brl: 1200, eur: null }, "sem cotação → só reais");
+eq(precoMisto(0, 6), null, "sem preço → null");
+const pe = montarPayloadOferta([it(1)], { euro: { taxa: 6, em: Date.UTC(2026, 9, 30, 17, 5) }, og: { imagem: "x" } });
+ok(pe.euro === true && pe.itens[0].preco === 1299, "payload euro guarda o R$ base");
+eq(pe.og.titulo, "Produto 1 — € 259,80 · R$ 1.558,80", "título do preview com € e R$ (sem mencionar +20%)");
+ok(pe.og.descricao.includes("Price updates on click") && pe.og.descricao.length <= 160, "descrição do preview avisa em 3 idiomas");
+const imgE = JSON.stringify(cardOgProduto(it(1), { euro: { taxa: 6, em: 0 } }));
+ok(imgE.includes("€ 259,80") && imgE.includes("R$ 1.558,80"), "imagem do preview com os dois valores");
+eq(montarPayloadOferta([it(1)], { euro: { taxa: 6, em: 0 }, mostrarPreco: false }).euro, false, "sem preço → sem euro");
+const cot = { taxa: 6, em: Date.UTC(2026, 9, 30, 17, 5) };
+eq(textoCotacao(cot), "Cotação: 1 € = R$ 6,00 (30/10/2026 14:05)", "cotação com data no fuso de Brasília");
+const tg = textoGrupoEuro(pe, "https://app/p/abc", cot);
+ok(tg.includes("€ 259,80* · R$ 1.558,80") && !tg.includes("20%") && tg.includes("🇬🇧") && tg.includes("🇪🇸") && tg.includes("🇧🇷") && tg.includes(fmtEUR(259.8)) && tg.includes("é atualizado com a cotação do momento"), "mensagem do grupo com R$, €, cotação e aviso");
+const { mensagemInteresseEuro, idiomaDoNavegador } = await import("../src/lib/precoEuro.js");
+ok(mensagemInteresseEuro(pe.itens[0], cot, "u", "es").startsWith("¡Hola! Me interesa") && mensagemInteresseEuro(pe.itens[0], cot, "u", "en").includes("€ 259,80 · R$ 1.558,80"), "mensagem do pedido recalculada, em es/en");
+eq([idiomaDoNavegador("es-AR"), idiomaDoNavegador("en-GB"), idiomaDoNavegador("de-DE")], ["es", "en", "pt"], "idioma pelo navegador (padrão pt)");

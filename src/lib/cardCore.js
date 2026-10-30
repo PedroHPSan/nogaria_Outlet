@@ -1,6 +1,7 @@
 // Layout PURO dos cards de divulgação (px): Feed 4:5, Story 9:16 e Status. Devolve
 // listas de operações de desenho (mesmo modelo do PDF) para o renderizador de canvas.
 import { precoVenda } from "./export.js";
+import { precoMisto, fmtEUR, fmtDataCotacao } from "./precoEuro.js";
 import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogoCore.js";
 import { TEMAS } from "./catalogoSpec.js";
 
@@ -99,13 +100,22 @@ export function montarCarrossel(itens, titulo, formato, ctxPorSku = {}, ctx = {}
 // selo de preço fica DENTRO da imagem (nada é cortado). Foto em data URI (sem taint).
 export const OG_LADO = 800;
 
-function faixaPreco(ops, preco, rotulo) {
+// Modo euro (ctx.euro = { taxa, em }): o preço vira o € do momento da publicação (R$ +20% ÷ cotação).
+// fmtPreco → texto de uma linha; fmtDupla → { eur, brl } para mostrar os dois valores.
+const fmtDupla = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? { eur: fmtEUR(m.eur), brl: brl(m.brl) } : null; };
+const fmtPreco = (p, euro) => { const d = fmtDupla(p, euro); return d ? `${d.eur} · ${d.brl}` : brl(p); };
+
+function faixaPreco(ops, preco, rotulo, euro) {
   const y = OG_LADO - 170;
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 170, fill: "#0b162d" });
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 8, fill: "#52ff7f" });
-  if (preco > 0) ops.push({ k: "text", x: 40, y: y + 112, s: brl(preco), size: 92, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
-  else ops.push({ k: "text", x: 40, y: y + 104, s: rotulo || "Consulte", size: 64, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
-  ops.push({ k: "text", x: 40, y: y + 150, s: "NOGÁRIA OUTLET", size: 22, bold: true, color: "#52ff7f" });
+  const dupla = preco > 0 ? fmtDupla(preco, euro) : null;
+  if (dupla) {
+    ops.push({ k: "text", x: 40, y: y + 82, s: dupla.eur, size: 76, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+    ops.push({ k: "text", x: 40, y: y + 130, s: dupla.brl, size: 44, bold: true, color: "#52ff7f", maxW: OG_LADO - 80 });
+  } else if (preco > 0) ops.push({ k: "text", x: 40, y: y + 112, s: brl(preco), size: 92, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  if (preco <= 0) ops.push({ k: "text", x: 40, y: y + 104, s: rotulo || "Consulte", size: 64, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  ops.push({ k: "text", x: 40, y: y + 158, s: euro && preco > 0 ? `NOGÁRIA OUTLET · cotação ${fmtDataCotacao(euro.em)}` : "NOGÁRIA OUTLET", size: 22, bold: true, color: "#52ff7f" });
 }
 
 export function cardOgProduto(it, ctx = {}) {
@@ -129,7 +139,7 @@ export function cardOgProduto(it, ctx = {}) {
     ops.push({ k: "rect", x: OG_LADO - 30 - w, y: 86, w, h: 60, fill: "#52ff7f", r: 30 });
     ops.push({ k: "text", x: OG_LADO - 30 - w + 22, y: 130, s, size: 36, bold: true, color: "#0b162d" });
   }
-  faixaPreco(ops, ctx.mostrarPreco === false ? 0 : precoVenda(it));
+  faixaPreco(ops, ctx.mostrarPreco === false ? 0 : precoVenda(it), null, ctx.euro);
   return { formato: "og", w: OG_LADO, h: OG_LADO, ops };
 }
 
@@ -157,8 +167,8 @@ export function cardOgOferta(itens, ctx = {}) {
     }
     const p = ctx.mostrarPreco === false ? null : precoVenda(it);
     if (p > 0) {
-      ops.push({ k: "rect", x: x + 10, y: y + altura - 62, w: Math.min(cel - 20, brl(p).length * 24 + 30), h: 50, fill: "#0b162d", r: 25 });
-      ops.push({ k: "text", x: x + 26, y: y + altura - 26, s: brl(p), size: 32, bold: true, color: "#52ff7f" });
+      ops.push({ k: "rect", x: x + 10, y: y + altura - 62, w: Math.min(cel - 20, fmtPreco(p, ctx.euro).length * (ctx.euro ? 16 : 24) + 30), h: 50, fill: "#0b162d", r: 25 });
+      ops.push({ k: "text", x: x + 26, y: y + altura - 26, s: fmtPreco(p, ctx.euro), size: ctx.euro ? 22 : 32, bold: true, color: "#52ff7f" });
     }
   });
   const precos = (itens || []).map((i) => precoVenda(i)).filter((p) => p > 0);
@@ -167,6 +177,6 @@ export function cardOgOferta(itens, ctx = {}) {
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 170, fill: "#0b162d" });
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 8, fill: "#52ff7f" });
   ops.push({ k: "text", x: 40, y: y + 70, s: `${(itens || []).length} OFERTAS${minimo ? " · a partir de" : ""}`, size: 34, bold: true, color: "#52ff7f" });
-  ops.push({ k: "text", x: 40, y: y + 140, s: minimo ? brl(minimo) : "NOGÁRIA OUTLET", size: 76, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  ops.push({ k: "text", x: 40, y: y + 140, s: minimo ? fmtPreco(minimo, ctx.euro) : "NOGÁRIA OUTLET", size: ctx.euro && minimo ? 52 : 76, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
   return { formato: "og", w: OG_LADO, h: OG_LADO, ops };
 }
