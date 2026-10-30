@@ -171,6 +171,6 @@ Decisões do dono que mudaram o plano: conversão **EU = BR + 2** (tabela de mer
 | 2.3 Numeração crua no payload, conversão na página | Feito | `ofertaCore.js`, `ProdutoPublicoView.jsx` |
 | 2.1 Acréscimo/arredondamento configuráveis; 2.2 envio internacional; 2.4 PDF em es/en; 2.5 log de cotações; 2.6 pt-PT próprio | Pendente | — |
 
-Limitações conhecidas: a cotação do pedido vem do navegador do cliente e é validada só por faixa (3 a 12 R$/€); a equipe vê taxa e hora no pedido para conferir. Nome do produto e cor continuam em português. `og:locale` segue `pt_BR`.
+Cotação do pedido: vem da tabela `cotacoes`, gravada só pela Edge Function `cotacao` (service role); a RPC `registrar_interesse` não aceita taxa do cliente (revisão de segurança de 31/10). Exige cotação de até 15 min; sem ela o pedido segue sem código. Nome do produto e cor continuam em português. `og:locale` segue `pt_BR`.
 
-Deploy: aplicar as duas migrations (aprovação Pedro/Bárbara) **antes** de `vercel deploy --prod`.
+Deploy: aplicar as duas migrations (aprovação Pedro/Bárbara), publicar a Edge Function (`supabase functions deploy cotacao --no-verify-jwt`) e só então `vercel deploy --prod`.

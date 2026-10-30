@@ -45,6 +45,9 @@ export default function PedidosEuroScreen({ onClose }) {
         {visiveis.map((p) => {
           const venc = p.status === "ABERTO" && vencido(p);
           const novo = venc && cot ? eurAgora(p, cot.taxa) : null;
+          // Pedido recente cujo € foge >5% do valor na cotação de agora: conferir antes de aceitar.
+          const agora = !venc && cot && p.status === "ABERTO" ? eurAgora(p, cot.taxa) : null;
+          const diverge = agora && Math.abs(Number(p.eur) - agora) / agora > 0.05;
           return (
             <div key={p.id} className="bg-white rounded-xl border border-gray-200 p-3 space-y-1">
               <div className="flex items-center justify-between">
@@ -56,6 +59,11 @@ export default function PedidosEuroScreen({ onClose }) {
               {venc && (
                 <p className="text-xs text-amber-800 bg-amber-50 rounded p-2 flex items-center gap-1">
                   <AlertTriangle className="w-3.5 h-3.5" /> Vencido (24 h).{novo ? ` Recalculado hoje: ${fmtEUR(novo)}` : " Recalcule com a cotação atual."}
+                </p>
+              )}
+              {diverge && (
+                <p className="text-xs text-red-700 bg-red-50 rounded p-2 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Valor difere mais de 5% do cálculo de agora ({fmtEUR(agora)}). Confira antes de aceitar.
                 </p>
               )}
               {p.status === "ABERTO" && (

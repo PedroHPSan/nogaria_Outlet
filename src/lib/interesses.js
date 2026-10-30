@@ -3,12 +3,11 @@
 import { supabase } from "./supabase.js";
 import { precoMisto } from "./precoEuro.js";
 
-// Retorna { codigo, eur, valido_ate } ou null se o registro falhar (a venda segue só com o texto).
-export async function registrarInteresse(slug, sku, lang, cotacao) {
+// O servidor decide preço e cotação (tabela `cotacoes`); o cliente só diz qual item e idioma.
+// Retorna { codigo, eur, taxa, taxa_em, valido_ate } ou null se falhar (a venda segue só com o texto).
+export async function registrarInteresse(slug, sku, lang) {
   try {
-    const { data, error } = await supabase.rpc("registrar_interesse", {
-      p_slug: slug, p_sku: sku, p_lang: lang, p_taxa: cotacao.taxa, p_taxa_em: new Date(cotacao.em).toISOString(),
-    });
+    const { data, error } = await supabase.rpc("registrar_interesse", { p_slug: slug, p_sku: sku, p_lang: lang });
     return error ? null : data;
   } catch { return null; }
 }

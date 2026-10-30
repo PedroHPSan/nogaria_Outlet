@@ -72,8 +72,10 @@ export default function ProdutoPublicoView({ slug }) {
     try {
       const c = await cotacaoEuro({ forcar: true, soProprio: true });
       setCotacao(c); setConfirmar({ item, cotacao: c, pedido: null });
-      const pedido = await registrarInteresse(slug, item.sku, lang, c);
-      setConfirmar((atual) => (atual?.item === item ? { item, cotacao: c, pedido } : atual));
+      // O valor do pedido vem do servidor: se registrou, mostra e envia a cotação gravada (mesma do código).
+      const pedido = await registrarInteresse(slug, item.sku, lang);
+      const cot = pedido ? { taxa: Number(pedido.taxa), em: new Date(pedido.taxa_em).getTime() } : c;
+      setConfirmar((atual) => (atual?.item === item ? { item, cotacao: cot, pedido } : atual));
     } catch { setConfirmar({ item, cotacao: null, pedido: null }); }
   };
 

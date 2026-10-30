@@ -27,10 +27,27 @@ async function frankfurter() {
   return { taxa, em: Date.now(), fonte: "frankfurter" };
 }
 
+// Fonte preferida: Edge Function `cotacao`, que também grava a taxa usada pela RPC dos pedidos.
+async function viaSupabase() {
+  const base = process.env.VITE_SUPABASE_URL, key = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!base || !key) throw new Error("sem supabase");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(`${base}/functions/v1/cotacao`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: ctl.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (!(d?.taxa > 0)) throw new Error("sem cotação");
+    return d;
+  } finally { clearTimeout(timer); }
+}
+
 export default async function handler(req, res) {
   try {
     let c;
-    try { c = await awesome(); } catch { c = await frankfurter(); }
+    try { c = await viaSupabase(); } catch {
+      try { c = await awesome(); } catch { c = await frankfurter(); }
+    }
     res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     res.status(200).json(c);
   } catch {
