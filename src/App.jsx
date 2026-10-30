@@ -239,7 +239,7 @@ export default function App() {
       )}
       {showCaixaQr && (
         <CaixasScreen
-          params={params} user={user}
+          params={params} user={user} refreshKey={refreshKey}
           onClose={() => setShowCaixaQr(false)}
           onOpenItem={(it) => { setShowCaixaQr(false); setOpenItem(it); }}
         />

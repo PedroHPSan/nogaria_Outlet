@@ -199,12 +199,126 @@ export async function marcarItemAvariado(sku, user) {
   await supabase.from("eventos").insert({ sku, acao: "caixa:item_avaria", usuario: user?.email });
 }
 
-// Item ausente na conferência: sai da caixa (caixa_id=null). Evento `caixa:item_faltando`.
-export async function marcarItemFaltando(sku, user) {
+// Item ausente na conferência: sai da caixa (caixa_id=null). O código da caixa de
+// origem vai no `detalhe` do evento `caixa:item_faltando` (item) e o SKU no evento
+// espelho da própria caixa — é o que permite listar o que faltou (itensFaltandoDaCaixa).
+export async function marcarItemFaltando(sku, caixaCodigo, user) {
   const { error } = await supabase.from("itens")
     .update({ caixa_id: null, upd_by: user?.email }).eq("sku", sku);
   if (error) throw error;
-  await supabase.from("eventos").insert({ sku, acao: "caixa:item_faltando", usuario: user?.email });
+  await supabase.from("eventos").insert([
+    { sku, acao: "caixa:item_faltando", detalhe: caixaCodigo, usuario: user?.email },
+    { sku: caixaCodigo, acao: "caixa:item_faltando", detalhe: sku, usuario: user?.email },
+  ]);
+}
+
+// Itens que estavam na caixa e foram marcados como faltando (e não voltaram a ela):
+// [{ item, quando, por }] — `item.caixa_id`/`sala_id` mostram onde estão agora.
+export async function itensFaltandoDaCaixa(codigo) {
+  const { data: evs } = await supabase.from("eventos")
+    .select("sku, ts, usuario").eq("acao", "caixa:item_faltando").eq("detalhe", codigo)
+    .not("sku", "like", "CX-%").not("sku", "like", "MALA-%").order("ts", { ascending: false });
+  const ultimo = new Map();
+  for (const e of evs || []) if (!ultimo.has(e.sku)) ultimo.set(e.sku, e);
+  if (!ultimo.size) return [];
+  const { data: itens } = await supabase.from("itens").select("*").in("sku", [...ultimo.keys()]);
+  return (itens || [])
+    .filter((it) => it.caixa_id !== codigo)
+    .map((item) => ({ item, quando: ultimo.get(item.sku).ts, por: ultimo.get(item.sku).usuario }));
+}
+
+// ───────────────────────── Rodadas de conferência ─────────────────────────
+// Cada rodada (caixa_conferencias) guarda um resultado por item (caixa_conferencia_itens);
+// só pode haver uma aberta por caixa (índice único parcial).
+export const RESULTADO = { OK: "OK", FALTANDO: "FALTANDO", AVARIADO: "AVARIADO", SOBRANDO: "SOBRANDO" };
+
+// Rodada aberta da caixa → { rodada, resultados: { [sku]: resultado }, sobrando: [item] } (rodada=null se não há).
+export async function conferenciaAtual(codigo) {
+  const { data: rodada } = await supabase.from("caixa_conferencias")
+    .select("*").eq("caixa_id", codigo).is("concluida_em", null).maybeSingle();
+  if (!rodada) return { rodada: null, resultados: {}, sobrando: [] };
+  const { data: rs } = await supabase.from("caixa_conferencia_itens").select("sku, resultado").eq("conferencia_id", rodada.id);
+  const resultados = {};
+  for (const r of rs || []) resultados[r.sku] = r.resultado;
+  const skus = Object.keys(resultados).filter((k) => resultados[k] === RESULTADO.SOBRANDO);
+  const sobrando = skus.length
+    ? ((await supabase.from("itens").select("*").in("sku", skus)).data || []).filter((it) => it.caixa_id !== codigo)
+    : [];
+  return { rodada, resultados, sobrando };
+}
+
+// Abre a rodada N+1 (ou devolve a que outra pessoa já abriu).
+export async function iniciarConferencia(codigo, user) {
+  const aberta = (await supabase.from("caixa_conferencias").select("*").eq("caixa_id", codigo).is("concluida_em", null).maybeSingle()).data;
+  if (aberta) return aberta;
+  const ult = (await supabase.from("caixa_conferencias").select("numero").eq("caixa_id", codigo).order("numero", { ascending: false }).limit(1)).data;
+  const numero = (ult?.[0]?.numero || 0) + 1;
+  const { data, error } = await supabase.from("caixa_conferencias")
+    .insert({ caixa_id: codigo, numero, iniciada_por: user?.email }).select().single();
+  if (error) {
+    if (error.code === "23505") { // corrida com outro usuário: reaproveita a aberta
+      const o = (await supabase.from("caixa_conferencias").select("*").eq("caixa_id", codigo).is("concluida_em", null).maybeSingle()).data;
+      if (o) return o;
+    }
+    throw error;
+  }
+  await supabase.from("eventos").insert({ sku: codigo, acao: "caixa:conferencia_iniciada", detalhe: `rodada ${numero}`, usuario: user?.email });
+  return data;
+}
+
+// Grava (ou troca) o resultado de um item na rodada.
+export async function registrarResultadoItem(confId, sku, resultado, user) {
+  const { error } = await supabase.from("caixa_conferencia_itens")
+    .upsert({ conferencia_id: confId, sku, resultado, por: user?.email, em: new Date().toISOString() });
+  if (error) throw error;
+}
+
+// Desfaz o resultado de um item (volta a pendente).
+export async function limparResultadoItem(confId, sku) {
+  const { error } = await supabase.from("caixa_conferencia_itens").delete().eq("conferencia_id", confId).eq("sku", sku);
+  if (error) throw error;
+}
+
+// Resume os resultados da rodada contra os itens atuais da caixa (puro).
+export function resumirRodada(itens, resultados) {
+  const r = { total: itens.length, conferidos: 0, avariados: 0, pendentes: 0, faltando: 0, sobrando: 0 };
+  for (const it of itens) {
+    const x = resultados[it.sku];
+    if (x === RESULTADO.OK) r.conferidos++;
+    else if (x === RESULTADO.AVARIADO) { r.conferidos++; r.avariados++; }
+    else r.pendentes++;
+  }
+  for (const k of Object.keys(resultados)) {
+    if (resultados[k] === RESULTADO.FALTANDO) r.faltando++;
+    else if (resultados[k] === RESULTADO.SOBRANDO) r.sobrando++;
+  }
+  return r;
+}
+
+// Conclui a rodada: grava totais, carimba a caixa como conferida e registra o resumo no histórico.
+export async function concluirConferencia(rodada, itens, resultados, user) {
+  const r = resumirRodada(itens, resultados);
+  const agora = new Date().toISOString();
+  const { error } = await supabase.from("caixa_conferencias").update({
+    concluida_em: agora, concluida_por: user?.email,
+    total: r.total, conferidos: r.conferidos, faltando: r.faltando, avariados: r.avariados, sobrando: r.sobrando,
+  }).eq("id", rodada.id).is("concluida_em", null);
+  if (error) throw error;
+  await supabase.from("caixas").update({ conferida_em: agora, conferida_por: user?.email }).eq("codigo", rodada.caixa_id);
+  await supabase.from("eventos").insert({
+    sku: rodada.caixa_id, acao: "caixa:conferida", usuario: user?.email,
+    detalhe: `rodada ${rodada.numero}: ${r.conferidos}/${r.total} ok · ${r.pendentes} pendente(s) · ${r.faltando} faltando · ${r.avariados} avariado(s) · ${r.sobrando} sobrando`,
+  });
+  return r;
+}
+
+// Item lido que não é da caixa: registra SOBRANDO (evento no item e espelho na caixa).
+export async function registrarSobrando(rodada, sku, user) {
+  await registrarResultadoItem(rodada.id, sku, RESULTADO.SOBRANDO, user);
+  await supabase.from("eventos").insert([
+    { sku, acao: "caixa:item_sobrando", detalhe: rodada.caixa_id, usuario: user?.email },
+    { sku: rodada.caixa_id, acao: "caixa:item_sobrando", detalhe: sku, usuario: user?.email },
+  ]);
 }
 
 // Histórico de uma caixa (eventos cuja `sku` é o código da caixa), recentes primeiro.

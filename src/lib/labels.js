@@ -180,6 +180,7 @@ export function buildBoxLabel(caixa, itens, params, sala) {
       ? "NOGÁRIA OUTLET · ETIQUETA DE MALA"
       : "NOGÁRIA OUTLET · ETIQUETA DE CAIXA",
     sku: caixa?.codigo || "",
+    apelido: caixa?.apelido?.trim() || "",
     qtd: lista.length,
     pesoTxt,
     lotes: [...lotes].sort((a, b) => a - b),

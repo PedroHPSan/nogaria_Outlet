@@ -161,6 +161,11 @@ function CompactBox({ label }) {
       >
         {label.sku}
       </div>
+      {label.apelido && (
+        <div style={{ fontSize: "8pt", textAlign: "center", fontWeight: 800, lineHeight: 1.15, marginBottom: mm(0.6) }}>
+          {label.apelido}
+        </div>
+      )}
       <div style={{ fontSize: "7pt", textAlign: "center", fontWeight: 700, marginBottom: mm(1) }}>
         {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens{label.pesoTxt ? ` · ${label.pesoTxt}` : ""}
       </div>
@@ -233,6 +238,11 @@ function FullBox({ label, tall = false }) {
           <div style={{ fontFamily: "monospace", fontWeight: 800, fontSize: tall ? "15pt" : "12pt", whiteSpace: "nowrap" }}>
             {label.sku}
           </div>
+          {label.apelido && (
+            <div style={{ fontSize: tall ? "13pt" : "10pt", fontWeight: 800, lineHeight: 1.15, overflowWrap: "anywhere" }}>
+              {label.apelido}
+            </div>
+          )}
           <div style={{ fontSize: tall ? "9pt" : "8pt", fontWeight: 700 }}>
             {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens{label.pesoTxt ? ` · ${label.pesoTxt}` : ""}
           </div>
