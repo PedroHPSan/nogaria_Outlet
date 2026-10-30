@@ -9,7 +9,7 @@ import { cotacaoEuro } from "../lib/cotacao";
 import { tamanhoExibicao } from "../lib/tamanhos";
 import {
   precoMisto, fmtEUR, textoCotacao, mensagemInteresseEuro, idiomaDoNavegador, publicoPadrao,
-  traduzirBadge, traduzirCondicao, IDIOMAS, T,
+  traduzirBadge, traduzirCondicao, fonteCotacao, horaConsulta, IDIOMAS, T,
 } from "../lib/precoEuro";
 import { Loader2, Boxes, MessageCircle } from "lucide-react";
 
@@ -74,7 +74,7 @@ export default function ProdutoPublicoView({ slug }) {
       setCotacao(c); setConfirmar({ item, cotacao: c, pedido: null });
       // O valor do pedido vem do servidor: se registrou, mostra e envia a cotação gravada (mesma do código).
       const pedido = await registrarInteresse(slug, item.sku, lang);
-      const cot = pedido ? { taxa: Number(pedido.taxa), em: new Date(pedido.taxa_em).getTime() } : c;
+      const cot = pedido ? { ...c, taxa: Number(pedido.taxa), em: new Date(pedido.taxa_em).getTime() } : c;
       setConfirmar((atual) => (atual?.item === item ? { item, cotacao: cot, pedido } : atual));
     } catch { setConfirmar({ item, cotacao: null, pedido: null }); }
   };
@@ -101,6 +101,12 @@ export default function ProdutoPublicoView({ slug }) {
         </span>
       </header>
       <main className="max-w-xl mx-auto p-4 space-y-4">
+        {p.euro && (
+          <button onClick={() => setPub(pub === "eu" ? "br" : "eu")}
+            className="w-full rounded-xl border-2 border-sky-500 bg-sky-50 text-sky-800 font-bold py-3 text-sm flex items-center justify-center gap-2">
+            {pub === "eu" ? `🇧🇷 ${T[lang].verReais}` : `🇪🇺 ${T[publicoPadrao() === "br" ? "pt" : lang].verEuros}`}
+          </button>
+        )}
         {p.itens.length > 1 && <h1 className="text-lg font-extrabold text-gray-900">{p.titulo}</h1>}
         {p.itens.map((it) => {
           const vendido = vendidos.includes(it.sku);
@@ -148,6 +154,7 @@ export default function ProdutoPublicoView({ slug }) {
               {cotacao ? `${textoCotacao(cotacao, lang, { local: true })}. ` : cotacao === false ? `${t.falhou} ` : `${t.buscando} `}
               {t.atualiza}
             </p>
+            {cotacao && <p>{t.fonte}: {fonteCotacao(cotacao.fonte)} · {t.consultada} {horaConsulta(cotacao.consultadaEm)}.</p>}
             <p>{t.pagar}</p>
             <p>{t.entrega}</p>
           </div>
@@ -166,6 +173,9 @@ export default function ProdutoPublicoView({ slug }) {
                   <div>
                     <p className="text-3xl font-extrabold text-[#02477e]">{fmtEUR(m.eur, lang)}</p>
                     <p className="text-xs text-gray-500 mt-1">{textoCotacao(confirmar.cotacao, lang, { local: true })}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <b>{t.fonte}:</b> {fonteCotacao(confirmar.cotacao.fonte)} · {t.consultada} <b>{horaConsulta(confirmar.cotacao.consultadaEm)}</b>
+                    </p>
                     {confirmar.pedido?.codigo && <p className="text-xs font-mono font-bold text-gray-700 mt-1">{t.pedido} #{confirmar.pedido.codigo}</p>}
                   </div>
                 ) : (
@@ -178,6 +188,7 @@ export default function ProdutoPublicoView({ slug }) {
                   </>
                 )}
                 <p className="text-xs text-amber-800 bg-amber-50 rounded-lg p-2">{t.confirmaAviso}</p>
+                <p className="text-[11px] text-gray-500">{t.lgpd}</p>
                 {msg && (
                   <a href={linkWa(numero, msg)} target="_blank" rel="noopener noreferrer"
                     onClick={() => setConfirmar(null)}

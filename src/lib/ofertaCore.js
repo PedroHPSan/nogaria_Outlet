@@ -21,7 +21,7 @@ export function medidasTexto(it) {
 
 // Título do preview: "Produto — R$ 1.299". Sem preço, só o nome.
 // euro: { taxa } troca o R$ pelo € (R$ +20% ÷ cotação).
-const precoOgTxt = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? `${fmtEUR(m.eur)} · ${brl2(p)}` : brl(p); };
+const precoOgTxt = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? `${brl2(p)} · ${fmtEUR(m.eur)}` : brl(p); };
 
 export function tituloOg(it, { mostrarPreco = true, euro = null } = {}) {
   const p = precoVenda(it);

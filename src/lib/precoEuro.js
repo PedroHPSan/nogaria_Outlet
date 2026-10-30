@@ -46,6 +46,7 @@ export const T = {
     pagar: "Pagamento em euros por transferência para uma conta na Espanha. A Nogária envia os dados após a confirmação.",
     entrega: "Entrega: combinada na conversa (envio internacional, impostos e frete não incluídos).",
     privacidade: "Contamos os acessos à página sem coletar dados pessoais. A cotação vem dos nossos servidores.",
+    verEuros: "Mora na Europa? Ver o preço em euros", verReais: "Ver em reais (R$)", fonte: "Fonte da cotação", consultada: "consultada às", lgpd: "A cotação é consultada pelos servidores da Nogária; seus dados pessoais não são enviados à fonte.",
     pedido: "Pedido", indisponivel: "Oferta indisponível",
     indisponivelDesc: "Este link expirou ou não existe. Chame a Nogária Outlet para ver as ofertas do dia.",
     ola: "Olá! Tenho interesse em", rodape: "Preços e disponibilidade sujeitos a alteração. Peças de outlet, com condição descrita.",
@@ -60,6 +61,7 @@ export const T = {
     pagar: "Payment in euros by bank transfer to an account in Spain. Nogária sends the details after confirmation.",
     entrega: "Delivery: arranged in the chat (international shipping, taxes and freight not included).",
     privacidade: "We count page visits without collecting personal data. The exchange rate comes from our own servers.",
+    verEuros: "Live in Europe? See the price in euros", verReais: "See in reais (R$)", fonte: "Rate source", consultada: "checked at", lgpd: "The rate is fetched by Nogária's servers; your personal data is not sent to the source.",
     pedido: "Order", indisponivel: "Offer unavailable",
     indisponivelDesc: "This link has expired or does not exist. Contact Nogária Outlet to see today's offers.",
     ola: "Hello! I'm interested in", rodape: "Prices and availability subject to change. Outlet items, condition described.",
@@ -74,11 +76,22 @@ export const T = {
     pagar: "Pago en euros por transferencia a una cuenta en España. Nogária envía los datos tras la confirmación.",
     entrega: "Entrega: se acuerda en el chat (envío internacional, impuestos y flete no incluidos).",
     privacidade: "Contamos las visitas a la página sin recopilar datos personales. La cotización viene de nuestros servidores.",
+    verEuros: "¿Vive en Europa? Ver el precio en euros", verReais: "Ver en reales (R$)", fonte: "Fuente de la cotización", consultada: "consultada a las", lgpd: "La cotización la consulta Nogária desde sus servidores; sus datos personales no se envían a la fuente.",
     pedido: "Pedido", indisponivel: "Oferta no disponible",
     indisponivelDesc: "Este enlace ha caducado o no existe. Contacte con Nogária Outlet para ver las ofertas del día.",
     ola: "¡Hola! Me interesa", rodape: "Precios y disponibilidad sujetos a cambios. Artículos de outlet, con condición descrita.",
   },
 };
+
+// Fonte da cotação, por extenso, para o cliente (transparência/LGPD).
+const FONTES = {
+  awesomeapi: "AwesomeAPI — câmbio comercial EUR/BRL (economia.awesomeapi.com.br)",
+  frankfurter: "Frankfurter / Banco Central Europeu — taxa de referência do dia (frankfurter.app)",
+};
+export const fonteCotacao = (fonte) => FONTES[fonte] || "Cotação EUR/BRL de mercado";
+
+// "14:05:32" no fuso do visitante: momento em que a cotação foi consultada (segundo a segundo).
+export const horaConsulta = (ts) => new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 // pt / es mantêm o idioma; qualquer outro (en, fr, de, it…) cai em inglês.
 export const idiomaDoNavegador = (nav = (typeof navigator !== "undefined" ? navigator.language : "")) => {
@@ -102,17 +115,17 @@ export function eurTexto(brlBase, taxa, { negrito = false, lang = "pt" } = {}) {
   return m?.eur ? (negrito ? `*${fmtEUR(m.eur, lang)}*` : fmtEUR(m.eur, lang)) : "";
 }
 
-// "259,80 € · R$ 1.299,00" (cartão e mensagem do grupo: um link para os dois públicos).
+// "R$ 1.299,00 · 259,80 €" (cartão e mensagem do grupo: um link para os dois públicos; o R$ vem primeiro).
 export function duplaPreco(brlBase, taxa, opts) {
   const eur = eurTexto(brlBase, taxa, opts);
-  return eur && Number(brlBase) > 0 ? `${eur} · ${fmtBRL2(brlBase)}` : "";
+  return eur && Number(brlBase) > 0 ? `${fmtBRL2(brlBase)} · ${eur}` : "";
 }
 
 // Mensagem do grupo (compacta): título, preço (1 produto), link, uma linha curta por idioma e a cotação uma vez.
 export function textoGrupoEuro(payload, url, cotacao) {
   const linhas = [`*${payload.titulo}*`];
   if (payload.itens.length === 1) {
-    const l = duplaPreco(payload.itens[0].preco, cotacao?.taxa, { negrito: true });
+    const l = duplaPreco(payload.itens[0].preco, cotacao?.taxa, { negrito: false });
     if (l) linhas.push(l);
   }
   linhas.push(url, "");
