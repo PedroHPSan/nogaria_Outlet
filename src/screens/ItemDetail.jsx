@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto, definirFotoPrincipal } from "../lib/fotos";
-import { moverEtapa, desmembrarItem, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
+import { moverEtapa, desmembrarItem, aplicarProdutoACatalogar, contarACatalogarDoLote, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -526,21 +526,42 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     salvar("VENDIDO");
   };
 
-  // Desmembra o item em N unidades individuais (1 SKU cada). Salva antes para que
-  // as cópias herdem os dados atuais.
-  const desmembrar = async () => {
-    const resp = window.prompt("Quantas unidades este item tem no total? (cria 1 SKU por unidade)", "2");
-    if (resp == null) return;
-    const total = Math.floor(Number(resp));
-    if (!total || total < 2) { alert("Informe um número maior que 1."); return; }
+  // Divide o item em N: "substituir" aplica este produto (dados + fotos) a itens "A CATALOGAR"
+  // do mesmo lote, mantendo os SKUs deles, e abre a impressão coletiva das etiquetas;
+  // "iguais" cria SKUs novos (desmembrar). Salva antes para as cópias herdarem os dados.
+  const [divOpen, setDivOpen] = useState(false);
+  const [divModo, setDivModo] = useState("substituir");
+  const [divTotal, setDivTotal] = useState(2);
+  const [divBusy, setDivBusy] = useState(false);
+  const [disponiveis, setDisponiveis] = useState(null); // nº de "A CATALOGAR" no lote
+  const [lotePrint, setLotePrint] = useState(null); // etiquetas da impressão coletiva
+  useEffect(() => {
+    if (!divOpen) return;
+    setDisponiveis(null);
+    contarACatalogarDoLote(it).then(setDisponiveis).catch(() => setDisponiveis(0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [divOpen]);
+  const dividir = async () => {
+    const qtd = Math.floor(Number(divTotal));
+    if (!qtd || qtd < 1) { alert("Informe uma quantidade maior que 0."); return; }
+    setDivBusy(true);
     try {
       if (dirty.current) await salvar(null);
-      const novos = await desmembrarItem({ ...it }, total, user);
-      onSaved();
-      alert(`${novos.length} unidade(s) criada(s) neste lote${fotos.length ? " — fotos replicadas" : ""}.`);
+      if (divModo === "iguais") {
+        const novos = await desmembrarItem({ ...it }, qtd + 1, user);
+        alert(`${novos.length} unidade(s) criada(s) neste lote${fotos.length ? " — fotos replicadas" : ""}.`);
+      } else {
+        const feitos = await aplicarProdutoACatalogar({ ...it }, qtd, user);
+        if (!feitos.length) { alert("Não há itens 'A CATALOGAR' disponíveis neste lote."); return; }
+        const salaDe = (x) => salas.find((s) => s.codigo === x.sala_id) || null;
+        setLotePrint([it, ...feitos].map((x) => buildProductLabel(x, salaDe(x))));
+        onSaved();
+      }
+      setDivOpen(false);
+      if (divModo === "iguais") onSaved();
     } catch (e) {
-      alert("Falha ao desmembrar: " + (e?.message || e));
-    }
+      alert("Falha ao dividir: " + (e?.message || e));
+    } finally { setDivBusy(false); }
   };
   const sm = statusMeta(it.status);
 
@@ -1118,9 +1139,34 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           <Field label="Observações"><textarea className={inputCls} rows={2} value={it.obs ?? ""} onChange={(e) => set({ obs: e.target.value })} placeholder="Detalhes, defeitos, nº de série…" /></Field>
         </div>
 
-        <button onClick={desmembrar} className="w-full flex items-center justify-center gap-2 text-gray-700 border border-gray-300 bg-white rounded-xl py-3 text-sm font-semibold mb-2">
-          <Layers className="w-4 h-4" /> Desmembrar em várias unidades
+        <button onClick={() => setDivOpen(true)} className="w-full flex items-center justify-center gap-2 text-gray-700 border border-gray-300 bg-white rounded-xl py-3 text-sm font-semibold mb-2">
+          <Layers className="w-4 h-4" /> Dividir em vários itens
         </button>
+        {divOpen && (
+          <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => !divBusy && setDivOpen(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+              <p className="font-bold text-gray-900">Dividir {it.sku} em vários itens</p>
+              <label className="flex items-start gap-2 rounded-xl border border-gray-200 p-3 text-sm">
+                <input type="radio" name="divModo" className="mt-1" checked={divModo === "substituir"} onChange={() => setDivModo("substituir")} />
+                <span><b>Substituir itens "A CATALOGAR" do lote</b><br /><span className="text-gray-500">
+                  Aplica este produto{fotos.length ? " e as fotos" : ""} a outros SKUs do lote {it.lote ?? "(sem lote)"} que ainda estão sem produto — os SKUs deles são mantidos — e já abre a impressão de todas as etiquetas.
+                  {" "}{disponiveis == null ? "Contando…" : <b>{disponiveis} disponível(is) no lote.</b>}</span></span>
+              </label>
+              <label className="flex items-start gap-2 rounded-xl border border-gray-200 p-3 text-sm">
+                <input type="radio" name="divModo" className="mt-1" checked={divModo === "iguais"} onChange={() => setDivModo("iguais")} />
+                <span><b>Criar SKUs novos</b><br /><span className="text-gray-500">Cria novas unidades iguais a este item (dados{fotos.length ? " e fotos" : ""} copiados).</span></span>
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-600">Quantos outros itens iguais a este?</span>
+                <input type="number" min={1} max={divModo === "substituir" && disponiveis ? disponiveis : undefined} value={divTotal} onChange={(e) => setDivTotal(e.target.value)} className={inputCls} />
+              </label>
+              <div className="flex gap-2">
+                <button onClick={() => setDivOpen(false)} disabled={divBusy} className="flex-1 border border-gray-300 rounded-xl py-2.5 text-sm font-semibold text-gray-700">Cancelar</button>
+                <button onClick={dividir} disabled={divBusy || (divModo === "substituir" && !disponiveis)} className="flex-1 bg-orange-500 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-60">{divBusy ? "Aplicando…" : divModo === "substituir" ? "Substituir e imprimir" : "Criar SKUs"}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {statusIdx(it.status) >= statusIdx("TRIADO") && statusIdx(it.status) < statusIdx("VENDIDO") && it.status !== "DESCARTE" && (
           <button onClick={venderDireto} className="w-full flex items-center justify-center gap-2 text-emerald-700 border border-emerald-200 bg-emerald-50 rounded-xl py-3 text-sm font-semibold mb-2">
@@ -1169,6 +1215,11 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             onPrinted={carregarVias}
             onClose={() => setPrinting(false)}
           />
+        </Suspense>
+      )}
+      {lotePrint && (
+        <Suspense fallback={<div className="fixed inset-0 z-[70] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <LabelPrint labels={lotePrint} user={user} onClose={() => setLotePrint(null)} />
         </Suspense>
       )}
       {separando && <SepararModal item={it} user={user} onClose={() => setSeparando(false)} onFeito={() => onSaved?.()} />}

@@ -53,6 +53,7 @@ export default function App() {
   const [showNew, setShowNew] = useState(false);
   const [showFotoQr, setShowFotoQr] = useState(false);
   const [showCaixaQr, setShowCaixaQr] = useState(false);
+  const [caixaInicial, setCaixaInicial] = useState(null); // abre a conferência já nesta caixa (menu Conferir)
   const [showOndeEsta, setShowOndeEsta] = useState(false);
   const [showSalas, setShowSalas] = useState(false);
   const [preFilter, setPreFilter] = useState(null);
@@ -149,6 +150,7 @@ export default function App() {
         <ConferenciaScreen
           lotes={lotes} user={user} params={params} onOpen={setOpenItem} refreshKey={refreshKey}
           onChanged={() => { loadLotes(); onSaved(); }}
+          onOpenCaixa={(cod) => { setCaixaInicial(cod); setShowCaixaQr(true); }}
         />
       )}
       {tab === "vendas" && (
@@ -239,8 +241,8 @@ export default function App() {
       )}
       {showCaixaQr && (
         <CaixasScreen
-          params={params} user={user} refreshKey={refreshKey}
-          onClose={() => setShowCaixaQr(false)}
+          params={params} user={user} refreshKey={refreshKey} initialCodigo={caixaInicial}
+          onClose={() => { setShowCaixaQr(false); setCaixaInicial(null); }}
           onOpenItem={(it) => { setShowCaixaQr(false); setOpenItem(it); }}
         />
       )}

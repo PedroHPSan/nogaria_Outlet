@@ -2,7 +2,7 @@
 // inventário físico (marcar item como conferido). Lógica de dados isolada dos
 // componentes, espelhando o padrão de retry-em-colisão de NewItem.jsx.
 import { supabase } from "./supabase";
-import { buildSku } from "./model";
+import { buildSku, STATUS_FORA_ESTOQUE_IN } from "./model";
 import { classeAutomatica } from "./classificacao";
 import { copiarFotos } from "./fotos";
 import { tallyPorLote } from "./catalogarStats";
@@ -244,6 +244,58 @@ export async function desmembrarItem(item, total, user) {
     usuario: user.email,
   });
   return novos;
+}
+
+// Placeholder = item ainda sem produto cadastrado ("A CATALOGAR (placeholder)" etc.).
+export const ehACatalogar = (it) => String(it?.produto || "").trim().toUpperCase().startsWith("A CATALOGAR");
+
+// Campos que NÃO são sobrescritos no item que recebe o produto: ele mantém o próprio
+// local/destino (herdados da caixa/sala).
+const CAMPOS_NAO_SUBSTITUI = new Set(["destino", "local_fisico", "caixa_num", "caixa_original"]);
+
+// Itens "A CATALOGAR" disponíveis no lote do item (candidatos a receber o produto).
+function queryACatalogarDoLote(item, cols, opts) {
+  let q = supabase.from("itens").select(cols, opts)
+    .ilike("produto", "A CATALOGAR%").neq("sku", item.sku).not("status", "in", STATUS_FORA_ESTOQUE_IN);
+  return item.lote == null ? q.is("lote", null) : q.eq("lote", item.lote);
+}
+export async function contarACatalogarDoLote(item) {
+  const { count, error } = await queryACatalogarDoLote(item, "sku", { count: "exact", head: true });
+  if (error) throw error;
+  return count || 0;
+}
+
+// Em vez de criar SKUs novos, transforma `qtd` itens "A CATALOGAR" do MESMO lote em cópias
+// do produto de `item` (dados + fotos), mantendo o SKU de cada um. Retorna os itens atualizados.
+export async function aplicarProdutoACatalogar(item, qtd, user) {
+  if (ehACatalogar(item)) throw new Error("Este item ainda é 'A CATALOGAR' — cadastre o produto antes de replicar.");
+  const n = Math.max(0, Math.floor(Number(qtd) || 0));
+  if (!n) return [];
+  const { data: alvos, error } = await queryACatalogarDoLote(item, "sku").order("sku").limit(n);
+  if (error) throw error;
+
+  const patch = {};
+  for (const k of CAMPOS_COPIA) if (!CAMPOS_NAO_SUBSTITUI.has(k) && item[k] !== undefined) patch[k] = item[k];
+  patch.quantidade = 1;
+  patch.anuncio_feito = false;
+  patch.upd_by = user.email;
+
+  const feitos = [];
+  for (const { sku } of alvos || []) {
+    const { data, error: ue } = await supabase.from("itens").update(patch).eq("sku", sku).select().single();
+    if (ue) throw ue;
+    try { await copiarFotos(item.sku, sku); } catch { /* cópia best-effort */ }
+    await supabase.from("eventos").insert({ sku, acao: "desmembrado", detalhe: `produto replicado de ${item.sku}`, usuario: user.email });
+    feitos.push(data);
+  }
+  if (feitos.length) {
+    await supabase.from("eventos").insert({
+      sku: item.sku, acao: "desmembrado",
+      detalhe: `replicado em ${feitos.length} a catalogar: ${feitos.map((x) => x.sku).join(", ")}`,
+      usuario: user.email,
+    });
+  }
+  return feitos;
 }
 
 // ───────────────────────── Classificação em massa (backfill) ─────────────────────────

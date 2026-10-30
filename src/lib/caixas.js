@@ -227,6 +227,27 @@ export async function itensFaltandoDaCaixa(codigo) {
     .map((item) => ({ item, quando: ultimo.get(item.sku).ts, por: ultimo.get(item.sku).usuario }));
 }
 
+// Nº de itens que saíram de cada caixa (faltando) e ainda não voltaram: { [codigo]: n }.
+// Usa os eventos espelho (sku = código da caixa, detalhe = SKU do item).
+export async function contarFaltandoPorCaixa() {
+  const { data: evs } = await supabase.from("eventos").select("sku, detalhe")
+    .eq("acao", "caixa:item_faltando").or("sku.like.CX-%,sku.like.MALA-%").limit(2000);
+  const pares = new Map();
+  for (const e of evs || []) if (e.detalhe) pares.set(`${e.sku}|${e.detalhe}`, { caixa: e.sku, item: e.detalhe });
+  if (!pares.size) return {};
+  const skus = [...new Set([...pares.values()].map((v) => v.item))];
+  const atual = {};
+  for (let i = 0; i < skus.length; i += 200) {
+    const { data } = await supabase.from("itens").select("sku, caixa_id").in("sku", skus.slice(i, i + 200));
+    for (const it of data || []) atual[it.sku] = it;
+  }
+  const out = {};
+  for (const { caixa, item } of pares.values()) {
+    if (atual[item] && atual[item].caixa_id !== caixa) out[caixa] = (out[caixa] || 0) + 1;
+  }
+  return out;
+}
+
 // ───────────────────────── Rodadas de conferência ─────────────────────────
 // Cada rodada (caixa_conferencias) guarda um resultado por item (caixa_conferencia_itens);
 // só pode haver uma aberta por caixa (índice único parcial).

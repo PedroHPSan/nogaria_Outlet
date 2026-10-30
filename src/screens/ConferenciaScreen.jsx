@@ -8,7 +8,7 @@ import { atribuirLote, garantirLote, marcarConferido, limparConferencia, definir
 import { classeAutomatica, estimarValorCaixa, estimarValorVenda, estimarPesoCaixa } from "../lib/classificacao";
 import {
   CAIXA_STATUS, CAIXA_TIPO, criarCaixa, adicionarItemCaixa, removerItemCaixa,
-  fecharCaixa, reabrirCaixa, listarCaixas, itensDaCaixa, definirApelidoCaixa, contarItensPorCaixa,
+  fecharCaixa, reabrirCaixa, listarCaixas, itensDaCaixa, definirApelidoCaixa, contarItensPorCaixa, contarFaltandoPorCaixa,
 } from "../lib/caixas";
 import OndeEstaModal from "../components/OndeEstaModal";
 import { buildBoxLabel } from "../lib/labels";
@@ -21,7 +21,7 @@ import { DEFAULT_PARAMS } from "../lib/pricing";
 import {
   Inbox, ScanLine, ClipboardList, Loader2, CheckCircle2, Circle, AlertTriangle,
   PackageCheck, RotateCcw, Camera, ChevronRight, ChevronDown, Tags, Sparkles, ArrowLeftRight,
-  Package, Printer, FileDown, Lock, Plus, Trash2, ArrowLeft, MapPin, Pencil,
+  Package, Printer, FileDown, Lock, Plus, Trash2, ArrowLeft, MapPin, Pencil, ClipboardCheck,
 } from "lucide-react";
 
 const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
@@ -46,17 +46,18 @@ async function fetchItens(applyFilter) {
   return data;
 }
 
-export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS, onOpen, refreshKey, onChanged }) {
+export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS, onOpen, refreshKey, onChanged, onOpenCaixa }) {
   const [secao, setSecao] = useState("definir");
   return (
     <div className="pb-24">
       <div className="sticky top-14 z-10 bg-gray-50 px-4 pt-3 pb-2 border-b border-gray-200">
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1.5">
           {[
             { id: "definir", t: "Definir lote", icon: Inbox },
             { id: "categorizar", t: "Categorizar", icon: Tags },
             { id: "mover", t: "Mover etapa", icon: ArrowLeftRight },
             { id: "encaixotar", t: "Encaixotar", icon: Package },
+            { id: "caixas", t: "Caixas", icon: ClipboardCheck },
             { id: "inventario", t: "Inventário", icon: ScanLine },
             { id: "pendencias", t: "Pendências", icon: ClipboardList },
           ].map((s) => (
@@ -71,8 +72,66 @@ export default function ConferenciaScreen({ lotes, user, params = DEFAULT_PARAMS
       {secao === "mover" && <MoverEtapa lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "encaixotar" && <Encaixotar user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "categorizar" && <CategorizarMassa lotes={lotes} user={user} params={params} refreshKey={refreshKey} onChanged={onChanged} />}
+      {secao === "caixas" && <ConferirCaixas refreshKey={refreshKey} onOpenCaixa={onOpenCaixa} />}
       {secao === "inventario" && <Inventario lotes={lotes} user={user} refreshKey={refreshKey} onChanged={onChanged} />}
       {secao === "pendencias" && <Pendencias lotes={lotes} onOpen={onOpen} refreshKey={refreshKey} />}
+    </div>
+  );
+}
+
+// ───────────────────────── Conferir caixas ─────────────────────────
+// Visão geral da conferência de caixas: o que falta conferir e, principalmente, as caixas de
+// onde saíram itens (faltando). Abrir uma caixa leva à tela de conferência por rodadas.
+function ConferirCaixas({ refreshKey, onOpenCaixa }) {
+  const [caixas, setCaixas] = useState(null);
+  const [faltando, setFaltando] = useState({});
+  const [qtd, setQtd] = useState({});
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const [cs, f, q] = await Promise.all([listarCaixas(), contarFaltandoPorCaixa().catch(() => ({})), contarItensPorCaixa().catch(() => ({}))]);
+      if (vivo) { setCaixas(cs); setFaltando(f); setQtd(q); }
+    })();
+    return () => { vivo = false; };
+  }, [refreshKey]);
+
+  if (!caixas) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-orange-500" /></div>;
+  const comFaltando = caixas.filter((c) => faltando[c.codigo]);
+  const aConferir = caixas.filter((c) => !c.conferida_em && !faltando[c.codigo]);
+  const conferidas = caixas.filter((c) => c.conferida_em && !faltando[c.codigo]);
+  const Linha = ({ c }) => (
+    <button onClick={() => onOpenCaixa?.(c.codigo)} className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+      <Package className="w-5 h-5 text-gray-400 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-sm font-bold text-gray-900">{c.codigo}</span>
+          {faltando[c.codigo] > 0 && <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">{faltando[c.codigo]} faltando</span>}
+          {c.conferida_em && <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">conferida</span>}
+        </div>
+        <p className="text-xs text-gray-500 truncate">{c.apelido || "sem apelido"} · {qtd[c.codigo] || 0} item(ns){c.sala_id ? ` · ${c.sala_id}` : ""}</p>
+      </div>
+      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+    </button>
+  );
+  const Grupo = ({ titulo, lista, cor }) => !lista.length ? null : (
+    <div>
+      <p className={`text-xs font-bold uppercase tracking-wide mb-2 ${cor}`}>{titulo} · {lista.length}</p>
+      <div className="space-y-1.5">{lista.map((c) => <Linha key={c.codigo} c={c} />)}</div>
+    </div>
+  );
+  return (
+    <div className="px-4 pt-4 space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-3 text-sm text-gray-600">
+        Confira cada caixa em rodadas: marque os itens (ou leia o QR), registre avariados e faltando, e conclua a rodada.
+        Itens que saíram de uma caixa ficam listados nela até voltarem.
+        <button onClick={() => onOpenCaixa?.(null)} className="mt-2 w-full flex items-center justify-center gap-2 bg-gray-900 text-white rounded-xl py-2.5 text-sm font-bold active:bg-gray-800">
+          <ScanLine className="w-4 h-4" /> Escanear QR da caixa
+        </button>
+      </div>
+      <Grupo titulo="Com itens faltando" lista={comFaltando} cor="text-red-600" />
+      <Grupo titulo="A conferir" lista={aConferir} cor="text-amber-600" />
+      <Grupo titulo="Conferidas" lista={conferidas} cor="text-emerald-600" />
+      {!caixas.length && <p className="text-sm text-gray-400 text-center py-8">Nenhuma caixa criada ainda.</p>}
     </div>
   );
 }
