@@ -267,10 +267,10 @@ export async function contarACatalogarDoLote(item) {
 
 // Em vez de criar SKUs novos, transforma `qtd` itens "A CATALOGAR" do MESMO lote em cópias
 // do produto de `item` (dados + fotos), mantendo o SKU de cada um. Retorna os itens atualizados.
-export async function aplicarProdutoACatalogar(item, qtd, user) {
+export async function aplicarProdutoACatalogar(item, qtd, user, { comFotos = false } = {}) {
   if (ehACatalogar(item)) throw new Error("Este item ainda é 'A CATALOGAR' — cadastre o produto antes de replicar.");
   const n = Math.max(0, Math.floor(Number(qtd) || 0));
-  if (!n) return [];
+  if (!n) return { feitos: [], semFoto: [] };
   const { data: alvos, error } = await queryACatalogarDoLote(item, "sku").order("sku").limit(n);
   if (error) throw error;
 
@@ -281,10 +281,13 @@ export async function aplicarProdutoACatalogar(item, qtd, user) {
   patch.upd_by = user.email;
 
   const feitos = [];
+  const semFoto = [];
   for (const { sku } of alvos || []) {
     const { data, error: ue } = await supabase.from("itens").update(patch).eq("sku", sku).select().single();
     if (ue) throw ue;
-    try { await copiarFotos(item.sku, sku); } catch { /* cópia best-effort */ }
+    let copiadas = 0;
+    try { copiadas = await copiarFotos(item.sku, sku); } catch { /* cópia best-effort */ }
+    if (comFotos && !copiadas) semFoto.push(sku);
     await supabase.from("eventos").insert({ sku, acao: "desmembrado", detalhe: `produto replicado de ${item.sku}`, usuario: user.email });
     feitos.push(data);
   }
@@ -295,7 +298,7 @@ export async function aplicarProdutoACatalogar(item, qtd, user) {
       usuario: user.email,
     });
   }
-  return feitos;
+  return { feitos, semFoto };
 }
 
 // ───────────────────────── Classificação em massa (backfill) ─────────────────────────

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto, definirFotoPrincipal } from "../lib/fotos";
+import { avisosSubstituicao } from "../lib/catalogarStats";
 import { moverEtapa, desmembrarItem, aplicarProdutoACatalogar, contarACatalogarDoLote, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
@@ -551,8 +552,10 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         const novos = await desmembrarItem({ ...it }, qtd + 1, user);
         alert(`${novos.length} unidade(s) criada(s) neste lote${fotos.length ? " — fotos replicadas" : ""}.`);
       } else {
-        const feitos = await aplicarProdutoACatalogar({ ...it }, qtd, user);
+        const { feitos, semFoto } = await aplicarProdutoACatalogar({ ...it }, qtd, user, { comFotos: fotos.length > 0 });
         if (!feitos.length) { alert("Não há itens 'A CATALOGAR' disponíveis neste lote."); return; }
+        const avisos = avisosSubstituicao({ pedido: qtd, aplicados: feitos.length, semFoto });
+        if (avisos.length) alert(avisos.join("\n"));
         const salaDe = (x) => salas.find((s) => s.codigo === x.sala_id) || null;
         setLotePrint([it, ...feitos].map((x) => buildProductLabel(x, salaDe(x))));
         onSaved();

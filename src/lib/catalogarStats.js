@@ -18,3 +18,11 @@ export function tallyPorLote(rows) {
       return a.lote - b.lote;
     });
 }
+
+// Avisos da substituição de "A CATALOGAR": aplicou menos do que o pedido e/ou fotos não copiadas.
+export function avisosSubstituicao({ pedido, aplicados, semFoto = [] }) {
+  const avisos = [];
+  if (aplicados < pedido) avisos.push(`Só ${aplicados} de ${pedido} itens "A CATALOGAR" estavam disponíveis no lote — aplicado em ${aplicados}.`);
+  if (semFoto.length) avisos.push(`Fotos não copiadas em: ${semFoto.join(", ")}.`);
+  return avisos;
+}

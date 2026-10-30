@@ -1,6 +1,6 @@
 // Testes das funções PURAS de catalogação (catalogarStats.js). Rode: npm run test:catalogar
 import assert from "node:assert/strict";
-import { tallyPorLote } from "../src/lib/catalogarStats.js";
+import { tallyPorLote, avisosSubstituicao } from "../src/lib/catalogarStats.js";
 
 let passou = 0;
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); passou++; console.log(`  ok  ${msg}`); };
@@ -32,5 +32,10 @@ eq(
   [{ lote: 3, count: 1 }, { lote: null, count: 1 }],
   "no empate, o bucket sem lote fica por último"
 );
+
+console.log("avisos da substituição");
+eq(avisosSubstituicao({ pedido: 6, aplicados: 6 }), [], "tudo aplicado e com fotos → sem aviso");
+eq(avisosSubstituicao({ pedido: 6, aplicados: 4 }).length, 1, "aplicou menos que o pedido → avisa");
+eq(avisosSubstituicao({ pedido: 2, aplicados: 2, semFoto: ["NOG-1-1"] })[0].includes("NOG-1-1"), true, "foto não copiada → cita o SKU");
 
 console.log(`\n${passou} asserções OK`);
