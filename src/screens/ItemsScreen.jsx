@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM, DESTINOS, STATUS_FORA_ESTOQUE_IN } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
@@ -13,12 +14,12 @@ import { Search, Filter, ChevronRight, Box, Loader2, Printer, CheckSquare, Squar
 import FotoInputs from "../components/FotoInputs";
 
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
-const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
-const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
-const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
-const PrecoRapidoModal = React.lazy(() => import("../components/PrecoRapidoModal"));
-const RevisaoPrecosModal = React.lazy(() => import("../components/RevisaoPrecosModal"));
-const RateioLoteModal = React.lazy(() => import("../components/RateioLoteModal"));
+const LabelPrint = lazySeguro(() => import("../components/labels/LabelPrint"));
+const AnuncioModal = lazySeguro(() => import("../components/AnuncioModal"));
+const CatalogoRapidoModal = lazySeguro(() => import("../components/CatalogoRapidoModal"));
+const PrecoRapidoModal = lazySeguro(() => import("../components/PrecoRapidoModal"));
+const RevisaoPrecosModal = lazySeguro(() => import("../components/RevisaoPrecosModal"));
+const RateioLoteModal = lazySeguro(() => import("../components/RateioLoteModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;

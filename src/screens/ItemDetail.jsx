@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
@@ -33,10 +34,10 @@ import { salvarAnaliseIA } from "../lib/ia";
 import { classificarItem } from "../lib/classificacao";
 
 // Lazy: a lib de leitura de código de barras (@zxing) só carrega ao abrir o scanner.
-const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
+const BarcodeScanner = lazySeguro(() => import("./BarcodeScanner"));
 // Lazy: a tela de etiquetas só carrega (qrcode/jspdf) ao imprimir.
-const LabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
-const AnuncioModal = React.lazy(() => import("../components/AnuncioModal"));
+const LabelPrint = lazySeguro(() => import("../components/labels/LabelPrint"));
+const AnuncioModal = lazySeguro(() => import("../components/AnuncioModal"));
 
 const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white";

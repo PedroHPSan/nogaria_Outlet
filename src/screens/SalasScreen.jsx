@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import {
   listarSalas, buscarSala, criarSala, atualizarSala, conteudoSala,
   alocarCaixaNaSala, alocarItemNaSala, removerCaixaDaSala, removerItemDaSala, historicoSala,
@@ -12,9 +13,9 @@ import {
   ChevronRight, ChevronLeft, Plus, Search, Printer, QrCode, History, Trash2, Pencil, BookOpen,
 } from "lucide-react";
 
-const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
-const LazyLabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
-const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
+const BarcodeScanner = lazySeguro(() => import("./BarcodeScanner"));
+const LazyLabelPrint = lazySeguro(() => import("../components/labels/LabelPrint"));
+const CatalogoRapidoModal = lazySeguro(() => import("../components/CatalogoRapidoModal"));
 
 const eventoSalaLabel = (a) => ({
   "sala:criada": "sala criada", "sala:editada": "sala editada",

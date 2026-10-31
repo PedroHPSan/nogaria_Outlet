@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { Loader2, Search, Filter, Boxes, BookOpen, MessageCircle } from "lucide-react";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import { listarItensCatalogo, DESTINO_SEM, DESTINO_INTL, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
@@ -10,7 +11,7 @@ import { listarCaixas } from "../lib/caixas";
 import { fmtBRL, ALL_STATUS, DESTINOS, LOTE_SEM } from "../lib/model";
 
 // Motor de catálogo único: o mesmo modal usado em Itens → Selecionar e em Salas.
-const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
+const CatalogoRapidoModal = lazySeguro(() => import("../components/CatalogoRapidoModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const CLASSES = ["A+", "A", "B", "C", "D", "E"];

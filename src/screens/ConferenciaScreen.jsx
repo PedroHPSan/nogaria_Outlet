@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
+import { useRefreshSilencioso } from "../lib/useRefreshSilencioso";
 import { LOTE_SEM, ALL_STATUS, STATUS_FLOW, statusMeta, DESTINOS, fmtBRL, fmtKg, CLASSE_STYLE, STATUS_FORA_ESTOQUE_IN } from "../lib/model";
 import { listarSalas } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
@@ -24,8 +26,8 @@ import {
   Package, Printer, FileDown, Lock, Plus, Trash2, ArrowLeft, MapPin, Pencil, ClipboardCheck,
 } from "lucide-react";
 
-const LazyScanner = React.lazy(() => import("./BarcodeScanner"));
-const LazyLabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
+const LazyScanner = lazySeguro(() => import("./BarcodeScanner"));
+const LazyLabelPrint = lazySeguro(() => import("../components/labels/LabelPrint"));
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 
 // Carrega todos os itens que batem com o filtro (PostgREST corta em 1.000 linhas).
@@ -137,6 +139,12 @@ function ConferirCaixas({ refreshKey, onOpenCaixa }) {
 }
 
 // ───────────────────────── Definir lote (caixa de entrada) ─────────────────────────
+// Mantém na seleção só os SKUs que continuam na lista recarregada.
+const manterSelecao = (sel, lista) => {
+  const ok = new Set(lista.map((i) => i.sku));
+  return new Set([...sel].filter((k) => ok.has(k)));
+};
+
 function DefinirLote({ lotes, user, refreshKey, onChanged }) {
   const [itens, setItens] = useState(null);
   const [sel, setSel] = useState(() => new Set());
@@ -147,12 +155,15 @@ function DefinirLote({ lotes, user, refreshKey, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
 
-  const load = useCallback(async () => {
-    setItens(null);
-    setSel(new Set());
-    setItens(await fetchItens((q) => q.is("lote", null)));
+  // silencioso = veio do realtime: mantém a seleção (só dos que continuam na lista) e não pisca a lista
+  const load = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) { setItens(null); setSel(new Set()); }
+    const data = await fetchItens((q) => q.is("lote", null));
+    if (silencioso) setSel((s) => manterSelecao(s, data));
+    setItens(data);
   }, []);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load]);
+  useRefreshSilencioso(refreshKey, () => load({ silencioso: true }), { pausado: busy });
 
   const toggle = (sku) => setSel((s) => {
     const n = new Set(s); n.has(sku) ? n.delete(sku) : n.add(sku); return n;
@@ -255,6 +266,8 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
   const [fLote, setFLote] = useState("");
   const [soSemCat, setSoSemCat] = useState(true);
   const [itens, setItens] = useState(null);
+  const itensRef = useRef(null); // lista atual, para a recarga silenciosa saber quais itens são novos
+  itensRef.current = itens;
   const [sugs, setSugs] = useState({});      // sku -> categoria sugerida
   const [escolhas, setEscolhas] = useState({}); // sku -> categoria escolhida
   const [sel, setSel] = useState(() => new Set());
@@ -272,8 +285,10 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
 
   const semCategoria = (it) => !it.grupo || it.grupo.startsWith("Diversos");
 
-  const load = useCallback(async () => {
-    setItens(null); setSel(new Set()); setMsg(null); setVisiveis(60);
+  // silencioso = veio do realtime: preserva categorias escolhidas e seleção dos itens que continuam
+  // na lista; só itens novos recebem sugestão/seleção automática.
+  const load = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) { setItens(null); setSel(new Set()); setMsg(null); setVisiveis(60); }
     const data = await fetchItens((q) =>
       fLote === LOTE_SEM ? q.is("lote", null) : (fLote ? q.eq("lote", Number(fLote)) : q));
     const lista = (soSemCat ? data.filter(semCategoria) : data)
@@ -284,9 +299,25 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
       sg[it.sku] = sug || null;
       if (sug) { esc[it.sku] = sug; s.add(it.sku); }
     }
-    setSugs(sg); setEscolhas(esc); setSel(s); setItens(lista);
+    if (!silencioso) { setSugs(sg); setEscolhas(esc); setSel(s); setItens(lista); return; }
+    const ja = new Set((itensRef.current || []).map((i) => i.sku));
+    const novos = lista.filter((i) => !ja.has(i.sku)).map((i) => i.sku);
+    setSugs(sg);
+    setEscolhas((e) => {
+      const n = {};
+      for (const it of lista) if (it.sku in e) n[it.sku] = e[it.sku];
+      for (const k of novos) if (esc[k]) n[k] = esc[k];
+      return n;
+    });
+    setSel((atual) => {
+      const n = manterSelecao(atual, lista);
+      for (const k of novos) if (s.has(k)) n.add(k);
+      return n;
+    });
+    setItens(lista);
   }, [fLote, soSemCat, catList]);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load]);
+  useRefreshSilencioso(refreshKey, () => load({ silencioso: true }), { pausado: busy });
 
   const recarregarSemClasse = useCallback(() => {
     contarSemClasse().then(setSemClasse).catch(() => setSemClasse(null));
@@ -461,8 +492,9 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
-  const load = useCallback(async () => {
-    setItens(null); setSel(new Set()); setMsg(null); setVisiveis(60);
+  // silencioso = veio do realtime: mantém a seleção atual (itens novos entram desmarcados)
+  const load = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) { setItens(null); setSel(new Set()); setMsg(null); setVisiveis(60); }
     if (!origem) { setItens([]); return; }
     const data = await fetchItens((q) => {
       let qq = q.eq("status", origem);
@@ -471,9 +503,11 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
       return qq;
     });
     setItens(data);
-    setSel(new Set(data.map((i) => i.sku))); // tudo marcado por padrão
+    if (silencioso) setSel((s) => manterSelecao(s, data));
+    else setSel(new Set(data.map((i) => i.sku))); // tudo marcado por padrão
   }, [origem, fLote]);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load]);
+  useRefreshSilencioso(refreshKey, () => load({ silencioso: true }), { pausado: busy });
 
   const fotos = useThumbs(itens);
   const toggle = (sku) => setSel((s) => { const n = new Set(s); n.has(sku) ? n.delete(sku) : n.add(sku); return n; });
@@ -1029,13 +1063,16 @@ function Inventario({ lotes, user, refreshKey, onChanged }) {
   const [msg, setMsg] = useState(null); // { tipo, texto }
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  // silencioso = veio do realtime (inclusive da própria conferência): atualiza sem piscar nem
+  // voltar a lista para o topo a cada item conferido
+  const load = useCallback(async ({ silencioso = false } = {}) => {
     if (!fLote) { setItens(null); return; }
-    setItens(null);
+    if (!silencioso) setItens(null);
     const data = await fetchItens((q) => (fLote === LOTE_SEM ? q.is("lote", null) : q.eq("lote", Number(fLote))));
     setItens(data);
   }, [fLote]);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load]);
+  useRefreshSilencioso(refreshKey, () => load({ silencioso: true }), { pausado: busy });
 
   const conferidos = itens ? itens.filter((i) => i.conferido_em).length : 0;
   const fotos = useThumbs(itens);
@@ -1163,16 +1200,19 @@ function Pendencias({ lotes, onOpen, refreshKey }) {
   const [fLote, setFLote] = useState("");
   const [itens, setItens] = useState(null);
 
+  const buscar = useCallback(() => fetchItens((q) =>
+    fLote === LOTE_SEM ? q.is("lote", null) : fLote ? q.eq("lote", Number(fLote)) : q), [fLote]);
   useEffect(() => {
     let cancelado = false;
     (async () => {
       setItens(null);
-      const data = await fetchItens((q) =>
-        fLote === LOTE_SEM ? q.is("lote", null) : fLote ? q.eq("lote", Number(fLote)) : q);
+      const data = await buscar();
       if (!cancelado) setItens(data);
     })();
     return () => { cancelado = true; };
-  }, [fLote, refreshKey]);
+  }, [buscar]);
+  // realtime: atualiza sem esvaziar a lista (não perde a rolagem)
+  useRefreshSilencioso(refreshKey, () => { buscar().then(setItens).catch(() => {}); });
 
   const incompletos = itens
     ? itens.map((it) => ({ it, ...checarCompletude(it) })).filter((x) => !x.ok)

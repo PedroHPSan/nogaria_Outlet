@@ -1,4 +1,5 @@
 import React, { useState, useRef, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import FotoInputs from "../components/FotoInputs";
@@ -7,7 +8,7 @@ import { CLASSE_STYLE } from "../lib/model";
 import { X, Camera, Loader2, ScanLine, ArrowRight, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
 
 // Leitor de QR só carrega a lib (@zxing) quando a tela abre.
-const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
+const BarcodeScanner = lazySeguro(() => import("./BarcodeScanner"));
 
 // Fluxo rápido (mobile): escaneia o QR da etiqueta (que codifica o SKU), abre o
 // produto e adiciona fotos direto — sem precisar caçar o item na lista. Pensado

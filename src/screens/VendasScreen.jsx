@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMeta, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
 import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
 import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag } from "lucide-react";
 
-const OrcamentosScreen = React.lazy(() => import("./OrcamentosScreen"));
-const SacolasScreen = React.lazy(() => import("./SacolasScreen"));
-const PedidosEuroScreen = React.lazy(() => import("./PedidosEuroScreen"));
+const OrcamentosScreen = lazySeguro(() => import("./OrcamentosScreen"));
+const SacolasScreen = lazySeguro(() => import("./SacolasScreen"));
+const PedidosEuroScreen = lazySeguro(() => import("./PedidosEuroScreen"));
 
 const PAGE = 50;
 
