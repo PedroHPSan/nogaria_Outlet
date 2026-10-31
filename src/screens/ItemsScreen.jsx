@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, statusMeta, CLASSE_STYLE, fmtBRL, LOTE_SEM, DESTINOS, STATUS_FORA_ESTOQUE_IN } from "../lib/model";
+import { ALL_STATUS, CLASSE_STYLE, fmtBRL, LOTE_SEM, DESTINOS, filtrarStatusItens, statusMetaItem } from "../lib/model";
 import { buildProductLabel, buildBoxLabel } from "../lib/labels";
 import { primeirasFotos, enviarFoto, marcarFotoFeita } from "../lib/fotos";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -165,10 +165,9 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
     if (fLote === LOTE_SEM) query = query.is("lote", null);
     else if (fLote) query = query.eq("lote", Number(fLote));
     if (fClasse) query = query.eq("classe", fClasse);
-    // Sem status escolhido, mostra só o estoque ativo (esconde VENDIDO/ENTREGUE/
-    // DESCARTE — já foram pro cliente/sucata). Escolher um desses no filtro ainda os revela.
-    if (fStatus) query = query.eq("status", fStatus);
-    else query = query.not("status", "in", STATUS_FORA_ESTOQUE_IN);
+    // Sem status escolhido, mostra só o estoque disponível (esconde VENDIDO/ENTREGUE/DESCARTE e
+    // os separados em sacola do WhatsApp). "Vendido" no filtro inclui os separados.
+    query = filtrarStatusItens(query, fStatus);
     if (fGrupo) query = query.eq("grupo", fGrupo);
     if (fDestino === DESTINO_SEM) query = query.is("destino", null);
     else if (fDestino === DESTINO_INTL) query = query.in("destino", destinosInternacionais());
@@ -426,7 +425,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
       <div className="px-3 pt-2 space-y-1.5">
         {itens.map((it) => {
-          const sm = statusMeta(it.status);
+          const sm = statusMetaItem(it);
           const sel = selected.has(it.sku);
           return (
             <div key={it.sku}

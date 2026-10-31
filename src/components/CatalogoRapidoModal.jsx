@@ -8,7 +8,7 @@ import { gerarCatalogoPdfDeItens, gerarCardsDivulgacao } from "../lib/catalogoGe
 import { compartilharArquivo, compartilharArquivos, compartilharTexto, baixarArquivo } from "../lib/compartilhar";
 import { dedupCatalogo, agruparCatalogo, linkInteresseItem } from "../lib/catalogo";
 import { publicarCatalogo } from "../lib/catalogoPublico";
-import { publicarOferta } from "../lib/ofertaPublica";
+import { publicarOferta, separarDisponiveis, textoBloqueados } from "../lib/ofertaPublica";
 import { destinosInternacionais } from "../lib/destinos";
 import { textoGrupoEuro } from "../lib/precoEuro";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
@@ -157,11 +157,13 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     const texto = textoOferta(r);
     setOfertas([{ sku: "lote", titulo: r.payload.titulo, url: r.url, texto }]); registrar("link");
     await copiar(texto);
-    setAviso(`${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}${r.semCotacao ? "Cotação do euro indisponível: link só em reais. " : ""}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
+    setAviso(`${r.bloqueados?.length ? `Fora do link (já vendido ou separado): ${textoBloqueados(r.bloqueados)}. ` : ""}${r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio). " : "Link copiado — cole no grupo. "}${r.semCotacao ? "Cotação do euro indisponível: link só em reais. " : ""}Vale 30 dias.${itens.length > MAX_ITENS_OFERTA ? ` Só os ${MAX_ITENS_OFERTA} primeiros itens entram.` : ""}`);
   });
 
   const ofertasPorProduto = () => executar(async () => {
-    const lista = itens.slice(0, MAX_ITENS_OFERTA);
+    // vendidos/separados em sacola ficam de fora (relido do banco); se nenhum sobrar, recusa
+    const { disponiveis: lista, bloqueados } = await separarDisponiveis(itens.slice(0, MAX_ITENS_OFERTA));
+    if (!lista.length) throw new Error(`Nenhum item disponível: já vendido ou separado — ${textoBloqueados(bloqueados)}.`);
     const saida = [];
     for (let i = 0; i < lista.length; i++) {
       setProgresso({ feitas: i, total: lista.length });
@@ -169,7 +171,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
       saida.push({ sku: lista[i].sku, titulo: r.payload.titulo, url: r.url, texto: textoOferta(r) });
     }
     setOfertas(saida); registrar("link");
-    setAviso(`${saida.length} links gerados — copie e cole um por mensagem no grupo (cada link mostra o seu produto).`);
+    setAviso(`${saida.length} links gerados — copie e cole um por mensagem no grupo (cada link mostra o seu produto).${bloqueados.length ? ` Fora (já vendido ou separado): ${textoBloqueados(bloqueados)}.` : ""}`);
   });
 
   const textoWpp = () => executar(async () => {

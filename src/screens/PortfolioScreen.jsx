@@ -57,7 +57,8 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
       setWpp({ sku: it.sku, estado: "ok", msg: r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio)." : r.semCotacao ? "Link copiado só em reais (cotação do euro indisponível)." : "Link copiado — cole no grupo do WhatsApp." });
     } catch (e) {
       console.error(e);
-      setWpp({ sku: it.sku, estado: "erro", msg: "Não consegui gerar o link. Tente de novo." });
+      // vendido/separado: a mensagem da trava explica; outros erros, genérica
+      setWpp({ sku: it.sku, estado: "erro", msg: /vendido ou separado/.test(e?.message || "") ? e.message : "Não consegui gerar o link. Tente de novo." });
     }
     setTimeout(() => setWpp((w) => (w?.estado === "gerando" ? w : null)), 4000);
   };

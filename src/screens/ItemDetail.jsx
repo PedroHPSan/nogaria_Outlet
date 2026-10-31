@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
-import { STATUS_FLOW, statusIdx, statusMeta, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
+import { STATUS_FLOW, statusIdx, statusMeta, statusMetaItem, indisponivelParaVenda, motivoIndisponivel, CLASSE_STYLE, ESTADOS, EMBALAGENS, VOLTAGENS, validarEAN, fmtBRL, CANAIS_VENDA } from "../lib/model";
 import {
   ChevronLeft, ChevronRight, ZoomIn, Camera, AlertTriangle, ArrowRight, Trash2, Loader2, X, ScanLine, Barcode, Printer, Undo2, RefreshCw, Layers, Sparkles, ImageIcon, Check, CheckCircle2, Smartphone, Ruler, ExternalLink, Receipt, Package, Images, Star, Globe, Wand2, MessageCircle, ShoppingBag
 } from "lucide-react";
@@ -380,7 +380,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       const r = await gerarLinkGrupo(it);
       if (!r.copiado) window.prompt("Copie o link:", r.texto);
       setLinkWpp({ texto: r.texto, semImagem: r.semImagem, semCotacao: r.semCotacao });
-    } catch (e) { console.error(e); setLinkWpp("erro"); }
+    } catch (e) { console.error(e); setLinkWpp("erro"); alert(e?.message || "Falha ao gerar o link."); }
     setTimeout(() => setLinkWpp(null), 4000);
   };
   const aplicarClasse = async () => {
@@ -585,7 +585,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       alert("Falha ao dividir: " + (e?.message || e));
     } finally { setDivBusy(false); }
   };
-  const sm = statusMeta(it.status);
+  const sm = statusMetaItem(it);
+  // Vendido/entregue/descarte ou separado em sacola: não gera link nem separa de novo.
+  const bloqueadoVenda = indisponivelParaVenda(it);
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
@@ -609,15 +611,15 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               className="flex items-center gap-1 bg-gray-800 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-gray-100">
               <Printer className="w-3.5 h-3.5" /> Etiqueta
             </button>
-            <button onClick={gerarLinkWpp} disabled={linkWpp === "gerando"}
-              className="flex items-center gap-1 bg-emerald-700 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
-              title="Link com foto e preço para colar no grupo de WhatsApp">
+            <button onClick={gerarLinkWpp} disabled={linkWpp === "gerando" || bloqueadoVenda}
+              className="flex items-center gap-1 bg-emerald-700 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              title={bloqueadoVenda ? `Sem link: item ${motivoIndisponivel(it)}` : "Link com foto e preço para colar no grupo de WhatsApp"}>
               {linkWpp === "gerando" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
               {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem preview)" : linkWpp.semCotacao ? "Copiado (sem €)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
             </button>
-            <button onClick={() => setSeparando(true)}
-              className="flex items-center gap-1 bg-orange-600 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white"
-              title="Separar este item para um cliente do WhatsApp">
+            <button onClick={() => setSeparando(true)} disabled={bloqueadoVenda}
+              className="flex items-center gap-1 bg-orange-600 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              title={bloqueadoVenda ? `Não pode separar: item ${motivoIndisponivel(it)}` : "Separar este item para um cliente do WhatsApp"}>
               <ShoppingBag className="w-3.5 h-3.5" /> Separar
             </button>
             <button onClick={() => setAnuncio(true)}
@@ -1259,7 +1261,12 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           <LabelPrint labels={lotePrint} user={user} onClose={() => setLotePrint(null)} />
         </Suspense>
       )}
-      {separando && <SepararModal item={it} user={user} onClose={() => setSeparando(false)} onFeito={() => onSaved?.()} />}
+      {separando && <SepararModal item={it} user={user} onClose={() => setSeparando(false)} onFeito={async () => {
+        onSaved?.();
+        // reflete a reserva na ficha aberta (selo "Vendido · separado" e botões travados) sem marcar alteração
+        const { data } = await supabase.from("itens").select("reservado_ate, reservado_por_orc").eq("sku", it.sku).maybeSingle();
+        if (data) setIt((p) => ({ ...p, ...data }));
+      }} />}
       {anuncio && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
           <AnuncioModal itens={itensAnuncio} params={params} onClose={() => setAnuncio(false)} />
