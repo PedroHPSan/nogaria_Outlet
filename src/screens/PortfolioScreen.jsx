@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { Loader2, Search, Filter, Boxes, BookOpen, MessageCircle } from "lucide-react";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import { listarItensCatalogo, DESTINO_SEM, DESTINO_INTL, CATALOGO_ESTADO_BADGE } from "../lib/catalogo";
@@ -10,7 +11,7 @@ import { listarCaixas } from "../lib/caixas";
 import { fmtBRL, ALL_STATUS, DESTINOS, LOTE_SEM } from "../lib/model";
 
 // Motor de catálogo único: o mesmo modal usado em Itens → Selecionar e em Salas.
-const CatalogoRapidoModal = React.lazy(() => import("../components/CatalogoRapidoModal"));
+const CatalogoRapidoModal = lazySeguro(() => import("../components/CatalogoRapidoModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const CLASSES = ["A+", "A", "B", "C", "D", "E"];
@@ -56,7 +57,8 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
       setWpp({ sku: it.sku, estado: "ok", msg: r.semImagem ? "Link copiado, mas SEM imagem de preview (falha no envio)." : r.semCotacao ? "Link copiado só em reais (cotação do euro indisponível)." : "Link copiado — cole no grupo do WhatsApp." });
     } catch (e) {
       console.error(e);
-      setWpp({ sku: it.sku, estado: "erro", msg: "Não consegui gerar o link. Tente de novo." });
+      // vendido/separado: a mensagem da trava explica; outros erros, genérica
+      setWpp({ sku: it.sku, estado: "erro", msg: /vendido ou separado/.test(e?.message || "") ? e.message : "Não consegui gerar o link. Tente de novo." });
     }
     setTimeout(() => setWpp((w) => (w?.estado === "gerando" ? w : null)), 4000);
   };

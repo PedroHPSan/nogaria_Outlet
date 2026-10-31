@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, LOTE_SEM, DESTINOS, STATUS_FORA_ESTOQUE_IN, fmtBRL } from "../lib/model";
+import { ALL_STATUS, LOTE_SEM, DESTINOS, filtrarStatusItens, fmtBRL } from "../lib/model";
 import {
   COLUNAS_PLANILHA, COLUNAS_PADRAO, COLUNAS_FIXAS, GRUPOS_COLUNAS, CLASSES,
   colunasVisiveis, normalizarVisiveis, montarPatch, montarPlanilha, nomeArquivo,
@@ -77,8 +77,7 @@ export default function PlanilhaScreen({ lotes, params, user, onOpen, refreshKey
         let query = supabase.from("itens").select("*");
         if (fLote === LOTE_SEM) query = query.is("lote", null);
         else if (fLote) query = query.eq("lote", Number(fLote));
-        if (fStatus) query = query.eq("status", fStatus);
-        else if (!incluirFora) query = query.not("status", "in", STATUS_FORA_ESTOQUE_IN);
+        query = filtrarStatusItens(query, fStatus, { incluirFora }); // separados contam como vendidos
         if (fClasse) query = query.eq("classe", fClasse);
         if (fGrupo) query = query.eq("grupo", fGrupo);
         if (fDestino) query = query.eq("destino", fDestino);

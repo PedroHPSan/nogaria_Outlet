@@ -7,6 +7,7 @@ import { montarPayloadOferta, textoGrupo, MAX_ITENS_OFERTA } from "./ofertaCore.
 import { cotacaoEuro } from "./cotacao.js";
 import { textoGrupoEuro } from "./precoEuro.js";
 import { carregarContato } from "./empresaConfig.js";
+import { indisponivelParaVenda, motivoIndisponivel } from "./model.js";
 
 const LIMITE_OG = 300 * 1024; // acima disso o WhatsApp pode ignorar a imagem
 
@@ -26,11 +27,37 @@ async function gerarImagemPreview(itens, mostrarPreco, euro) {
   return blob;
 }
 
+// Trava contra revenda: relê do banco status e reserva (a tela pode estar desatualizada) e separa
+// o que ainda pode ser oferecido. Vendido/entregue/descarte e separado em sacola não entram.
+export async function separarDisponiveis(itens) {
+  const skus = (itens || []).map((i) => i.sku);
+  if (!skus.length) return { disponiveis: [], bloqueados: [] };
+  const { data, error } = await supabase.from("itens").select("sku, status, reservado_ate, reservado_por_orc").in("sku", skus);
+  if (error) throw error;
+  const atual = new Map((data || []).map((r) => [r.sku, r]));
+  const disponiveis = [], bloqueados = [];
+  for (const it of itens) {
+    const a = atual.get(it.sku);
+    if (!a) bloqueados.push({ sku: it.sku, motivo: "não encontrado" });
+    else if (indisponivelParaVenda(a)) bloqueados.push({ sku: it.sku, motivo: motivoIndisponivel(a) });
+    else disponiveis.push(it);
+  }
+  return { disponiveis, bloqueados };
+}
+
+export const textoBloqueados = (bloqueados) =>
+  bloqueados.map((b) => `${b.sku} (${b.motivo})`).join(", ");
+
 // itens: linhas de `itens` (1 → /p de produto; 2..12 → oferta com grade).
-// Retorna { url, slug, payload, expira_em, semImagem }.
+// Itens vendidos ou separados em sacola são retirados; se não sobrar nenhum, recusa.
+// Retorna { url, slug, payload, expira_em, semImagem, bloqueados }.
 export async function publicarOferta(itens, { titulo, contato, mostrarPreco = true, euro = false } = {}) {
-  const lista = (itens || []).slice(0, MAX_ITENS_OFERTA);
-  if (!lista.length) throw new Error("Selecione ao menos 1 item.");
+  const { disponiveis, bloqueados } = await separarDisponiveis((itens || []).slice(0, MAX_ITENS_OFERTA));
+  const lista = disponiveis;
+  if (!lista.length) {
+    if (bloqueados.length) throw new Error(`Não é possível gerar link: já vendido ou separado — ${textoBloqueados(bloqueados)}.`);
+    throw new Error("Selecione ao menos 1 item.");
+  }
   const slug = gerarSlug();
   // euro: true → busca a cotação agora; ela vai estampada no preview (a página busca outra a cada visita).
   const cotacao = euro && mostrarPreco ? await cotacaoEuro().catch(() => null) : null; // sem cotação: o link sai só em reais
@@ -54,7 +81,7 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
     .select("slug, expira_em")
     .single();
   if (error) throw error;
-  return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, expira_em: data.expira_em, semImagem: !imagem, cotacao, semCotacao: euro && mostrarPreco && !cotacao };
+  return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, expira_em: data.expira_em, semImagem: !imagem, cotacao, semCotacao: euro && mostrarPreco && !cotacao, bloqueados };
 }
 
 // SKUs desta oferta que já foram vendidos/entregues (RPC anônima por slug; falha → nenhum).

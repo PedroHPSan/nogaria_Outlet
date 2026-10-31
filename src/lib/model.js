@@ -24,6 +24,40 @@ export const foraDoEstoque = (status) => STATUS_FORA_ESTOQUE.includes(status);
 // Pronto para o filtro `in` do PostgREST: query.not("status", "in", <isto>).
 export const STATUS_FORA_ESTOQUE_IN = `(${STATUS_FORA_ESTOQUE.join(",")})`;
 
+// ── Separado na sacola do WhatsApp = vendido para efeito de interface e filtros ──
+// O status no banco NÃO muda ao separar (só `reservado_ate`/`reservado_por_orc`): se a sacola vencer
+// ou for cancelada, o item volta a ficar disponível sozinho. A venda (status VENDIDO, painel, lucro)
+// só é registrada no pagamento. Aqui o item separado é tratado como vendido: selo, filtros e bloqueio
+// de novo link/separação.
+export const separadoEmSacola = (it, agora = new Date()) =>
+  !foraDoEstoque(it?.status) && !!it?.reservado_ate && new Date(it.reservado_ate) > new Date(agora);
+// Não pode ser oferecido de novo (link do WhatsApp, catálogo, nova sacola).
+export const indisponivelParaVenda = (it, agora = new Date()) => foraDoEstoque(it?.status) || separadoEmSacola(it, agora);
+export const motivoIndisponivel = (it, agora = new Date()) =>
+  separadoEmSacola(it, agora) ? `separado na sacola ${it.reservado_por_orc || ""}`.trim()
+    : foraDoEstoque(it?.status) ? `${statusMeta(it.status).label.toLowerCase()}` : null;
+export const STATUS_SEPARADO = { id: "SEPARADO", label: "Vendido · separado", short: "Separado", color: "bg-emerald-600 text-white" };
+// statusMeta considerando a sacola: item separado aparece como "Vendido · separado ORC-xxxx".
+export const statusMetaItem = (it, agora = new Date()) =>
+  separadoEmSacola(it, agora)
+    ? { ...STATUS_SEPARADO, label: `${STATUS_SEPARADO.label}${it.reservado_por_orc ? ` ${it.reservado_por_orc}` : ""}` }
+    : statusMeta(it?.status);
+
+// Filtro de status para consultas PostgREST de `itens`, com separados contando como vendidos:
+// - "VENDIDO": vendidos + separados em sacola ativa;
+// - outro status de estoque (ex.: ANUNCIADO): só os que não estão separados;
+// - sem status: estoque disponível (fora VENDIDO/ENTREGUE/DESCARTE e fora os separados),
+//   salvo `incluirFora` (mostra tudo).
+export function filtrarStatusItens(query, status, { incluirFora = false, agora = new Date() } = {}) {
+  const iso = new Date(agora).toISOString();
+  const livre = `reservado_ate.is.null,reservado_ate.lte.${iso}`;
+  if (status === "VENDIDO")
+    return query.or(`status.eq.VENDIDO,and(reservado_ate.gt.${iso},status.not.in.${STATUS_FORA_ESTOQUE_IN})`);
+  if (status) return foraDoEstoque(status) ? query.eq("status", status) : query.eq("status", status).or(livre);
+  if (incluirFora) return query;
+  return query.not("status", "in", STATUS_FORA_ESTOQUE_IN).or(livre);
+}
+
 // Foto principal = foto de menor `ordem`. Para tornar uma foto a principal,
 // damos a ela uma ordem abaixo do mínimo atual do SKU (min − 1). Assim ela vira
 // a capa em todos os consumidores (catálogo, portfólio, miniatura, anúncio) sem

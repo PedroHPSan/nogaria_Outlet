@@ -2,7 +2,7 @@
 // Itens + filtro por caixa). O dedup/agrupamento/selos são PUROS e vivem em
 // catalogoCore.js (testáveis em Node); aqui fica só a query no supabase.
 import { supabase } from "./supabase.js";
-import { LOTE_SEM } from "./model.js";
+import { LOTE_SEM, filtrarStatusItens } from "./model.js";
 import { DESTINO_SEM, DESTINO_INTL, CATALOGO_STATUS_EXCLUIR, CATALOGO_ESTADO_BADGE } from "./catalogoCore.js";
 import { destinosInternacionais } from "./destinos.js";
 
@@ -35,7 +35,6 @@ export async function listarItensCatalogo(filtros = {}) {
       return partes.flat().sort((a, b) => (b.preco_ideal || 0) - (a.preco_ideal || 0) || String(a.sku).localeCompare(String(b.sku)));
     }
   }
-  const excluirStatus = `(${CATALOGO_STATUS_EXCLUIR.join(",")})`;
 
   const PAGE = 1000;
   let data = [];
@@ -45,8 +44,8 @@ export async function listarItensCatalogo(filtros = {}) {
     if (lote === LOTE_SEM) query = query.is("lote", null);
     else if (lote) query = query.eq("lote", Number(lote));
     if (classe) query = query.eq("classe", classe);
-    if (status) query = query.eq("status", status);
-    else if (statusPadrao) query = query.not("status", "in", excluirStatus);
+    // catálogo = o que pode ser vendido: separados em sacola do WhatsApp ficam de fora
+    if (status || statusPadrao) query = filtrarStatusItens(query, status);
     if (grupo) query = query.eq("grupo", grupo);
     if (destino === DESTINO_SEM) query = query.is("destino", null);
     else if (destino === DESTINO_INTL) query = query.in("destino", destinosInternacionais());

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import {
   listarCaixas, buscarCaixa, itensDaCaixa, itensFaltandoDaCaixa, adicionarItemCaixa,
   registrarChegada, definirApelidoCaixa, localizarItem, reabrirCaixa, fecharCaixa,
@@ -18,8 +19,8 @@ import {
   ChevronLeft, MapPin, CalendarCheck, ClipboardCheck, PackageX, Search, CheckCircle2, History, QrCode, Printer, Pencil,
 } from "lucide-react";
 
-const BarcodeScanner = React.lazy(() => import("./BarcodeScanner"));
-const LazyLabelPrint = React.lazy(() => import("../components/labels/LabelPrint"));
+const BarcodeScanner = lazySeguro(() => import("./BarcodeScanner"));
+const LazyLabelPrint = lazySeguro(() => import("../components/labels/LabelPrint"));
 
 // data de hoje em "YYYY-MM-DD" (para o <input type=date>).
 const hojeISO = () => new Date().toISOString().slice(0, 10);

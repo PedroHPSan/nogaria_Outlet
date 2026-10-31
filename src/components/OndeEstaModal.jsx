@@ -1,8 +1,9 @@
 import React, { useState, Suspense } from "react";
+import { lazySeguro } from "../lib/lazySeguro";
 import { localizarItem, CAIXA_STATUS } from "../lib/caixas";
 import { X, Loader2, ScanLine, Search, Package, CheckCircle2, AlertTriangle, MapPin } from "lucide-react";
 
-const BarcodeScanner = React.lazy(() => import("../screens/BarcodeScanner"));
+const BarcodeScanner = lazySeguro(() => import("../screens/BarcodeScanner"));
 
 // "Onde está?": lê/digita SKU ou GTIN e diz na hora se o produto está numa caixa
 // (qual, com apelido e status) ou solto. Segue pronto para a próxima leitura.
