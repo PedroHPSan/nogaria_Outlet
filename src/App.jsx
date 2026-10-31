@@ -74,7 +74,8 @@ export default function App() {
   // sessão de autenticação
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>
+      setSession((prev) => (prev?.user?.id === s?.user?.id && prev?.access_token === s?.access_token ? prev : s)));
     return () => sub.subscription.unsubscribe();
   }, []);
 
