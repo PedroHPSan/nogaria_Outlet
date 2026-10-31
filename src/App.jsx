@@ -51,7 +51,9 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = carregando
   const [lotes, setLotes] = useState([]);
   const [tab, setTab] = useState("painel");
-  const [destKey, setDestKey] = useState(0); // remonta as telas quando a lista de destinos muda
+  // Versão da lista de destinos: só força um re-render (as telas leem DESTINOS a cada render).
+  // NÃO usar como `key` de nada — remontar a árvore apagava formulários abertos (cadastro em andamento).
+  const [, setDestVersion] = useState(0);
   const [showDestinos, setShowDestinos] = useState(false);
   const [openItem, setOpenItem] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -76,6 +78,10 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // O supabase-js emite um objeto de sessão NOVO a cada refresh de token e quando a aba/app volta
+  // a ficar visível. Os efeitos de carga dependem só do usuário, para não reexecutar nesses eventos.
+  const userId = session?.user?.id;
+
   // lotes não são realtime; recarrega sob demanda (ex.: ao criar um lote novo)
   const loadLotes = useCallback(() => {
     supabase.from("lotes").select("*").order("lote").then(({ data }) => setLotes(data || []));
@@ -83,15 +89,15 @@ export default function App() {
 
   // parâmetros de precificação (tabelas pricing_*); cai em DEFAULT_PARAMS se falhar
   useEffect(() => {
-    if (!session) return;
+    if (!userId) return;
     carregarParametros().then(setParams).catch(() => {});
-  }, [session]);
+  }, [userId]);
 
   // Deep-link: abrir direto uma ficha pela URL (?item=SKU). Usado pelo QR exibido
   // no notebook — o celular lê o QR e cai exatamente neste cadastro para fotografar.
   const deepLinkRef = useRef(false);
   useEffect(() => {
-    if (!session || deepLinkRef.current) return;
+    if (!userId || deepLinkRef.current) return;
     const sku = new URLSearchParams(window.location.search).get("item");
     if (!sku) return;
     deepLinkRef.current = true;
@@ -101,17 +107,17 @@ export default function App() {
       // limpa o parâmetro para não reabrir num refresh
       window.history.replaceState({}, "", window.location.pathname);
     })();
-  }, [session]);
+  }, [userId]);
 
   // destinos cadastráveis (lista viva em DESTINOS); sem tabela/rede, fica a lista padrão
   useEffect(() => {
-    if (!session) return;
-    carregarDestinos().then((ok) => ok && setDestKey((k) => k + 1));
-  }, [session]);
+    if (!userId) return;
+    carregarDestinos().then((ok) => ok && setDestVersion((k) => k + 1));
+  }, [userId]);
 
   // dados base + realtime
   useEffect(() => {
-    if (!session) return;
+    if (!userId) return;
     loadLotes();
     supabase.from("eventos").select("*").order("ts", { ascending: false }).limit(80).then(({ data }) => setEventos(data || []));
 
@@ -123,7 +129,7 @@ export default function App() {
       )
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [session, loadLotes]);
+  }, [userId, loadLotes]);
 
   const onSaved = useCallback(() => setRefreshKey((k) => k + 1), []);
   const onCreated = useCallback(() => { loadLotes(); setRefreshKey((k) => k + 1); setShowNew(false); }, [loadLotes]);
@@ -137,7 +143,7 @@ export default function App() {
   const user = session.user;
 
   return (
-    <div key={destKey} className="min-h-screen bg-gray-50 max-w-lg mx-auto relative">
+    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto relative">
       <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center"><Package className="w-4 h-4 text-white" /></div>
@@ -262,7 +268,7 @@ export default function App() {
           onOpenItem={(it) => { setShowOndeEsta(false); setOpenItem(it); }}
         />
       )}
-      {showDestinos && <DestinosModal onClose={() => { setShowDestinos(false); setDestKey((k) => k + 1); }} />}
+      {showDestinos && <DestinosModal onClose={() => { setShowDestinos(false); setDestVersion((k) => k + 1); }} />}
       {showSalas && (
         <SalasScreen
           user={user}
