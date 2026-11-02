@@ -2,7 +2,7 @@
 import assert from "node:assert";
 import { elegibilidadeCatalogo as el } from "../src/lib/catalogoElegibilidade.js";
 
-const ok = { status: "FOTOGRAFADO", preco_ideal: 50, estado: "BOM", grupo: "Casa" };
+const ok = { status: "FOTOGRAFADO", preco_ideal: 50, preco_aprovacao: "APROVADO", estado: "BOM", grupo: "Casa" };
 const ctx = { fotos: 1 };
 
 assert.deepStrictEqual(el(ok, ctx), { elegivel: true, motivos: [] });
@@ -15,6 +15,8 @@ assert.deepStrictEqual(el({ ...ok, preco_ideal: null }, ctx).motivos, ["sem_prec
 assert.deepStrictEqual(el({ ...ok, estado: null }, ctx).motivos, ["sem_estado"]);
 assert.deepStrictEqual(el({ ...ok, grupo: "  " }, ctx).motivos, ["sem_categoria"]);
 assert.deepStrictEqual(el(ok, { ...ctx, reservado: true }).motivos, ["reservado"]);
+assert.deepStrictEqual(el({ ...ok, preco_aprovacao: null }, ctx).motivos, ["preco_nao_validado"]);
+assert.deepStrictEqual(el({ ...ok, preco_aprovacao: "PENDENTE" }, ctx).motivos, ["preco_nao_validado"]);
 assert.deepStrictEqual(el({ ...ok, preco_ideal: 0, grupo: null }, { fotos: 0, reservado: true }).motivos,
   ["sem_foto", "sem_preco", "sem_categoria", "reservado"]);
 console.log("catalogo elegibilidade: ok");

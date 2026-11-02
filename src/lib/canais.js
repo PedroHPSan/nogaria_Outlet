@@ -19,3 +19,11 @@ export const retirarDeTodos = (sku, user) => rpc("retirar_de_todos", { p_sku: sk
 export const painelCatalogo = () => rpc("catalogo_painel");
 export const jobsComProblema = async () => [...(await rpc("jobs_listar", { p_status: "morto", p_limite: 50 })), ...(await rpc("jobs_listar", { p_status: "erro", p_limite: 50 }))];
 export const reenfileirarJob = (id) => rpc("job_reenfileirar", { p_id: id });
+
+// Tirar uma oferta do catálogo é decisão deliberada da Bárbara: fica registrada e a peça não volta a ser oferecida.
+export async function excluirDoCatalogo(skus, user) {
+  const linhas = skus.map((sku) => ({ sku, canal: "whatsapp", estado: "pausado", pausado_motivo: "excluido", updated_at: new Date().toISOString() }));
+  const { error } = await supabase.from("listing_state").upsert(linhas, { onConflict: "sku,canal" });
+  if (error) throw error;
+  await supabase.from("eventos").insert(skus.map((sku) => ({ sku, acao: "catalogo:excluido", usuario: user?.email ?? null })));
+}
