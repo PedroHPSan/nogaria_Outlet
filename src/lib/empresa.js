@@ -3,8 +3,9 @@
 // Edite aqui para mudar o WhatsApp/nome que aparece no PDF e no QR.
 export const EMPRESA = {
   nome: "Nogária Outlet",
-  whatsapp: "5591983929085",       // só dígitos (país+DDD+número), formato do wa.me
-  whatsappLabel: "+55 91 98392-9085",
+  whatsapp: "5591992561815",       // só dígitos (país+DDD+número), formato do wa.me — número oficial desde 2026-11-02
+  whatsappLabel: "+55 91 99256-1815",
+  entrega: "Entrega grátis em Belém e Ananindeua. Outras cidades: a combinar, por transportadora.",
   tagline: "Logística Reversa & Outlet",
 };
 

@@ -3,7 +3,7 @@
 import { EMPRESA } from "./empresa.js";
 
 export const CHAVES_CONTATO = [
-  { chave: "whatsapp", rotulo: "WhatsApp (DDI+DDD+número)", placeholder: "5591983929085" },
+  { chave: "whatsapp", rotulo: "WhatsApp (DDI+DDD+número)", placeholder: "5591992561815" },
   { chave: "instagram", rotulo: "Instagram", placeholder: "@nogaria" },
   { chave: "site", rotulo: "Site", placeholder: "www.nogaria.com.br" },
   { chave: "email", rotulo: "E-mail", placeholder: "contato@…" },
@@ -12,7 +12,7 @@ export const CHAVES_CONTATO = [
   { chave: "horario", rotulo: "Horário", placeholder: "Seg–Sáb, 9h–18h" },
 ];
 
-// 5591983929085 → "+55 91 98392-9085" (celular BR); fora do padrão, devolve "+dígitos".
+// 5591992561815 → "+55 91 99256-1815" (celular BR); fora do padrão, devolve "+dígitos".
 export function rotuloWhatsApp(digitos) {
   const d = String(digitos || "").replace(/\D/g, "");
   const m = d.match(/^(55)(\d{2})(9?\d{4})(\d{4})$/);

@@ -119,6 +119,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
           </button>
         )}
         {p.itens.length > 1 && <h1 className="text-lg font-extrabold text-gray-900">{p.titulo}</h1>}
+        {!euro && <p className="rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold px-3 py-2">🚚 {EMPRESA.entrega}</p>}
         {p.itens.map((it) => {
           const vendido = vendidos.includes(it.sku);
           const misto = euro && it.preco > 0 ? precoMisto(it.preco, cotacao?.taxa) : null;
