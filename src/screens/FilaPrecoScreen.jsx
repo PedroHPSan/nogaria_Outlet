@@ -84,14 +84,14 @@ export default function FilaPrecoScreen({ params, user, onClose, onOpen }) {
             {pub.ok} publicada(s){pub.erros.length ? `, ${pub.erros.length} com erro: ${pub.erros.slice(0, 3).map((e) => `${e.sku} (${e.erro})`).join("; ")}` : "."}</p>}
         </div>
       )}
-      {(filtro === "sem_preco" || filtro === "preco_nao_validado") && lista && visiveis.length > 0 && (
+      {filtro === "sem_preco" && lista && visiveis.length > 0 && (
         <div className="mx-4 mb-2 bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-600">Lote:</span>
           {TAMANHOS_LOTE.map((t) => (
             <button key={t} onClick={() => setTamanho(t)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${tamanho === t ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-700"}`}>{t === TAMANHOS_LOTE[0] ? `${t} (piloto)` : t}</button>
           ))}
           <button onClick={precificar} disabled={abrindo} className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50">
-            {abrindo ? <Loader2 className="w-4 h-4 animate-spin" /> : `${filtro === "sem_preco" ? "Precificar" : "Validar preço de"} ${Math.min(tamanho, visiveis.length)} peças`}
+            {abrindo ? <Loader2 className="w-4 h-4 animate-spin" /> : `Precificar ${Math.min(tamanho, visiveis.length)} peças`}
           </button>
         </div>
       )}

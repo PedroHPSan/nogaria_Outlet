@@ -4,7 +4,7 @@ import { X, Loader2, LayoutDashboard } from "lucide-react";
 import { painelCatalogo, jobsComProblema, reenfileirarJob } from "../lib/canais";
 import { fmtBrasilia } from "../lib/filaPublicacao";
 
-const BLOQUEIOS = [["sem_preco", "Sem preço"], ["preco_nao_validado", "Preço sem validação"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
+const BLOQUEIOS = [["sem_preco", "Sem preço"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
 const N = (v) => Number(v ?? 0).toLocaleString("pt-BR");
 
 export default function PainelCanaisScreen({ onClose }) {

@@ -14,7 +14,6 @@ export function elegibilidadeCatalogo(item, ctx = {}) {
   else if (!STATUS_CATALOGO.includes(item.status)) motivos.push("etapa");
   if (!(ctx.fotos > 0)) motivos.push("sem_foto");
   if (!(Number(item.preco_ideal) > 0)) motivos.push("sem_preco");
-  else if (item.preco_aprovacao !== "APROVADO") motivos.push("preco_nao_validado"); // preço é subjetivo: a Bárbara valida
   if (!item.estado) motivos.push("sem_estado");
   if (!String(item.grupo ?? "").trim()) motivos.push("sem_categoria");
   if (!FINAIS.includes(item.status) && ctx.reservado) motivos.push("reservado");
