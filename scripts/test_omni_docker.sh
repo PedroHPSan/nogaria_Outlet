@@ -80,6 +80,14 @@ OUT7=$($PSQL -A -t -F' | ' < scripts/sql/test_fila.sql 2>&1)
 echo "$OUT7"
 echo "$OUT7" | grep -q "^FAIL" && { echo "HÁ FALHAS (fila)"; exit 1; }
 echo "$OUT7" | grep -q "^PASS" || { echo "nenhum PASS na fila"; exit 1; }
+# N1: trava de status + RPCs de transição
+MIG8=supabase/migrations/20261102200000_guarda_status.sql
+$PSQL < $MIG8 || { echo "FALHA ao aplicar a migration da guarda de status"; exit 1; }
+$PSQL < $MIG8 || { echo "FALHA: migration da guarda de status não é idempotente"; exit 1; }
+OUT8=$($PSQL -A -t -F' | ' < scripts/sql/test_guarda_status.sql 2>&1)
+echo "$OUT8"
+echo "$OUT8" | grep -q "^FAIL" && { echo "HÁ FALHAS (guarda de status)"; exit 1; }
+echo "$OUT8" | grep -q "^PASS" || { echo "nenhum PASS na guarda de status"; exit 1; }
 # Teto por número sob concorrência: 6 sessões do mesmo número reservam SKUs diferentes → no máximo 3.
 $PSQL -c "insert into itens (sku, produto, status) select 'TT'||g, 'T', 'PRONTO' from generate_series(1,6) g; insert into contatos_whatsapp (wa_id) values ('5599'); insert into listing_state (sku, canal, estado) select 'TT'||g, 'whatsapp', 'publicado' from generate_series(1,6) g;" || exit 1
 for i in $(seq 1 6); do

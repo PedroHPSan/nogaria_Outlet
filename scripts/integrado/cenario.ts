@@ -157,7 +157,25 @@ check((await reservaSacola([r3s], "ORC-OUTRO", 3)).status < 300, "outra origem p
 const conflito = await reservaSacola([r3s, sku(6, 9)], "ORC-R2", 3);
 check(conflito.status >= 400 && /ORC-OUTRO/.test(JSON.stringify(conflito.data)), "reabrir com item já separado por outro é recusado com o motivo", conflito.data);
 
-console.log("== 7. Saúde geral ==");
+console.log("== 7. Guarda de status (N1/N2): o app não consegue vender direto ==");
+const [v1, v2, v3] = [sku(7, 1), sku(7, 2), sku(7, 3)];
+await insere("itens", [v1, v2, v3].map((k) => ({ sku: k, produto: "V", status: "PRONTO" })));
+const direto = await rest(`/itens?sku=eq.${v1}`, { method: "PATCH", body: { status: "VENDIDO" }, jwt: USER });
+check(direto.status >= 400 && /só por RPC/.test(JSON.stringify(direto.data)), "PATCH direto para VENDIDO (usuário logado) é recusado pelo banco", direto);
+check(((await rest(`/itens?sku=eq.${v1}`)).data as any[])[0].status === "PRONTO", "o item continua PRONTO depois da tentativa");
+check((await rest(`/itens?sku=eq.${v1}`, { method: "PATCH", body: { status: "PRECIFICADO" }, jwt: USER })).status < 300, "etapa comum da triagem continua editável direto");
+check((await rpc("mover_etapa", { p_sku: v1, p_para: "PRONTO", p_user: "teste", p_de_label: "Precificado" }, USER)).status < 300, "mover_etapa por RPC funciona");
+// o cenário do R1: o bot reservou, a equipe tenta vender na ficha para outra origem
+await rpc("reservar_item", { p_sku: v2, p_canal: "whatsapp", p_origem_tipo: "carrinho_wa", p_origem_ref: "5591900000009", p_expira_em: new Date(Date.now() + 36e5).toISOString() });
+const vendaFicha = await rpc("baixar_venda", { p_sku: v2, p_valor: 80, p_canal_venda: "B2C / Venda direta", p_pedido_ref: "FICHA-1", p_user: "teste" }, USER);
+check(vendaFicha.status >= 400 && /reservado por 5591900000009/.test(JSON.stringify(vendaFicha.data)), "vender na ficha item reservado pelo bot é recusado com o motivo", vendaFicha.data);
+check((await rpc("baixar_venda", { p_sku: v3, p_valor: 50, p_canal_venda: "WhatsApp", p_pedido_ref: "OK-1", p_user: "teste" }, USER)).status < 300, "venda de item livre passa pela RPC");
+check((await rpc("mover_etapa", { p_sku: v3, p_para: "PRONTO", p_user: "teste" }, USER)).status >= 400, "voltar item vendido por mover_etapa é recusado");
+check((await rpc("marcar_entregue", { p_sku: v3, p_user: "teste" }, USER)).status < 300, "marcar_entregue por RPC");
+const reab = await rpc("reabrir_estoque", { p_sku: v3, p_motivo: "cliente devolveu", p_para: "PRONTO", p_user: "teste" }, USER);
+check(reab.status < 300 && ((await rest(`/itens?sku=eq.${v3}`)).data as any[])[0].status === "PRONTO", "reabrir_estoque devolve o item ao estoque");
+
+console.log("== 8. Saúde geral ==");
 const ruins = (await rest(`/integracao_jobs?status=in.(erro,morto)`)).data as any[];
 check(ruins.length === 0, "nenhum job em erro/morto ao final", ruins);
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "../lib/supabase";
+import { moverEtapa } from "../lib/conferencia";
 import { ALL_STATUS, LOTE_SEM, DESTINOS, filtrarStatusItens, fmtBRL } from "../lib/model";
 import {
   COLUNAS_PLANILHA, COLUNAS_PADRAO, COLUNAS_FIXAS, GRUPOS_COLUNAS, CLASSES,
@@ -148,20 +149,26 @@ export default function PlanilhaScreen({ lotes, params, user, onOpen, refreshKey
     if (patch[campo] === (it[campo] ?? null)) return; // nada mudou
 
     setSalvando(it.sku);
+    // Status NUNCA é gravado direto: passa pela RPC `mover_etapa` (que recusa VENDIDO/ENTREGUE — a venda
+    // é feita na ficha, "Vender" — e item reservado em ANUNCIADO/DESCARTE) e registra o evento no banco.
+    if (campo === "status") {
+      try {
+        await moverEtapa(it.sku, patch.status, user, ALL_STATUS.find((s2) => s2.id === it.status)?.label);
+        const { data: fresco } = await supabase.from("itens").select("*").eq("sku", it.sku).single();
+        setSalvando(null);
+        setItens((arr) => (arr || []).map((x) => (x.sku === it.sku ? (fresco || { ...x, status: patch.status }) : x)));
+        setMsg({ tom: "ok", texto: `${it.sku} · ${col.header} atualizado.` });
+      } catch (e) {
+        setSalvando(null);
+        setMsg({ tom: "erro", texto: `${it.sku}: ${e.message || e}` });
+      }
+      return;
+    }
     const corpo = { ...patch, upd_by: user?.email };
-    // Carimbos de pós-venda ao mudar o status pela planilha (espelha ItemDetail).
-    if (campo === "status" && patch.status === "VENDIDO" && !it.vendido_em) corpo.vendido_em = new Date().toISOString();
-    if (campo === "status" && patch.status === "ENTREGUE") corpo.entregue_em = new Date().toISOString();
 
     const { data, error } = await supabase.from("itens").update(corpo).eq("sku", it.sku).select().single();
     setSalvando(null);
     if (error) { setMsg({ tom: "erro", texto: `Erro ao salvar: ${error.message}` }); return; }
-    if (campo === "status") {
-      // Auditoria do fluxo, igual à da ficha (best-effort: não desfaz o salvamento).
-      await supabase.from("eventos")
-        .insert({ sku: it.sku, acao: `status:${patch.status}`, detalhe: "planilha", usuario: user?.email })
-        .then(null, () => {});
-    }
     setItens((arr) => (arr || []).map((x) => (x.sku === it.sku ? data : x)));
     setMsg({ tom: "ok", texto: `${it.sku} · ${col.header} atualizado.` });
   }, [user]);

@@ -8,7 +8,8 @@ import {
 import { buildProductLabel, genQrDataUrl } from "../lib/labels";
 import { enviarFoto, definirFotoPrincipal } from "../lib/fotos";
 import { avisosSubstituicao } from "../lib/catalogarStats";
-import { moverEtapa, desmembrarItem, aplicarProdutoACatalogar, contarACatalogarDoLote, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
+import { registrarVenda, marcarEntregue } from "../lib/vendas";
+import { moverEtapa, reabrirEstoque, desmembrarItem, aplicarProdutoACatalogar, contarACatalogarDoLote, testeObrigatorio, registrarSemTeste, propagarCategoriaIrmaos, propagarEnriquecimentoIrmaos } from "../lib/conferencia";
 import { MEDIDAS_FONTE, fonteLabel, estimarPorCategoria, registrarMedida } from "../lib/medidas";
 import { diagnosticarPorCanal } from "../lib/export";
 import { buscarViasImpressao } from "../lib/printLog";
@@ -234,10 +235,16 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   // Volta o item para a etapa anterior, com registro no histórico (rastreabilidade).
   const voltarEtapa = async () => {
     if (!prev) return;
-    if (!window.confirm(`Voltar este item para "${prev.label}"?`)) return;
+    const vendido = it.status === "VENDIDO" || it.status === "ENTREGUE";
+    // Devolução de item vendido/entregue: pede o motivo e usa reabrir_estoque (a venda anterior fica no histórico).
+    const motivo = vendido ? window.prompt(`Devolver este item ao estoque (volta para "${prev.label}"). Motivo da devolução:`) : null;
+    if (vendido && !motivo?.trim()) return;
+    if (!vendido && !window.confirm(`Voltar este item para "${prev.label}"?`)) return;
     try {
-      await moverEtapa(it.sku, prev.id, user, statusMeta(it.status).label);
-      setIt((p) => ({ ...p, status: prev.id }));
+      if (vendido) await reabrirEstoque(it.sku, motivo, user, "PRONTO");
+      else await moverEtapa(it.sku, prev.id, user, statusMeta(it.status).label);
+      const { data: fresco } = await supabase.from("itens").select("*").eq("sku", it.sku).single();
+      setIt((p) => ({ ...p, ...(fresco || { status: vendido ? "PRONTO" : prev.id }) }));
       onSaved();
     } catch (e) {
       alert("Falha ao voltar etapa: " + (e.message || e));
@@ -507,10 +514,8 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       // Snapshot durável da análise da IA (inclui `aplicados` atualizado por aplicações manuais).
       ia_analise: it.ia_analise ?? null,
       upd_by: user.email,
-      ...(novoStatus ? { status: novoStatus } : {}),
-      // Carimbos de pós-venda na transição (vendido_em só se ainda vazio).
-      ...(novoStatus === "VENDIDO" && !it.vendido_em ? { vendido_em: new Date().toISOString() } : {}),
-      ...(novoStatus === "ENTREGUE" ? { entregue_em: new Date().toISOString() } : {}),
+      // `status` e os carimbos vendido_em/entregue_em NÃO entram aqui: a mudança de etapa passa pelas RPCs
+      // (mover_etapa / baixar_venda / marcar_entregue) logo abaixo — o banco recusa status final gravado direto.
     };
     const { data, error } = await supabase.from("itens").update(patch).eq("sku", it.sku).select().single();
     if (error) { alert("Erro ao salvar: " + error.message); return; }
@@ -523,9 +528,28 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     if (it.preco_ref_fonte === "IA:claude" && (item.preco_ref_fonte !== "IA:claude" || forcarIA)) {
       try { await propagarEnriquecimentoIrmaos(it.sku, user); } catch { /* best-effort */ }
     }
+    let atualizado = data;
     if (novoStatus) {
-      await supabase.from("eventos").insert({ sku: it.sku, acao: "status:" + novoStatus, usuario: user.email });
-      setIt((p) => ({ ...p, status: novoStatus }));
+      try {
+        if (novoStatus === "VENDIDO") {
+          // Venda só pela RPC baixar_venda: recusa item já vendido ou reservado por outra origem (bot, sacola...).
+          await registrarVenda(it.sku, {
+            valor_vendido: it.valor_vendido || null, canal_venda: it.canal_venda || null, taxa_venda: it.taxa_venda || null,
+            frete_pago: it.frete_pago || null, comprador: it.comprador, pedido_ref: it.pedido_ref,
+          }, user);
+        } else if (novoStatus === "ENTREGUE") {
+          await marcarEntregue(it.sku, user);
+        } else {
+          await moverEtapa(it.sku, novoStatus, user, statusMeta(item.status).label);
+        }
+      } catch (e) {
+        alert("Não foi possível mudar a etapa: " + (e.message || e));
+        onSaved(data); // os campos já foram salvos; o status continua o do banco
+        return;
+      }
+      const { data: fresco } = await supabase.from("itens").select("*").eq("sku", it.sku).single();
+      atualizado = fresco || { ...data, status: novoStatus };
+      setIt((p) => ({ ...p, status: atualizado.status, vendido_em: atualizado.vendido_em, entregue_em: atualizado.entregue_em }));
     }
     // Histórico de medição: registra só quando a origem mudou nesta sessão (best-effort).
     if (it.medidas_fonte && it.medidas_fonte !== fonteAbertura.current) {
@@ -534,7 +558,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       fonteAbertura.current = it.medidas_fonte;
     }
     dirty.current = false;
-    onSaved(data);
+    onSaved(atualizado);
   };
 
   const fechar = async () => { if (dirty.current) await salvar(null); onClose(); };
