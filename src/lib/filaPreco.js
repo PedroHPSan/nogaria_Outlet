@@ -3,7 +3,7 @@
 import { supabase } from "./supabase.js";
 import { MOTIVO_ROTULO } from "./catalogoElegibilidade.js";
 
-export const MOTIVOS_FILA = ["sem_preco", "sem_categoria", "sem_estado", "sem_foto"];
+export const MOTIVOS_FILA = ["sem_preco", "preco_nao_validado", "sem_categoria", "sem_estado", "sem_foto"];
 export { MOTIVO_ROTULO };
 export const TAMANHOS_LOTE = [50, 200, 1000];
 

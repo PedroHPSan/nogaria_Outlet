@@ -67,11 +67,12 @@ export async function buscarItemPublico(sku) {
 export async function elegiveisNaoPublicados() {
   const [el, pub] = await Promise.all([
     supabase.rpc("catalogo_elegibilidade", { p_sku: null }),
-    supabase.from("listing_state").select("sku").eq("canal", "whatsapp").eq("estado", "publicado").limit(10000),
+    // publicadas e as que a Bárbara tirou de propósito (excluídas) não voltam a ser oferecidas
+    supabase.from("listing_state").select("sku,estado,pausado_motivo").eq("canal", "whatsapp").limit(10000),
   ]);
   if (el.error) throw el.error;
   if (pub.error) throw pub.error;
-  const publicados = new Set((pub.data || []).map((r) => r.sku));
+  const publicados = new Set((pub.data || []).filter((r) => r.estado === "publicado" || r.pausado_motivo === "excluido").map((r) => r.sku));
   return (el.data || []).filter((r) => r.elegivel && !publicados.has(r.sku)).map((r) => r.sku).sort();
 }
 

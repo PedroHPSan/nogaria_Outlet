@@ -4,7 +4,7 @@ import { X, Loader2, LayoutDashboard } from "lucide-react";
 import { painelCatalogo, jobsComProblema, reenfileirarJob } from "../lib/canais";
 import { fmtBrasilia } from "../lib/filaPublicacao";
 
-const BLOQUEIOS = [["sem_preco", "Sem preço"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
+const BLOQUEIOS = [["sem_preco", "Sem preço"], ["preco_nao_validado", "Preço sem validação"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
 const N = (v) => Number(v ?? 0).toLocaleString("pt-BR");
 
 export default function PainelCanaisScreen({ onClose }) {
@@ -46,6 +46,7 @@ export default function PainelCanaisScreen({ onClose }) {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-3 text-xs space-y-1">
             <p><b>{N(p.elegiveis_nao_publicados)}</b> elegível(is) ainda fora do catálogo.</p>
+            <p className="text-gray-600"><b>{N(p.excluidos)}</b> tirada(s) do catálogo de propósito.</p>
             <p className={p.divergentes ? "text-red-600" : "text-gray-600"}><b>{N(p.divergentes)}</b> no catálogo mas não elegível(is) (saem como "out of stock" no feed).</p>
             <p className="text-gray-400">Atualizado {fmtBrasilia(p.atualizado_em)}</p>
           </div>
