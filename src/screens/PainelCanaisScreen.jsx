@@ -1,7 +1,7 @@
 // Painel catálogo × triagem (C6) + integrações com problema (N6): o que trava o catálogo e o que o worker não conseguiu fazer.
 import React, { useCallback, useEffect, useState } from "react";
 import { X, Loader2, LayoutDashboard } from "lucide-react";
-import { painelCatalogo, jobsComProblema, reenfileirarJob, listarCanais, definirCanalAtivo, CANAL_ROTULO } from "../lib/canais";
+import { painelCatalogo, jobsComProblema, reenfileirarJob, listarCanais, definirCanalAtivo, alertasAbertos, CANAL_ROTULO } from "../lib/canais";
 import { fmtBrasilia } from "../lib/filaPublicacao";
 
 const BLOQUEIOS = [["sem_preco", "Sem preço"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
@@ -11,9 +11,10 @@ export default function PainelCanaisScreen({ onClose, user }) {
   const [p, setP] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [canais, setCanais] = useState([]);
+  const [alertas, setAlertas] = useState([]);
   const [erro, setErro] = useState(null);
   const carregar = useCallback(async () => {
-    try { setErro(null); const [a, b, c] = await Promise.all([painelCatalogo(), jobsComProblema(), listarCanais()]); setP(a); setJobs(b); setCanais(c); } catch (e) { setErro(e.message || String(e)); }
+    try { setErro(null); const [a, b, c, d] = await Promise.all([painelCatalogo(), jobsComProblema(), listarCanais(), alertasAbertos()]); setP(a); setJobs(b); setCanais(c); setAlertas(d); } catch (e) { setErro(e.message || String(e)); }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
   const alternarCanal = async (c) => {
@@ -33,6 +34,12 @@ export default function PainelCanaisScreen({ onClose, user }) {
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {erro && <p className="text-xs text-red-600">{erro}</p>}
+        {alertas.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
+            <p className="text-xs font-bold text-red-700">Alertas ({alertas.length})</p>
+            {alertas.map((a) => <p key={a.chave} className="text-xs text-red-700">{a.detalhe} <span className="text-red-400">desde {fmtBrasilia(a.aberto_em)}</span></p>)}
+          </div>
+        )}
         {!p && !erro && <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto mt-10" />}
         {p && (<>
           <div className="grid grid-cols-2 gap-2 text-center">

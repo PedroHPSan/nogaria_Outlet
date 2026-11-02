@@ -43,3 +43,6 @@ export async function definirCanalAtivo(codigo, ativo, user) {
 
 // Reservas ativas feitas pelo bot do WhatsApp, por cliente (a equipe assume ao criar a sacola: item → Separar).
 export const reservasDoBot = () => rpc("reservas_bot");
+
+// Alertas operacionais abertos (worker parado, job morto, divergência...) — o banco os calcula a cada 5 min.
+export const alertasAbertos = () => rpc("alertas_abertos");
