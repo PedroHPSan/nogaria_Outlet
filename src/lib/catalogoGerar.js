@@ -37,9 +37,9 @@ export async function gerarCatalogoPdfDeItens(itens, specEntrada = {}, { signal,
   return { blob, resumo, spec };
 }
 
-// Cards de divulgação (PNG) para Instagram/WhatsApp: carrossel (capa + produtos + chamada)
+// Cards de divulgação (JPEG) para Instagram/WhatsApp: carrossel (capa + produtos + chamada)
 // ou um card único. Retorna [{ nome, blob }]. Fotos só dos itens que entram nos slides.
-export async function gerarCardsDivulgacao(itens, { formato = "feed", titulo = "Catálogo Nogária Outlet", tema = "noite", contato = {}, mostrarPreco = true } = {}, { signal, onProgress } = {}) {
+export async function gerarCardsDivulgacao(itens, { formato = "feed", titulo = "Catálogo Nogária Outlet", tema = "noite", contato = {}, mostrarPreco = true, euro = null } = {}, { signal, onProgress } = {}) {
   const [{ montarCarrossel }, { renderizarCard }, { genQrDataUrl }] = await Promise.all([
     import("./cardCore.js"), import("./cardImagem.js"), import("./labels.js"),
   ]);
@@ -50,10 +50,11 @@ export async function gerarCardsDivulgacao(itens, { formato = "feed", titulo = "
   const numero = contato.whatsapp || "";
   const qrContato = numero ? await genQrDataUrl(`https://wa.me/${numero}?text=${encodeURIComponent("Olá! Vi o anúncio da Nogária Outlet e quero atendimento.")}`) : null;
   const ctxPorSku = Object.fromEntries(escolhidos.map((i) => [i.sku, { foto: fotos[i.sku] }]));
-  const slides = montarCarrossel(itens, titulo, formato, ctxPorSku, { tema, contato, mostrarPreco, qrContato, logoBranco: LOGO_BRANCO, logoRatio: 265 / 520 });
+  const slides = montarCarrossel(itens, titulo, formato, ctxPorSku, { tema, contato, mostrarPreco, euro, qrContato, logoBranco: LOGO_BRANCO, logoRatio: 265 / 520 });
   const saida = [];
   for (let i = 0; i < slides.length; i++) {
-    saida.push({ nome: `${formato}-${String(i + 1).padStart(2, "0")}.png`, blob: await renderizarCard(slides[i]) });
+    // JPEG: o Instagram não aceita PNG na publicação por API e o arquivo fica bem menor no celular
+    saida.push({ nome: `${formato}-${String(i + 1).padStart(2, "0")}.jpg`, blob: await renderizarCard(slides[i], { tipo: "image/jpeg", qualidade: 0.9 }) });
   }
   return saida;
 }

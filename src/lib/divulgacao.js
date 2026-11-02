@@ -2,9 +2,10 @@
 // para catálogo do WhatsApp Business. Sem rede; testável em Node.
 import { precoVenda } from "./export.js";
 import { fraseCondicao } from "./catalogoCore.js";
+import { tamanhoEtiqueta } from "./tamanhos.js";
 
 export const LIMITE_LEGENDA_IG = 2200;
-export const LIMITE_HASHTAGS_IG = 30;
+export const LIMITE_HASHTAGS_IG = 5; // o Instagram limita a 5 hashtags por post/reel desde dez/2025
 export const MAX_ITENS_WHATSAPP = 30; // espelha a "mensagem com vários produtos" do WhatsApp
 
 const brl = (v) => `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
@@ -18,10 +19,12 @@ export function hashtagDe(texto) {
   return `#${partes.map((p, i) => (i ? p[0].toUpperCase() + p.slice(1) : p)).join("")}`;
 }
 
-const BASE = ["#nogaria", "#outlet", "#belem", "#moveis", "#decoracao", "#ofertas"];
-export function hashtagsPara(grupos = [], { max = 12 } = {}) {
-  const dinamicas = [...new Set(grupos.map(hashtagDe).filter(Boolean))];
-  return [...new Set([...BASE, ...dinamicas])].slice(0, Math.min(max, LIMITE_HASHTAGS_IG));
+// Marca primeiro, depois até 2 do grupo do produto, e fecha com as de alcance (outlet/Belém).
+const MARCA = "#nogaria";
+const ALCANCE = ["#outlet", "#belem"];
+export function hashtagsPara(grupos = [], { max = LIMITE_HASHTAGS_IG } = {}) {
+  const dinamicas = [...new Set(grupos.map(hashtagDe).filter(Boolean))].slice(0, 2);
+  return [...new Set([MARCA, ...dinamicas, ...ALCANCE])].slice(0, Math.min(max, LIMITE_HASHTAGS_IG));
 }
 
 const linhaItem = (it, { comPreco = true } = {}) => {
@@ -66,6 +69,23 @@ export function textoInstagram(itens, { titulo = "Novidades no outlet", validade
     legenda = `${corpo.slice(0, Math.max(0, sobra))}…\n\n${tags}`;
   }
   return legenda;
+}
+
+// Legenda de UM produto para feed/story: nome, condição · tamanho (calçado: EU · BR) · marca, preço, código e chamada.
+export function legendaProduto(it, { contato, mostrarPreco = true } = {}) {
+  const p = preco(it);
+  const detalhes = [fraseCondicao(it), tamanhoEtiqueta(it) ? `TAM ${tamanhoEtiqueta(it)}` : "", it.marca].filter(Boolean).join(" · ");
+  const tags = hashtagsPara([it.grupo].filter(Boolean)).join(" ");
+  return [
+    `${it.produto || it.sku} ✨`,
+    detalhes || null,
+    mostrarPreco && p > 0 ? `Por ${brl(p)}` : null,
+    `Código ${it.sku}`,
+    "",
+    contato ? `Quer? Chame no WhatsApp: ${contato}` : "Quer? Chame no WhatsApp (link na bio).",
+    "",
+    tags,
+  ].filter((l) => l !== null).join("\n");
 }
 
 export const legendaCard = (it) => `${it.produto || it.sku}${preco(it) > 0 ? ` por ${brl(preco(it))}` : ""} · ${fraseCondicao(it) || "consulte a condição"} · ${it.sku}`;
