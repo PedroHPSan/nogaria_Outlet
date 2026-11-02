@@ -22,16 +22,6 @@ const json = (body: unknown, status = 200) =>
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, SERVICE_ROLE);
 
-// Lê o claim `role` de um JWT sem verificar assinatura (o gateway já validou a apikey).
-function jwtRole(t: string): string | null {
-  try {
-    const p = t.split(".")[1];
-    const pad = p + "=".repeat((4 - (p.length % 4)) % 4);
-    const payload = JSON.parse(atob(pad.replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.role ?? null;
-  } catch { return null; }
-}
-
 const MARKETPLACE_ID = "A2Q3Y263D00KWC"; // Amazon BR
 const SPAPI_BASE = "https://sellingpartnerapi-na.amazon.com"; // BR usa a região NA
 const LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token";
@@ -96,13 +86,12 @@ async function fetchTodasListagens(token: string, sellerId: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    // Auth: service_role (admin/automação) ou usuário logado. O gateway do Supabase já
-    // valida a ASSINATURA da apikey antes de rotear; aqui basta conferir o claim `role`
-    // (cobre legado JWT e variações de valor do SERVICE_ROLE injetado) ou getUser p/ sessão.
+    // Auth (verify_jwt off: o gateway NÃO valida o token): x-cron-secret, chave service_role exata
+    // ou sessão de usuário verificada por getUser. Nunca confiar no claim `role` sem checar assinatura.
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
     const cron = Deno.env.get("CRON_SECRET");
     let autorizado = (!!cron && req.headers.get("x-cron-secret") === cron)
-      || (!!bearer && (bearer === SERVICE_ROLE || jwtRole(bearer) === "service_role"));
+      || (!!bearer && bearer === SERVICE_ROLE);
     if (!autorizado && bearer) {
       const { data: u } = await admin.auth.getUser(bearer);
       autorizado = !!u?.user;
