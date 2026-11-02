@@ -29,3 +29,5 @@ verify_jwt = false
 verify_jwt = true
 [functions.buscar-imagens]
 verify_jwt = true
+[functions.whatsapp-webhook]
+verify_jwt = false

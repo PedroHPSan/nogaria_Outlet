@@ -2,6 +2,8 @@
 // falha (o worker aplica backoff). Novos canais registram aqui (ex.: "amazon.quantidade" no E3-2).
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
+import { processarWhatsapp } from "./whatsapp.ts";
+
 export type Handler = (payload: Record<string, unknown>, ctx: { dryRun: boolean; admin: SupabaseClient }) => Promise<void>;
 
 // Enquanto o processamento real de cada canal não existe (E1-2, E4-2), só marca o evento da inbox como visto.
@@ -13,7 +15,7 @@ const marcarProcessado: Handler = async (payload, { admin }) => {
 
 export const handlers: Record<string, Handler> = {
   "processar.mercadolivre": marcarProcessado,
-  "processar.whatsapp": marcarProcessado,
+  "processar.whatsapp": processarWhatsapp,
   "processar.instagram": marcarProcessado,
   // Usado em testes locais e para validar o ciclo cron → worker.
   noop: async (payload) => {

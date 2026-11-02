@@ -44,6 +44,14 @@ OUT3=$($PSQL -A -t -F' | ' < scripts/sql/test_omni_worker.sql 2>&1)
 echo "$OUT3"
 echo "$OUT3" | grep -q "^FAIL" && { echo "HÁ FALHAS (worker)"; exit 1; }
 echo "$OUT3" | grep -q "^PASS" || { echo "nenhum PASS no worker"; exit 1; }
+# E1-2: WhatsApp
+MIG4=supabase/migrations/20261102150000_whatsapp_base.sql
+$PSQL < $MIG4 || { echo "FALHA ao aplicar a migration do WhatsApp"; exit 1; }
+$PSQL < $MIG4 || { echo "FALHA: migration do WhatsApp não é idempotente"; exit 1; }
+OUT4=$($PSQL -A -t -F' | ' < scripts/sql/test_whatsapp.sql 2>&1)
+echo "$OUT4"
+echo "$OUT4" | grep -q "^FAIL" && { echo "HÁ FALHAS (WhatsApp)"; exit 1; }
+echo "$OUT4" | grep -q "^PASS" || { echo "nenhum PASS no WhatsApp"; exit 1; }
 # Concorrência: 8 sessões reservam o mesmo SKU ao mesmo tempo → exatamente 1 vence.
 $PSQL -c "insert into itens (sku, produto, status) values ('CC1','Conc','PRONTO');" || exit 1
 for i in $(seq 1 8); do
