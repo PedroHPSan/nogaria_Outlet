@@ -33,3 +33,5 @@ verify_jwt = true
 verify_jwt = false
 [functions.catalogo-meta-feed]
 verify_jwt = false
+[functions.whatsapp-signup]
+verify_jwt = false

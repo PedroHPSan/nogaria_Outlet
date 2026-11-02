@@ -1,6 +1,8 @@
 // Painel catálogo × triagem (C6) + integrações com problema (N6): o que trava o catálogo e o que o worker não conseguiu fazer.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { X, Loader2, LayoutDashboard } from "lucide-react";
+import { lazySeguro } from "../lib/lazySeguro";
+const ConectarWhatsAppScreen = lazySeguro(() => import("./ConectarWhatsAppScreen"));
 import { painelCatalogo, jobsComProblema, reenfileirarJob, listarCanais, definirCanalAtivo, alertasAbertos, CANAL_ROTULO } from "../lib/canais";
 import { fmtBrasilia } from "../lib/filaPublicacao";
 
@@ -12,6 +14,7 @@ export default function PainelCanaisScreen({ onClose, user }) {
   const [jobs, setJobs] = useState([]);
   const [canais, setCanais] = useState([]);
   const [alertas, setAlertas] = useState([]);
+  const [conectarWa, setConectarWa] = useState(false);
   const [erro, setErro] = useState(null);
   const carregar = useCallback(async () => {
     try { setErro(null); const [a, b, c, d] = await Promise.all([painelCatalogo(), jobsComProblema(), listarCanais(), alertasAbertos()]); setP(a); setJobs(b); setCanais(c); setAlertas(d); } catch (e) { setErro(e.message || String(e)); }
@@ -66,6 +69,7 @@ export default function PainelCanaisScreen({ onClose, user }) {
         </>)}
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
           <p className="text-xs font-bold text-gray-700">Canais</p>
+          <button onClick={() => setConectarWa(true)} className="text-xs font-semibold text-emerald-700 underline">Conectar o número do WhatsApp (Cadastro Incorporado)</button>
           <p className="text-[11px] text-gray-500">Desativado: recusa reserva, publicação e feed do canal. Venda e retirada continuam funcionando.</p>
           {canais.map((c) => (
             <div key={c.codigo} className="flex items-center gap-2 text-xs">
@@ -88,6 +92,7 @@ export default function PainelCanaisScreen({ onClose, user }) {
           ))}
         </div>
       </div>
+      {conectarWa && <Suspense fallback={null}><ConectarWhatsAppScreen onClose={() => setConectarWa(false)} /></Suspense>}
     </div>
   );
 }
