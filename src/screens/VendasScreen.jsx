@@ -3,13 +3,14 @@ import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMetaItem, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
 import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
-import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag, Instagram, Tag } from "lucide-react";
+import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag, Instagram, Tag, LayoutDashboard } from "lucide-react";
 
 const OrcamentosScreen = lazySeguro(() => import("./OrcamentosScreen"));
 const SacolasScreen = lazySeguro(() => import("./SacolasScreen"));
 const PedidosEuroScreen = lazySeguro(() => import("./PedidosEuroScreen"));
 const FilaPublicacaoScreen = lazySeguro(() => import("./FilaPublicacaoScreen"));
 const FilaPrecoScreen = lazySeguro(() => import("./FilaPrecoScreen"));
+const PainelCanaisScreen = lazySeguro(() => import("./PainelCanaisScreen"));
 
 const PAGE = 50;
 
@@ -30,6 +31,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
   const [pedidosEuroOpen, setPedidosEuroOpen] = useState(false);
   const [filaOpen, setFilaOpen] = useState(false);
   const [filaPrecoOpen, setFilaPrecoOpen] = useState(false);
+  const [painelOpen, setPainelOpen] = useState(false);
 
   const refLote = useCallback((lote) => {
     const l = lotes.find((x) => String(x.lote) === String(lote));
@@ -119,6 +121,15 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
         className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
         <Tag className="w-4 h-4 text-emerald-600" /> Fila de preço do catálogo
       </button>
+      <button onClick={() => setPainelOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
+        <LayoutDashboard className="w-4 h-4 text-sky-600" /> Painel do catálogo
+      </button>
+      {painelOpen && (
+        <Suspense fallback={null}>
+          <PainelCanaisScreen onClose={() => setPainelOpen(false)} />
+        </Suspense>
+      )}
       {filaPrecoOpen && (
         <Suspense fallback={null}>
           <FilaPrecoScreen params={params} user={user} onOpen={onOpen} onClose={() => setFilaPrecoOpen(false)} />
