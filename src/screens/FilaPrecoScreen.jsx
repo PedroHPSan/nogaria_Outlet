@@ -113,7 +113,7 @@ export default function FilaPrecoScreen({ params, user, onClose, onOpen }) {
         <div className="fixed inset-0 z-[85] bg-black/50 flex items-end sm:items-center justify-center">
           <div className="bg-white w-full max-w-2xl rounded-t-2xl sm:rounded-2xl p-4 space-y-3 max-h-[92vh] flex flex-col">
             <p className="font-bold text-gray-900">Revisar ofertas antes de publicar</p>
-            <p className="text-xs text-gray-600">Desmarque o que NÃO deve ir ao catálogo: a peça fica de fora e não volta a ser oferecida. Os preços já foram validados.</p>
+            <p className="text-xs text-gray-600">Esta é a última etapa: ao publicar, os produtos marcados ficam <b>disponíveis para os clientes</b>, com o preço atual da ficha. Desmarque o que NÃO deve ir ao catálogo: a peça fica de fora e não volta a ser oferecida.</p>
             <div className="flex-1 overflow-y-auto space-y-1">
               {revPub.itens.map((i) => (
                 <label key={i.sku} className="flex items-center gap-2 text-xs bg-gray-50 rounded px-2 py-1.5">
