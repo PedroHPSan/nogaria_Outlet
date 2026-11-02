@@ -50,7 +50,7 @@ begin
     end if;
     n := n + 1;
   end loop;
-  insert into eventos (sku, acao, usuario, detalhe) values (p_sku, 'retirar:todos', p_user, n || ' canal(is)');
+  insert into eventos (sku, acao, usuario, detalhe) values (p_sku, 'retirar:todos', coalesce(auth.jwt()->>'email', p_user), n || ' canal(is)');
   return n;
 end $$;
 revoke all on function public.retirar_de_todos(text, text) from public, anon;
