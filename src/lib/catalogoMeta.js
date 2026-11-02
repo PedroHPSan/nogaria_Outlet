@@ -6,6 +6,7 @@ import { carregarContato } from "./empresaConfig.js";
 import { separarDisponiveis, textoBloqueados } from "./ofertaPublica.js";
 import { primeirasFotos } from "./fotos.js";
 import { lerTodas } from "./paginar.js";
+import { cotacaoEuro } from "./cotacao.js";
 
 const LADO_MAX = 1600;
 
@@ -36,8 +37,10 @@ export async function publicarNoCatalogo(item) {
   // `?v=` força a Meta a rever a imagem quando a foto muda.
   const urlFoto = `${supabase.storage.from("catalogo-meta").getPublicUrl(caminho).data.publicUrl}?v=${Date.now()}`;
   const c = await carregarContato();
+  // O feed da Meta é só em R$, mas a página /i segue o resto do sistema: com cotação, ela oferece o modo € (a página busca a cotação a cada visita).
+  const cot = await cotacaoEuro().catch(() => null);
   const payload = montarPayloadOferta([item], {
-    contato: { whatsapp: c.whatsapp, label: c.whatsappLabel }, mostrarPreco: true, euro: false, // catálogo Meta só em R$
+    contato: { whatsapp: c.whatsapp, label: c.whatsappLabel }, mostrarPreco: true, euro: cot,
     fotos: { [item.sku]: urlFoto }, og: { imagem: urlFoto },
   });
   if (!(payload.itens[0].preco > 0)) throw new Error("O item precisa de preço de venda para entrar no catálogo.");
