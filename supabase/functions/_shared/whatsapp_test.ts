@@ -35,5 +35,7 @@ Deno.test("extrairEventos: texto, carrinho e statuses com custo", () => {
 Deno.test("motivoAmigavel não vaza códigos internos", () => {
   assert.equal(motivoAmigavel("NOG-1: já separado em ORC-0012 (whatsapp)."), "Esse item já está reservado para outra pessoa.");
   assert.equal(motivoAmigavel("NOG-1: fora de estoque."), "Esse item já foi vendido.");
+  assert.match(motivoAmigavel("LIMITE_RESERVAS"), /limite de 3/);
+  assert.match(motivoAmigavel("NAO_PUBLICADO: NOG-1"), /equipe/);
   assert.match(motivoAmigavel("erro estranho"), /equipe/);
 });

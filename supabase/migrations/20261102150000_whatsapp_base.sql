@@ -65,7 +65,40 @@ end $$;
 revoke all on function public.whatsapp_reivindicar_codigo(text, text) from public, anon, authenticated;
 grant execute on function public.whatsapp_reivindicar_codigo(text, text) to service_role;
 
+-- Reserva pelo WhatsApp: teto por número e (opcional) exigência de item publicado, na MESMA transação,
+-- com lock por número (duas mensagens simultâneas não furam o teto). SKUs que o número já reservou não renovam prazo.
+-- Publicado = em oferta/catálogo público vigente OU listing_state('whatsapp') = publicado (catálogo Meta, E1-4).
+-- Devolve quantos SKUs novos foram reservados (0 = já estavam reservados para o número).
+create or replace function public.whatsapp_reservar(
+  p_wa_id text, p_skus text[], p_origem_tipo text, p_origem_ref text, p_expira_em timestamptz,
+  p_max integer default 3, p_exigir_publicado boolean default true
+) returns integer language plpgsql security definer set search_path = public as $$
+declare v_user text := 'wa:' || p_wa_id; v_ja text[]; v_novos text[]; s text;
+begin
+  perform pg_advisory_xact_lock(hashtext('wa:' || p_wa_id));
+  perform reservas_expirar();
+  select coalesce(array_agg(sku), '{}') into v_ja from reservas where status = 'ATIVA' and criado_por = v_user;
+  select coalesce(array_agg(distinct x), '{}') into v_novos from unnest(p_skus) x where x <> all (v_ja);
+  if cardinality(v_novos) = 0 then return 0; end if;
+  if cardinality(v_ja) + cardinality(v_novos) > p_max then
+    raise exception 'LIMITE_RESERVAS' using errcode = 'P0001';
+  end if;
+  if p_exigir_publicado then
+    foreach s in array v_novos loop
+      if not exists (select 1 from catalogos_publicos c where c.expira_em > now()
+                      and c.payload->'itens' @> jsonb_build_array(jsonb_build_object('sku', s)))
+         and not exists (select 1 from listing_state l where l.sku = s and l.canal = 'whatsapp' and l.estado = 'publicado') then
+        raise exception 'NAO_PUBLICADO: %', s using errcode = 'P0001';
+      end if;
+    end loop;
+  end if;
+  return reservar_itens(v_novos, 'whatsapp', p_origem_tipo, p_origem_ref, p_expira_em, v_user);
+end $$;
+revoke all on function public.whatsapp_reservar(text, text[], text, text, timestamptz, integer, boolean) from public, anon, authenticated;
+grant execute on function public.whatsapp_reservar(text, text[], text, text, timestamptz, integer, boolean) to service_role;
+
 -- ROLLBACK (manual):
+-- drop function if exists public.whatsapp_reservar(text, text[], text, text, timestamptz, integer, boolean);
 -- drop function if exists public.whatsapp_reivindicar_codigo(text, text);
 -- alter table public.interesses drop column if exists wa_id;
 -- drop table if exists public.mensagens_whatsapp, public.contatos_whatsapp;

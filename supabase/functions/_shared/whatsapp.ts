@@ -48,6 +48,7 @@ export function extrairEventos(payload: unknown): { mensagens: Msg[]; statuses: 
 
 // Traduz o erro das RPCs de reserva em texto seguro para o cliente (sem vazar códigos internos).
 export function motivoAmigavel(erro: string): string {
+  if (/LIMITE_RESERVAS/.test(erro)) return "Você já tem itens reservados (limite de 3). Conclua o pagamento para reservar mais.";
   if (/fora de estoque|já vendido/i.test(erro)) return "Esse item já foi vendido.";
   if (/já separado|reservado/i.test(erro)) return "Esse item já está reservado para outra pessoa.";
   if (/não encontrado/i.test(erro)) return "Não encontrei esse código. Confira e envie de novo.";

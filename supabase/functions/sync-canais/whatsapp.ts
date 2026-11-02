@@ -18,24 +18,14 @@ async function responder(ctx: Ctx, para: string, texto: string) {
   );
 }
 
-async function reservar(ctx: Ctx, skus: string[], origemTipo: string, origemRef: string, ate: Date, waId: string) {
-  const { error } = await ctx.admin.rpc("reservar_itens", {
-    p_skus: skus, p_canal: "whatsapp", p_origem_tipo: origemTipo, p_origem_ref: origemRef, p_expira_em: ate.toISOString(), p_user: `wa:${waId}`,
+// Reserva pelo RPC `whatsapp_reservar`: teto por número, exigência de item publicado e lock, tudo no banco.
+// Devolve { novos } (SKUs reservados agora; 0 = já eram do número) ou { erro }.
+async function reservar(ctx: Ctx, waId: string, skus: string[], origemTipo: string, origemRef: string, ate: Date, exigirPublicado: boolean) {
+  const { data, error } = await ctx.admin.rpc("whatsapp_reservar", {
+    p_wa_id: waId, p_skus: skus, p_origem_tipo: origemTipo, p_origem_ref: origemRef, p_expira_em: ate.toISOString(),
+    p_max: MAX_RESERVAS_POR_NUMERO, p_exigir_publicado: exigirPublicado,
   });
-  return error?.message ?? null;
-}
-
-// Quantas reservas ATIVAS este número já tem (e quais SKUs, para não renovar o prazo sozinho).
-async function reservasDoNumero(ctx: Ctx, waId: string): Promise<string[]> {
-  const { data } = await ctx.admin.from("reservas").select("sku").eq("status", "ATIVA").eq("criado_por", `wa:${waId}`);
-  return (data ?? []).map((r: { sku: string }) => r.sku);
-}
-
-// Só reserva por texto item que está numa oferta/catálogo público vigente (SKUs são sequenciais e adivinháveis).
-async function publicado(ctx: Ctx, sku: string): Promise<boolean> {
-  const { data } = await ctx.admin.from("catalogos_publicos").select("slug")
-    .gt("expira_em", new Date().toISOString()).contains("payload", { itens: [{ sku }] }).limit(1);
-  return (data?.length ?? 0) > 0;
+  return error ? { erro: error.message } : { novos: Number(data) };
 }
 
 async function tratarMensagem(ctx: Ctx, m: Msg) {
@@ -52,13 +42,9 @@ async function tratarMensagem(ctx: Ctx, m: Msg) {
   const ate = new Date(+agora + HORAS_RESERVA * 3600e3);
   if (m.tipo === "order" && m.itens.length) {
     const skus = [...new Set(m.itens.map((i) => i.sku))];
-    const ja = await reservasDoNumero(ctx, m.from);
-    const novos = skus.filter((k) => !ja.includes(k));
-    if (ja.length + novos.length > MAX_RESERVAS_POR_NUMERO)
-      return responder(ctx, m.from, `Você já tem itens reservados (limite de ${MAX_RESERVAS_POR_NUMERO}). Conclua o pagamento para reservar mais.`);
-    if (!novos.length) return responder(ctx, m.from, "Esses itens já estão reservados para você.");
-    const erro = await reservar(ctx, novos, "carrinho_wa", m.from, ate, m.from);
-    return responder(ctx, m.from, erro ? motivoAmigavel(erro)
+    const r = await reservar(ctx, m.from, skus, "carrinho_wa", m.from, ate, true);
+    return responder(ctx, m.from, r.erro ? motivoAmigavel(r.erro)
+      : r.novos === 0 ? "Esses itens já estão reservados para você."
       : `Reservei ${skus.join(", ")} por ${HORAS_RESERVA}h. Nossa equipe confirma o pagamento por aqui.`);
   }
   const it = m.texto ? interpretarTexto(m.texto) : null;
@@ -72,13 +58,9 @@ async function tratarMensagem(ctx: Ctx, m: Msg) {
     return responder(ctx, m.from, "Combinado! Você vai receber as novidades do Outlet. Para parar, envie SAIR.");
   }
   if (it.tipo === "quero") {
-    const ja = await reservasDoNumero(ctx, m.from);
-    if (ja.includes(it.sku)) return responder(ctx, m.from, `${it.sku} já está reservado para você.`); // não renova prazo
-    if (ja.length >= MAX_RESERVAS_POR_NUMERO)
-      return responder(ctx, m.from, `Você já tem ${ja.length} itens reservados (limite de ${MAX_RESERVAS_POR_NUMERO}). Conclua o pagamento para reservar mais.`);
-    if (!(await publicado(ctx, it.sku))) return; // fora de oferta pública → atendimento humano decide
-    const erro = await reservar(ctx, [it.sku], "carrinho_wa", m.from, ate, m.from);
-    return responder(ctx, m.from, erro ? motivoAmigavel(erro)
+    const r = await reservar(ctx, m.from, [it.sku], "carrinho_wa", m.from, ate, true);
+    return responder(ctx, m.from, r.erro ? motivoAmigavel(r.erro)
+      : r.novos === 0 ? `${it.sku} já está reservado para você.`
       : `Reservei ${it.sku} para você por ${HORAS_RESERVA}h. Nossa equipe confirma o pagamento por aqui.`);
   }
   // código de pedido em €: o RPC amarra o código ao primeiro número que o reivindica e limita tentativas inválidas
@@ -86,11 +68,9 @@ async function tratarMensagem(ctx: Ctx, m: Msg) {
   if (!r || r.status === "invalido" || r.status === "bloqueado") return; // sem resposta: não confirma se o código existe
   if (r.status === "ja_usado") return responder(ctx, m.from, "Esse código já está em atendimento. Fale com a nossa equipe.");
   if (!r.nova) return responder(ctx, m.from, `Pedido ${it.codigo} já recebido. Nossa equipe envia o link de pagamento em breve.`);
-  const ja = await reservasDoNumero(ctx, m.from);
-  if (ja.length >= MAX_RESERVAS_POR_NUMERO)
-    return responder(ctx, m.from, `Você já tem ${ja.length} itens reservados (limite de ${MAX_RESERVAS_POR_NUMERO}). Nossa equipe vai te responder.`);
-  const erro = await reservar(ctx, [r.sku], "interesse", it.codigo, new Date(r.valido_ate), m.from);
-  return responder(ctx, m.from, erro ? motivoAmigavel(erro)
+  // o item do pedido em € já foi validado quando o pedido foi criado (oferta pública em €): não exige publicação de novo
+  const res = await reservar(ctx, m.from, [r.sku], "interesse", it.codigo, new Date(r.valido_ate), false);
+  return responder(ctx, m.from, res.erro ? motivoAmigavel(res.erro)
     : `Pedido ${it.codigo} recebido: ${r.sku} reservado. Nossa equipe envia o link de pagamento em breve.`);
 }
 

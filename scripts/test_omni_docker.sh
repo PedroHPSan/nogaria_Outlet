@@ -60,6 +60,16 @@ OUT5=$($PSQL -A -t -F' | ' < scripts/sql/test_whatsapp_envio.sql 2>&1)
 echo "$OUT5"
 echo "$OUT5" | grep -q "^FAIL" && { echo "HÁ FALHAS (envio)"; exit 1; }
 echo "$OUT5" | grep -q "^PASS" || { echo "nenhum PASS no envio"; exit 1; }
+# Teto por número sob concorrência: 6 sessões do mesmo número reservam SKUs diferentes → no máximo 3.
+$PSQL -c "insert into itens (sku, produto, status) select 'TT'||g, 'T', 'PRONTO' from generate_series(1,6) g; insert into contatos_whatsapp (wa_id) values ('5599'); insert into listing_state (sku, canal, estado) select 'TT'||g, 'whatsapp', 'publicado' from generate_series(1,6) g;" || exit 1
+for i in $(seq 1 6); do
+  docker exec -e PGPASSWORD=postgres $NAME psql -h localhost -U supabase_admin -d postgres -q -t -A \
+    -c "select whatsapp_reservar('5599', array['TT$i'], 'carrinho_wa', '5599', now()+interval '1 day')" >/dev/null 2>&1 &
+done
+wait
+TETO=$($PSQL -A -t -c "select count(*) from reservas where criado_por='wa:5599' and status='ATIVA'" | tr -d ' ')
+[ "$TETO" = "3" ] || { echo "FALHA: teto sob concorrência — $TETO reservas (esperado 3)"; exit 1; }
+echo "PASS | 6 reservas simultâneas do mesmo número → teto de 3 respeitado"
 # Concorrência: 8 sessões reservam o mesmo SKU ao mesmo tempo → exatamente 1 vence.
 $PSQL -c "insert into itens (sku, produto, status) values ('CC1','Conc','PRONTO');" || exit 1
 for i in $(seq 1 8); do
