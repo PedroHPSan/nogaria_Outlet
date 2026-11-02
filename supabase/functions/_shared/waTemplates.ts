@@ -11,7 +11,7 @@ export type SacolaWa = {
 export const TEMPLATES: Record<Evento, { nome: string; corpo: string }> = {
   cobranca: {
     nome: "cobranca_sacola",
-    corpo: "Olá, {{1}}! Separei para você {{2}}. Total: {{3}}. Seguro até {{4}}. Me avise quando fizer o pagamento!",
+    corpo: "Olá, {{1}}! Sua reserva da sacola {{2}} está confirmada: {{3}}. Total: {{4}}. Válida até {{5}}. Para concluir o pedido, responda com o comprovante de pagamento.",
   },
   pago: {
     nome: "pagamento_confirmado",
@@ -38,7 +38,7 @@ export function paramsEvento(evento: Evento, s: SacolaWa): string[] {
   const nome = limpa(s.cliente_nome || "cliente");
   if (evento === "cobranca") {
     const ate = s.validade ? new Date(s.validade).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }) : "em breve";
-    return [nome, limpa(resumoItens(s.itens)), brl(s.total), ate];
+    return [nome, s.codigo, limpa(resumoItens(s.itens)), brl(s.total), ate];
   }
   if (evento === "pago") return [nome, s.codigo, brl(s.total)];
   return [nome, s.codigo];
