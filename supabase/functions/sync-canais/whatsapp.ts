@@ -3,7 +3,8 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { enviarTexto, extrairEventos, interpretarTexto, motivoAmigavel, type Msg } from "../_shared/whatsapp.ts";
 
-const HORAS_RESERVA = 24;
+const HORAS_RESERVA = 2; // hold curto: estoque único não pode ficar preso por quem não pagou (a equipe assume ao criar a sacola)
+const HORAS_FEP = 72; // janela grátis de ponto de entrada de anúncio (Click-to-WhatsApp)
 const MAX_RESERVAS_POR_NUMERO = 3; // evita travar o estoque por mensagens em massa
 type Ctx = { dryRun: boolean; admin: SupabaseClient };
 
@@ -33,6 +34,13 @@ async function tratarMensagem(ctx: Ctx, m: Msg) {
   await ctx.admin.from("contatos_whatsapp").upsert({
     wa_id: m.from, ...(m.nome ? { nome: m.nome } : {}), janela_ate: new Date(+agora + 24 * 3600e3).toISOString(), atualizado_em: agora.toISOString(),
   }, { onConflict: "wa_id" });
+  if (m.referral) { // atribuição venda → anúncio; só sobrescreve quando vier um clique novo
+    await ctx.admin.from("contatos_whatsapp").update({
+      ctwa_clid: m.referral.ctwaClid, referral_source_id: m.referral.sourceId, referral_source_type: m.referral.sourceType,
+      referral_headline: m.referral.headline, referral_em: agora.toISOString(),
+      fep_ate: m.referral.ctwaClid ? new Date(+agora + HORAS_FEP * 3600e3).toISOString() : null,
+    }).eq("wa_id", m.from);
+  }
   // Idempotência: o wamid já registrado significa que esta mensagem foi tratada antes.
   const { error: eDup } = await ctx.admin.from("mensagens_whatsapp").insert(
     { wa_message_id: m.id, wa_id: m.from, direcao: "in", tipo: m.tipo, texto: m.texto, payload: m.bruto });

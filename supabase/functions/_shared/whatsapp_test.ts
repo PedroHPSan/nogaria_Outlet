@@ -39,3 +39,13 @@ Deno.test("motivoAmigavel não vaza códigos internos", () => {
   assert.match(motivoAmigavel("NAO_PUBLICADO: NOG-1"), /equipe/);
   assert.match(motivoAmigavel("erro estranho"), /equipe/);
 });
+
+Deno.test("extrairEventos: referral de anúncio Click-to-WhatsApp", () => {
+  const payload = { entry: [{ changes: [{ value: { messages: [
+    { id: "wamid.7", from: "5591", type: "text", text: { body: "oi" }, referral: { source_url: "https://fb.me/x", source_id: 123456, source_type: "ad", headline: "Calçados com desconto", ctwa_clid: "CLID123" } },
+    { id: "wamid.8", from: "5592", type: "text", text: { body: "oi" } },
+  ] } }] }] };
+  const { mensagens } = extrairEventos(payload);
+  assert.deepEqual(mensagens[0].referral, { ctwaClid: "CLID123", sourceId: "123456", sourceType: "ad", headline: "Calçados com desconto", sourceUrl: "https://fb.me/x" });
+  assert.equal(mensagens[1].referral, null);
+});
