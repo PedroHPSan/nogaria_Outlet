@@ -6,6 +6,7 @@ import { listarSacolas, tirarDaSacola, registrarPagamento, registrarEntrega, can
 import { statusEfetivo, totais } from "../lib/orcamentosCore";
 import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO, PRAZOS_RENOVACAO, rotuloPrazo } from "../lib/sacolasCore";
 import { fmtBRL } from "../lib/model";
+import { reservasDoBot } from "../lib/canais";
 import { WA_API_ATIVA, eventoDaSacola, ROTULO_EVENTO, previaEnvio, enviarPelaApi, situacaoEnvios, rotuloEnvio } from "../lib/waEnvio";
 
 const COR = {
@@ -13,7 +14,7 @@ const COR = {
   CANCELADO: "bg-red-100 text-red-700", EXPIRADO: "bg-gray-200 text-gray-500",
 };
 const ROTULO = { ABERTA: "A pagar", VENDIDO: "Pago · a entregar", ENTREGUE: "Entregue", CANCELADO: "Cancelada", EXPIRADO: "Vencida" };
-const FILTROS = [["ABERTA", "A pagar"], ["EXPIRADO", "Vencidas"], ["VENDIDO", "A entregar"], ["ENTREGUE", "Entregues"], ["", "Todas"], ["CLIENTES", "Por cliente"]];
+const FILTROS = [["ABERTA", "A pagar"], ["EXPIRADO", "Vencidas"], ["VENDIDO", "A entregar"], ["ENTREGUE", "Entregues"], ["", "Todas"], ["CLIENTES", "Por cliente"], ["BOT", "Do bot"]];
 const fmtData = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function SacolasScreen({ user, onClose, onMudou }) {
@@ -25,6 +26,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   const [pagando, setPagando] = useState(null); // { id, forma, valor }
   const [dias, setDias] = useState({}); // id da sacola -> dias para reabrir/estender (padrão 3)
   const [previa, setPrevia] = useState(null); // { sacola, evento } — confirmação do envio pela API
+  const [doBot, setDoBot] = useState(null); // reservas ativas do bot do WhatsApp
   const [envios, setEnvios] = useState({}); // codigo -> situação dos envios (WhatsApp API)
 
   const carregar = useCallback(async () => {
@@ -39,11 +41,13 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   }, []);
   useEffect(() => { if (todas?.length) carregarEnvios(todas.filter((s) => ["ABERTA", "VENDIDO", "ENTREGUE"].includes(statusEfetivo(s)))); }, [todas, carregarEnvios]);
 
+  useEffect(() => { if (filtro === "BOT") reservasDoBot().then(setDoBot).catch((e) => { setErro(e.message || String(e)); setDoBot([]); }); }, [filtro]);
+
   const resumo = useMemo(() => resumoSacolas(todas || []), [todas]);
   const hoje = useMemo(() => resumoDoDia(todas || []), [todas]);
   const clientes = useMemo(() => porCliente(todas || []).filter((c) => !q.trim() || `${c.nome || ""} ${c.whatsapp || ""}`.toLowerCase().includes(q.trim().toLowerCase())), [todas, q]);
   const lista = useMemo(() => (todas || []).filter((s) => {
-    if (filtro === "CLIENTES") return false;
+    if (filtro === "CLIENTES" || filtro === "BOT") return false;
     if (filtro && statusEfetivo(s) !== filtro) return false;
     const t = q.trim().toLowerCase();
     return !t || `${s.codigo} ${s.cliente_nome || ""} ${s.cliente_whatsapp || ""}`.toLowerCase().includes(t);
@@ -87,6 +91,22 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {erro && <p className="text-sm text-red-600 flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> {erro}</p>}
         {!todas && <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</p>}
+        {filtro === "BOT" && (
+          <p className="text-[11px] text-gray-500">Reservas do bot valem 2 h. Para virar sacola: abra o item → Separar; a reserva passa para a sacola com o novo prazo.</p>
+        )}
+        {filtro === "BOT" && !doBot && <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</p>}
+        {filtro === "BOT" && doBot && doBot.length === 0 && <p className="text-sm text-gray-500 text-center mt-10">Nenhuma reserva do bot agora.</p>}
+        {filtro === "BOT" && (doBot || []).map((b) => (
+          <div key={b.wa_id} className="bg-white rounded-xl border border-gray-200 p-3 space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-gray-900 truncate">{b.nome || b.wa_id}</p>
+              {b.ctwa && <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">veio de anúncio</span>}
+              <a href={`https://wa.me/${b.wa_id}`} target="_blank" rel="noreferrer" className="ml-auto text-xs text-emerald-700 font-semibold underline">Conversar</a>
+            </div>
+            <p className="text-[11px] text-amber-700 font-semibold">vence {fmtData(b.expira_em)}</p>
+            {b.skus.map((sku, i) => <p key={sku} className="text-xs text-gray-700 truncate"><span className="font-mono text-gray-400">{sku}</span> {b.produtos[i]}</p>)}
+          </div>
+        ))}
         {filtro === "CLIENTES" && clientes.map((c) => (
           <div key={c.whatsapp || c.nome} className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3">
             <div className="min-w-0">

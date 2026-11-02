@@ -20,7 +20,9 @@ export function interpretarTexto(texto: string): Intencao | null {
   return null;
 }
 
-export type Msg = { id: string; from: string; tipo: string; texto: string | null; nome: string | null; itens: { sku: string; quantidade: number }[]; bruto: unknown };
+// Anúncio Click-to-WhatsApp: a Meta manda `referral` na 1ª mensagem vinda do anúncio (ctwa_clid = id do clique).
+export type Referral = { ctwaClid: string | null; sourceId: string | null; sourceType: string | null; headline: string | null; sourceUrl: string | null };
+export type Msg = { id: string; from: string; tipo: string; texto: string | null; nome: string | null; itens: { sku: string; quantidade: number }[]; referral: Referral | null; bruto: unknown };
 export type Status = { id: string; para: string; status: string; categoria: string | null; billable: boolean | null; pricingModel: string | null };
 
 // Percorre entry[].changes[].value do webhook e devolve mensagens recebidas e statuses de envio.
@@ -36,7 +38,11 @@ export function extrairEventos(payload: unknown): { mensagens: Msg[]; statuses: 
       const itens = m.type === "order"
         ? (m.order?.product_items ?? []).map((p: { product_retailer_id: string; quantity?: number }) => ({ sku: String(p.product_retailer_id).toUpperCase(), quantidade: p.quantity ?? 1 }))
         : [];
-      mensagens.push({ id: m.id, from: m.from, tipo: m.type, texto, nome: nomes.get(m.from) || null, itens, bruto: m });
+      const r = m.referral;
+      const referral: Referral | null = r && (r.ctwa_clid || r.source_id)
+        ? { ctwaClid: r.ctwa_clid ?? null, sourceId: r.source_id ? String(r.source_id) : null, sourceType: r.source_type ?? null, headline: r.headline ?? null, sourceUrl: r.source_url ?? null }
+        : null;
+      mensagens.push({ id: m.id, from: m.from, tipo: m.type, texto, nome: nomes.get(m.from) || null, itens, referral, bruto: m });
     }
     for (const s of v.statuses ?? []) {
       statuses.push({ id: s.id, para: s.recipient_id, status: s.status, categoria: s.pricing?.category ?? null,

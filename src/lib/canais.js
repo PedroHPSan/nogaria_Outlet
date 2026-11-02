@@ -40,3 +40,6 @@ export async function definirCanalAtivo(codigo, ativo, user) {
   if (error) throw error;
   await supabase.from("eventos").insert({ sku: null, acao: `canal:${codigo} ${ativo ? "ativado" : "desativado"}`, usuario: user?.email ?? null }).then(() => {}, () => {});
 }
+
+// Reservas ativas feitas pelo bot do WhatsApp, por cliente (a equipe assume ao criar a sacola: item → Separar).
+export const reservasDoBot = () => rpc("reservas_bot");
