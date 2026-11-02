@@ -39,6 +39,8 @@ export default function ProdutoPublicoView({ slug, sku }) {
         if (!vivo) return;
         if (!r || !Array.isArray(r.payload?.itens)) { setEstado("indisponivel"); return; }
         setDados({ payload: r.payload }); setVendidos(r.disponivel ? [] : [sku]); setEstado("ok");
+        // modo euro também no /i: a cotação vem ao vivo a cada visita, como nos links /p
+        if (r.payload.euro) cotacaoEuro({ forcar: true, soProprio: true }).then((c) => vivo && setCotacao(c)).catch(() => vivo && setCotacao(false));
       });
       return () => { vivo = false; };
     }
@@ -82,7 +84,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
       const c = await cotacaoEuro({ forcar: true, soProprio: true });
       setCotacao(c); setConfirmar({ item, cotacao: c, pedido: null });
       // O valor do pedido vem do servidor: se registrou, mostra e envia a cotação gravada (mesma do código).
-      const pedido = await registrarInteresse(slug, item.sku, lang);
+      const pedido = slug ? await registrarInteresse(slug, item.sku, lang) : null; // /i não tem slug: segue só com a mensagem
       const cot = pedido ? { ...c, taxa: Number(pedido.taxa), em: new Date(pedido.taxa_em).getTime() } : c;
       setConfirmar((atual) => (atual?.item === item ? { item, cotacao: cot, pedido } : atual));
     } catch { setConfirmar({ item, cotacao: null, pedido: null }); }
