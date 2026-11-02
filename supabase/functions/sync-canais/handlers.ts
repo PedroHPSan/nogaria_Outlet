@@ -4,6 +4,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 
 import { processarWhatsapp } from "./whatsapp.ts";
 import { enviarTemplate } from "./waTemplate.ts";
+import { retirarCatalogo, amazonQuantidade } from "./retirada.ts";
 import { comentarVendido, publicarInstagram, renovarTokenInstagram } from "./instagram.ts";
 
 export type Ctx = { dryRun: boolean; admin: SupabaseClient; job: { id: number; tentativas: number } };
@@ -22,6 +23,8 @@ export const handlers: Record<string, Handler> = {
   "wa.template": enviarTemplate,
   "ig.publicar": publicarInstagram,
   "ig.comentar_vendido": comentarVendido,
+  "catalogo.retirar": retirarCatalogo,
+  "amazon.quantidade": amazonQuantidade,
   "ig.refresh_token": renovarTokenInstagram,
   "processar.instagram": marcarProcessado,
   // Usado em testes locais e para validar o ciclo cron → worker.

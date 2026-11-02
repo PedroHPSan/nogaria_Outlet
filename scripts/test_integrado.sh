@@ -23,7 +23,7 @@ $PSQL -c "alter table itens add column if not exists taxa_venda numeric, add col
 $PSQL -c "create table if not exists public.publicacoes (id bigint primary key, sku text references itens(sku) on update cascade, canal text, listing_id text, url text, status text default 'exportado', erro text, exportado_em timestamptz default now(), publicado_em timestamptz, updated_at timestamptz default now(), created_at timestamptz default now()); alter table public.publicacoes enable row level security;" || exit 1
 for M in 20260801130000_orcamentos 20261028120000_sacolas_whatsapp 20260625143345_publicar_amazon \
          20261102120000_omnichannel_base 20261102130000_omnichannel_rpcs 20261102140000_omnichannel_worker \
-         20261102150000_whatsapp_base 20261102160000_whatsapp_envio 20261102170000_catalogo_meta 20261102180000_fila_publicacao 20261102200000_guarda_status; do
+         20261102150000_whatsapp_base 20261102160000_whatsapp_envio 20261102170000_catalogo_meta 20261102180000_fila_publicacao 20261102200000_guarda_status 20261102210000_retirada_canais; do
   $PSQL < supabase/migrations/$M.sql >/dev/null 2>&1 || { echo "FALHA ao aplicar $M"; $PSQL < supabase/migrations/$M.sql 2>&1 | tail -3; exit 1; }
 done
 # equivalente aos privilégios padrão do Supabase para as tabelas (funções seguem os grants das migrations)
