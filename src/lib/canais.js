@@ -27,3 +27,16 @@ export async function excluirDoCatalogo(skus, user) {
   if (error) throw error;
   await supabase.from("eventos").insert(skus.map((sku) => ({ sku, acao: "catalogo:excluido", usuario: user?.email ?? null })));
 }
+
+// Interruptor por canal (N12). Desativar recusa reserva, publicação e feed; retiradas continuam.
+export const CANAIS_INTERRUPTOR = ["whatsapp", "instagram", "amazon", "mercadolivre"];
+export async function listarCanais() {
+  const { data, error } = await supabase.from("canais").select("codigo,nome,ativo").in("codigo", CANAIS_INTERRUPTOR);
+  if (error) throw error;
+  return CANAIS_INTERRUPTOR.map((c) => (data || []).find((x) => x.codigo === c)).filter(Boolean);
+}
+export async function definirCanalAtivo(codigo, ativo, user) {
+  const { error } = await supabase.from("canais").update({ ativo }).eq("codigo", codigo);
+  if (error) throw error;
+  await supabase.from("eventos").insert({ sku: null, acao: `canal:${codigo} ${ativo ? "ativado" : "desativado"}`, usuario: user?.email ?? null }).then(() => {}, () => {});
+}

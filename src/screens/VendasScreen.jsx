@@ -127,7 +127,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
       </button>
       {painelOpen && (
         <Suspense fallback={null}>
-          <PainelCanaisScreen onClose={() => setPainelOpen(false)} />
+          <PainelCanaisScreen user={user} onClose={() => setPainelOpen(false)} />
         </Suspense>
       )}
       {filaPrecoOpen && (

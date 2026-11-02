@@ -153,6 +153,10 @@ Deno.serve(async (req) => {
       return json({ ok: true, estado: "pausado" });
     }
 
+    // Interruptor do canal (N12): desativado não publica (pausar/retirar acima continuam valendo).
+    const { data: canal } = await admin.from("canais").select("ativo").eq("codigo", "amazon").maybeSingle();
+    if (canal && canal.ativo === false) return json({ error: "O canal Amazon está desativado." }, 409);
+
     // Nunca publicar peça vendida/descartada nem reservada por outra origem.
     if (["VENDIDO", "ENTREGUE", "DESCARTE"].includes(item.status)) return json({ error: `item ${item.status}: fora de estoque` }, 409);
     await admin.rpc("reservas_expirar", { p_sku: sku });
