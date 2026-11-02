@@ -19,7 +19,7 @@ for M in 20260801130000_orcamentos 20261028120000_sacolas_whatsapp 2026062514334
   $PSQL < supabase/migrations/$M.sql || { echo "FALHA: pré-requisito $M"; exit 1; }
 done
 # `interesses` real exige a RPC/cotações; aqui só o necessário para a view.
-$PSQL -c "create table if not exists public.interesses (id uuid primary key default gen_random_uuid(), codigo text not null unique, status text not null default 'ABERTO', eur numeric(12,2) not null default 0, criado_em timestamptz not null default now());" || exit 1
+$PSQL -c "create table if not exists public.interesses (id uuid primary key default gen_random_uuid(), codigo text not null unique, status text not null default 'ABERTO', sku text, valido_ate timestamptz not null default now() + interval '1 day', eur numeric(12,2) not null default 0, criado_em timestamptz not null default now());" || exit 1
 MIG=supabase/migrations/20261102120000_omnichannel_base.sql
 $PSQL < $MIG || { echo "FALHA ao aplicar a migration"; exit 1; }
 $PSQL < $MIG || { echo "FALHA: migration não é idempotente (2ª aplicação)"; exit 1; }
