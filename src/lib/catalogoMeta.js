@@ -62,3 +62,29 @@ export async function buscarItemPublico(sku) {
     return error || !data ? null : data;
   } catch { return null; }
 }
+
+// Elegíveis (C1) que ainda não estão no catálogo, prontos para publicar em lote.
+export async function elegiveisNaoPublicados() {
+  const [el, pub] = await Promise.all([
+    supabase.rpc("catalogo_elegibilidade", { p_sku: null }),
+    supabase.from("listing_state").select("sku").eq("canal", "whatsapp").eq("estado", "publicado").limit(10000),
+  ]);
+  if (el.error) throw el.error;
+  if (pub.error) throw pub.error;
+  const publicados = new Set((pub.data || []).map((r) => r.sku));
+  return (el.data || []).filter((r) => r.elegivel && !publicados.has(r.sku)).map((r) => r.sku).sort();
+}
+
+// Publica as peças em paralelo limitado (conversão de foto é pesada). Cada falha vira entrada em `erros`; o resto segue.
+// Idempotente: republicar a mesma peça só atualiza foto/preço.
+export async function publicarLote(itens, { simultaneos = 4, onProgresso } = {}) {
+  const fila = [...itens]; const erros = []; let ok = 0;
+  const trabalhador = async () => {
+    for (let it = fila.shift(); it; it = fila.shift()) {
+      try { await publicarNoCatalogo(it); ok++; } catch (e) { erros.push({ sku: it.sku, erro: e.message || String(e) }); }
+      onProgresso?.({ ok, falhas: erros.length, total: itens.length });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(simultaneos, itens.length) }, trabalhador));
+  return { ok, erros };
+}
