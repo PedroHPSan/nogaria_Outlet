@@ -21,17 +21,11 @@ export async function registrarVenda(sku, dados, user) {
   if (error) throw error;
 }
 
-// Marca um item já vendido como entregue/enviado ao comprador (carimbo + auditoria).
-// Best-effort no evento, espelhando marcarConferido.
+// Marca um item já vendido como entregue/enviado ao comprador pela RPC `marcar_entregue`
+// (só VENDIDO → ENTREGUE; carimba entregue_em e grava o evento no banco).
 export async function marcarEntregue(sku, user) {
-  const { error } = await supabase
-    .from("itens")
-    .update({ status: "ENTREGUE", entregue_em: new Date().toISOString(), upd_by: user.email })
-    .eq("sku", sku);
+  const { error } = await supabase.rpc("marcar_entregue", { p_sku: sku, p_user: user.email });
   if (error) throw error;
-  try {
-    await supabase.from("eventos").insert({ sku, acao: "status:ENTREGUE", usuario: user.email });
-  } catch { /* auditoria best-effort */ }
 }
 
 // Vendas agregadas por método (canal_venda). Inclui VENDIDO e ENTREGUE. Agrega no

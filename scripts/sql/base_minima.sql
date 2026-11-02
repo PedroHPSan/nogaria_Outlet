@@ -1,12 +1,13 @@
 -- Base MÍNIMA para testar as migrations 20260801* em um Postgres local descartável.
 -- (As migrations antigas não são reaplicáveis do zero: schema_inicial é stub.)
 -- Uso: ver scripts/sql/README.md
+create type item_status as enum ('A_CATALOGAR','TRIADO','TESTADO','FOTOGRAFADO','PRECIFICADO','PRONTO','ANUNCIADO','VENDIDO','ENTREGUE','DESCARTE');
 create table itens (
-  sku text primary key, produto text, status text not null default 'A_CATALOGAR',
+  sku text primary key, produto text, status item_status not null default 'A_CATALOGAR',
   preco_ideal numeric, classe text, estado text, upd_by text, valor_vendido numeric,
-  pedido_ref text, comprador text, canal_venda text, vendido_em timestamptz
+  pedido_ref text, comprador text, canal_venda text, vendido_em timestamptz, entregue_em timestamptz
 );
-create table eventos (id bigserial primary key, sku text, acao text, usuario text, ts timestamptz not null default now());
+create table eventos (id bigserial primary key, sku text, acao text, usuario text, detalhe text, ts timestamptz not null default now());
 create table catalogos_publicos (
   slug text primary key, titulo text, edicao text, payload jsonb not null,
   expira_em timestamptz not null default now() + interval '30 days', criado_por uuid

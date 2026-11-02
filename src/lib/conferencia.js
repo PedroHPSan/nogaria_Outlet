@@ -2,7 +2,7 @@
 // inventário físico (marcar item como conferido). Lógica de dados isolada dos
 // componentes, espelhando o padrão de retry-em-colisão de NewItem.jsx.
 import { supabase } from "./supabase";
-import { buildSku, STATUS_FORA_ESTOQUE_IN } from "./model";
+import { buildSku, STATUS_FORA_ESTOQUE_IN, foraDoEstoque } from "./model";
 import { classeAutomatica } from "./classificacao";
 import { copiarFotos } from "./fotos";
 import { tallyPorLote } from "./catalogarStats";
@@ -140,26 +140,22 @@ export async function propagarEnriquecimentoIrmaos(sku, user) {
   return n;
 }
 
-// Move um item para outra etapa (status) com rastreabilidade. Registra um evento
-// "status:<novo>" com detalhe "de <etapa anterior>" para aparecer no Registro.
-// Usado tanto no avanço/retorno individual quanto no mover-etapa em massa.
+// Move um item para outra etapa da triagem (ou DESCARTE) pela RPC `mover_etapa`, que registra o evento
+// "status:<novo>" com detalhe "de <etapa anterior>". VENDIDO/ENTREGUE NÃO passam por aqui: a venda é
+// `registrarVenda` (baixar_venda), a entrega é `marcarEntregue` e devolver ao estoque é `reabrirEstoque`.
+// Usado no avanço/retorno individual e no mover-etapa em massa.
 export async function moverEtapa(sku, novoStatus, user, deStatusLabel) {
-  // Carimba as datas de pós-venda mesmo no avanço em massa (sem exigir os detalhes
-  // manuais aqui). entregue_em a cada entrega; vendido_em só onde ainda não houver
-  // (update guardado por .is(null), idempotente em re-movimentações).
-  const patch = { status: novoStatus, upd_by: user.email };
-  if (novoStatus === "ENTREGUE") patch.entregue_em = new Date().toISOString();
-  const { error } = await supabase
-    .from("itens").update(patch).eq("sku", sku);
-  if (error) throw error;
-  if (novoStatus === "VENDIDO")
-    await supabase.from("itens")
-      .update({ vendido_em: new Date().toISOString() }).eq("sku", sku).is("vendido_em", null);
-  await supabase.from("eventos").insert({
-    sku, acao: "status:" + novoStatus,
-    detalhe: deStatusLabel ? `de ${deStatusLabel}` : null,
-    usuario: user.email,
+  const { error } = await supabase.rpc("mover_etapa", {
+    p_sku: sku, p_para: novoStatus, p_user: user.email, p_de_label: deStatusLabel || null,
   });
+  if (error) throw error;
+}
+
+// Devolução/cancelamento: tira o item de VENDIDO/ENTREGUE de volta ao estoque (RPC `reabrir_estoque`).
+// Exige o motivo; a venda anterior fica no histórico (evento). Não republica em canal nenhum.
+export async function reabrirEstoque(sku, motivo, user, para = "PRONTO") {
+  const { error } = await supabase.rpc("reabrir_estoque", { p_sku: sku, p_motivo: motivo, p_para: para, p_user: user.email });
+  if (error) throw error;
 }
 
 // Política de teste por risco/valor: testar 100% é inviável por logística. O teste
@@ -213,7 +209,7 @@ export async function desmembrarItem(item, total, user) {
   const lote = item.lote ?? null;
 
   const base = {};
-  for (const k of CAMPOS_COPIA) if (item[k] !== undefined) base[k] = item[k];
+  for (const k of CAMPOS_COPIA) if (item[k] !== undefined && !(k === "status" && foraDoEstoque(item.status))) base[k] = item[k];
   base.quantidade = 1;
   base.anuncio_feito = false;
   base.upd_by = user.email;
@@ -275,7 +271,7 @@ export async function aplicarProdutoACatalogar(item, qtd, user, { comFotos = fal
   if (error) throw error;
 
   const patch = {};
-  for (const k of CAMPOS_COPIA) if (!CAMPOS_NAO_SUBSTITUI.has(k) && item[k] !== undefined) patch[k] = item[k];
+  for (const k of CAMPOS_COPIA) if (!CAMPOS_NAO_SUBSTITUI.has(k) && item[k] !== undefined && !(k === "status" && foraDoEstoque(item.status))) patch[k] = item[k];
   patch.quantidade = 1;
   patch.anuncio_feito = false;
   patch.upd_by = user.email;
