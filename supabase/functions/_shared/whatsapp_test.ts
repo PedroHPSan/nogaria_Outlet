@@ -29,7 +29,7 @@ Deno.test("extrairEventos: texto, carrinho e statuses com custo", () => {
   assert.equal(mensagens[0].texto, "quero NOG-103-415");
   assert.deepEqual(mensagens[1].itens, [{ sku: "NOG-103-001", quantidade: 1 }]);
   assert.deepEqual(statuses[0], { id: "wamid.9", para: "5591", status: "delivered", categoria: "utility", billable: true, pricingModel: "PMP" });
-  assert.deepEqual(extrairEventos({}), { mensagens: [], statuses: [] });
+  assert.deepEqual(extrairEventos({}), { mensagens: [], statuses: [], ecos: [] });
 });
 
 Deno.test("motivoAmigavel não vaza códigos internos", () => {
