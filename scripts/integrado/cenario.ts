@@ -113,10 +113,10 @@ const ls = (await rest(`/listing_state?sku=eq.${s4}&canal=eq.instagram`)).data a
 check(ls[0]?.estado === "publicado" && ls[0].external_listing_id === p.external_id, "listing_state do Instagram atualizado");
 const venda = await rpc("baixar_venda", { p_sku: s4, p_valor: 120, p_canal_venda: "WhatsApp", p_pedido_ref: "T-1", p_user: "teste" }, USER);
 check(venda.status < 300, "venda registrada pela RPC", venda);
-const jv = (await rest(`/integracao_jobs?idem_key=like.igv:${s4}:*`)).data as any[];
+const jv = (await rest(`/integracao_jobs?idem_key=like.ret:instagram:${s4}:*`)).data as any[];
 check(jv.length === 1 && jv[0].payload.media_id === p.external_id, "venda enfileira o comentário VENDIDO no post certo", jv);
 await worker();
-check(((await rest(`/integracao_jobs?idem_key=like.igv:${s4}:*`)).data as any[])[0].status === "ok", "comentário VENDIDO processado (simulado)");
+check(((await rest(`/integracao_jobs?idem_key=like.ret:instagram:${s4}:*`)).data as any[])[0].status === "ok", "comentário VENDIDO processado (simulado)");
 check(((await rest(`/fila_publicacao?id=eq.${pid}`)).data as any[])[0].status === "esgotado", "publicação com todos os itens vendidos fica esgotada");
 const s42 = sku(4, 2);
 const pid2 = (await rpc("publicacao_criar", { p_canal: "instagram", p_tipo: "feed", p_skus: [s42], p_payload: { legenda: "x", midias: [`${REST}/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/b.jpg`] } }, USER)).data;
@@ -175,7 +175,20 @@ check((await rpc("marcar_entregue", { p_sku: v3, p_user: "teste" }, USER)).statu
 const reab = await rpc("reabrir_estoque", { p_sku: v3, p_motivo: "cliente devolveu", p_para: "PRONTO", p_user: "teste" }, USER);
 check(reab.status < 300 && ((await rest(`/itens?sku=eq.${v3}`)).data as any[])[0].status === "PRONTO", "reabrir_estoque devolve o item ao estoque");
 
-console.log("== 8. Saúde geral ==");
+console.log("== 8. Retirada em todos os canais (N4) ==");
+const w1 = sku(8, 1);
+await insere("itens", { sku: w1, produto: "W", status: "PRONTO" });
+await insere("listing_state", [
+  { sku: w1, canal: "instagram", estado: "publicado", external_listing_id: "dry_M8" },
+  { sku: w1, canal: "whatsapp", estado: "publicado", external_listing_id: null },
+  { sku: w1, canal: "amazon", estado: "publicado", external_listing_id: "A8" }]);
+check((await rpc("baixar_venda", { p_sku: w1, p_valor: 70, p_canal_venda: "WhatsApp", p_pedido_ref: "R-8", p_user: "teste" }, USER)).status < 300, "venda de item publicado em 3 canais");
+const jr = (await rest(`/integracao_jobs?payload->>sku=eq.${w1}`)).data as any[];
+check(jr.length === 3 && ["amazon.quantidade", "catalogo.retirar", "ig.comentar_vendido"].every((t) => jr.some((j) => j.tipo === t)), "1 job por canal publicado", jr.map((j) => j.tipo));
+await worker();
+check(((await rest(`/integracao_jobs?payload->>sku=eq.${w1}`)).data as any[]).every((j) => j.status === "ok"), "worker processa os 3 jobs (dry-run) sem erro");
+
+console.log("== 9. Saúde geral ==");
 const ruins = (await rest(`/integracao_jobs?status=in.(erro,morto)`)).data as any[];
 check(ruins.length === 0, "nenhum job em erro/morto ao final", ruins);
 

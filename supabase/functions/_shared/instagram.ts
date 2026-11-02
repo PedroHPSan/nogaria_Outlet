@@ -83,4 +83,4 @@ export function redigir(texto: string): string {
     .replace(/\bIG[A-Za-z0-9_-]{30,}\b/g, "***");
 }
 
-export const mensagemVendido = (sku: string) => `${sku} VENDIDO ✅`;
+export const mensagemVendido = (sku: string, motivo: string = "vendido") => (motivo === "indisponivel" ? `${sku} INDISPONÍVEL` : `${sku} VENDIDO ✅`);

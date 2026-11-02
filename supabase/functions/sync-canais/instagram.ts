@@ -66,11 +66,11 @@ export async function publicarInstagram(payload: Record<string, unknown>, ctx: C
 }
 
 export async function comentarVendido(payload: Record<string, unknown>, ctx: Ctx) {
-  const mediaId = String(payload.media_id), sku = String(payload.sku);
-  if (simular(ctx) || mediaId.startsWith("dry_")) { console.log(`[ig dry-run] comentaria em ${mediaId}: ${mensagemVendido(sku)}`); return; }
+  const mediaId = String(payload.media_id), sku = String(payload.sku), motivo = String(payload.motivo ?? "vendido");
+  if (simular(ctx) || mediaId.startsWith("dry_")) { console.log(`[ig dry-run] comentaria em ${mediaId}: ${mensagemVendido(sku, motivo)}`); return; }
   const cred = await credenciais(ctx);
   if (!cred) throw new Error("Instagram não conectado (tabela instagram_oauth vazia)");
-  await comentar(mediaId, mensagemVendido(sku), { ...cred, versao: versao() });
+  await comentar(mediaId, mensagemVendido(sku, motivo), { ...cred, versao: versao() });
 }
 
 export async function renovarTokenInstagram(_payload: Record<string, unknown>, ctx: Ctx) {
