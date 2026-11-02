@@ -1,7 +1,7 @@
 // Handlers de retirada de canal (job criado pelo trigger itens_retirar_canais): catalogo.retirar e amazon.quantidade.
 // Em dry-run (SYNC_DRY_RUN=1 / AMZ_DRY_RUN=1) só registram no log. Falha NÃO é silenciosa: erro vira retry/`morto` e aparece nos alertas.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { marcarSemEstoque } from "../_shared/metaCatalogo.ts";
+import { marcarEmEstoque, marcarSemEstoque } from "../_shared/metaCatalogo.ts";
 import { atualizarQuantidade } from "../_shared/amazon.ts";
 
 type Ctx = { dryRun: boolean; admin: SupabaseClient };
@@ -16,6 +16,15 @@ export async function retirarCatalogo(payload: Record<string, unknown>, ctx: Ctx
     return;
   }
   await marcarSemEstoque([sku], { catalogId, token, versao: Deno.env.get("META_API_VERSION") ?? undefined });
+}
+
+// Reserva liberada/expirada e a peça voltou a ficar disponível: devolve "in stock" (o feed reconcilia de qualquer forma).
+export async function reporCatalogo(payload: Record<string, unknown>, ctx: Ctx) {
+  const sku = String(payload.sku);
+  if (ctx.dryRun) { console.log(`[catalogo dry-run] marcaria ${sku} como in stock`); return; }
+  const token = Deno.env.get("META_CATALOG_TOKEN"), catalogId = Deno.env.get("META_CATALOG_ID");
+  if (!token || !catalogId) { console.warn(`catalogo.repor ${sku}: META_CATALOG_TOKEN/META_CATALOG_ID ausentes — o feed repõe em até 1 h`); return; }
+  await marcarEmEstoque([sku], { catalogId, token, versao: Deno.env.get("META_API_VERSION") ?? undefined });
 }
 
 async function tokenLwa(admin: SupabaseClient): Promise<string> {

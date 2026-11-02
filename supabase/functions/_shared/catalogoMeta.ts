@@ -4,10 +4,12 @@
 type ItemPayload = {
   sku: string; produto?: string; marca?: string; cor?: string; medidas?: string; condicao?: string;
   badge?: { cls?: string } | null; preco?: number | null; foto?: string | null;
+  rotulos?: { grupo?: string | null; lote?: string | number | null; tamanho?: string | null; estado?: string | null } | null;
 };
 export type LinhaFeed = { sku: string; payload: { itens?: ItemPayload[] } | null; disponivel: boolean };
 
-export const COLUNAS = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "color"] as const;
+export const COLUNAS = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "color",
+  "product_type", "custom_label_0", "custom_label_1", "custom_label_2", "size"] as const;
 
 // Proteção contra injeção de fórmula em planilhas (=, +, -, @) e normalização de quebras.
 const limpa = (s: unknown) => {
@@ -15,6 +17,10 @@ const limpa = (s: unknown) => {
   return /^[=+\-@]/.test(t) ? `'${t}` : t;
 };
 const csv = (v: string) => (/[",]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+// Faixas de preço para conjuntos de anúncio ("até R$ 150"). Rótulo estável e legível no Commerce Manager.
+export const FAIXAS_PRECO: [number, string][] = [[50, "ate-50"], [100, "51-100"], [150, "101-150"], [250, "151-250"], [500, "251-500"], [Infinity, "acima-500"]];
+export const faixaPreco = (preco: number): string => FAIXAS_PRECO.find(([max]) => preco <= max)![1];
 
 export function condicaoMeta(it: ItemPayload): "new" | "used" {
   return it.badge?.cls === "novo" ? "new" : "used";
@@ -29,6 +35,8 @@ export function linhaCsv(l: LinhaFeed, site: string): string[] | null {
     l.disponivel ? "in stock" : "out of stock", condicaoMeta(it),
     `${Number(it.preco).toFixed(2)} BRL`, `${site.replace(/\/+$/, "")}/i/${encodeURIComponent(l.sku)}`,
     it.foto, limpa(it.marca || "Nogária Outlet"), limpa(it.cor || ""),
+    limpa(it.rotulos?.grupo || ""), it.rotulos?.lote != null && it.rotulos.lote !== "" ? limpa(`lote-${it.rotulos.lote}`) : "",
+    faixaPreco(Number(it.preco)), limpa(it.rotulos?.estado || ""), limpa(it.rotulos?.tamanho || ""),
   ];
 }
 
