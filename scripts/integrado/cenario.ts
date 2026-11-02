@@ -104,10 +104,10 @@ const s4 = sku(4, 1);
 await insere("itens", [{ sku: s4, produto: "Bolsa", status: "PRONTO" }, { sku: sku(4, 2), produto: "Cinto", status: "PRONTO" }]);
 const pid = (await rpc("publicacao_criar", { p_canal: "instagram", p_tipo: "feed", p_skus: [s4], p_payload: { legenda: "Bolsa linda #nogaria", midias: [`${REST}/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg`] } }, USER)).data;
 check(typeof pid === "string", "rascunho criado pelo usuário logado", pid);
-check((await rest(`/publicacoes?id=eq.${pid}`, { method: "PATCH", body: { status: "publicado" }, jwt: USER })).status >= 400 || ((await rest(`/publicacoes?id=eq.${pid}`)).data as any[])[0].status === "rascunho", "app não consegue mudar status direto");
+check((await rest(`/fila_publicacao?id=eq.${pid}`, { method: "PATCH", body: { status: "publicado" }, jwt: USER })).status >= 400 || ((await rest(`/fila_publicacao?id=eq.${pid}`)).data as any[])[0].status === "rascunho", "app não consegue mudar status direto");
 check((await rpc("publicacao_aprovar", { p_id: pid }, USER)).data === "aprovado", "aprovação enfileira a publicação");
 await worker();
-let p = ((await rest(`/publicacoes?id=eq.${pid}`)).data as any[])[0];
+let p = ((await rest(`/fila_publicacao?id=eq.${pid}`)).data as any[])[0];
 check(p.status === "publicado" && String(p.external_id).startsWith("dry_") && p.publicado_em, "worker publica (simulado) e registra o id", p);
 const ls = (await rest(`/listing_state?sku=eq.${s4}&canal=eq.instagram`)).data as any[];
 check(ls[0]?.estado === "publicado" && ls[0].external_listing_id === p.external_id, "listing_state do Instagram atualizado");
@@ -117,21 +117,21 @@ const jv = (await rest(`/integracao_jobs?idem_key=like.igv:${s4}:*`)).data as an
 check(jv.length === 1 && jv[0].payload.media_id === p.external_id, "venda enfileira o comentário VENDIDO no post certo", jv);
 await worker();
 check(((await rest(`/integracao_jobs?idem_key=like.igv:${s4}:*`)).data as any[])[0].status === "ok", "comentário VENDIDO processado (simulado)");
-check(((await rest(`/publicacoes?id=eq.${pid}`)).data as any[])[0].status === "esgotado", "publicação com todos os itens vendidos fica esgotada");
+check(((await rest(`/fila_publicacao?id=eq.${pid}`)).data as any[])[0].status === "esgotado", "publicação com todos os itens vendidos fica esgotada");
 const s42 = sku(4, 2);
 const pid2 = (await rpc("publicacao_criar", { p_canal: "instagram", p_tipo: "feed", p_skus: [s42], p_payload: { legenda: "x", midias: [`${REST}/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/b.jpg`] } }, USER)).data;
 await rpc("publicacao_agendar", { p_id: pid2, p_quando: new Date(Date.now() + 864e5).toISOString() }, USER);
 check((await rpc("publicacao_aprovar", { p_id: pid2 }, USER)).data === "agendado", "aprovação com horário futuro fica agendada");
 check((await rpc("publicacoes_enfileirar_vencidas", {})).data === 0, "agendada ainda não vencida não é enfileirada");
-await rest(`/publicacoes?id=eq.${pid2}`, { method: "PATCH", body: { agendado_para: new Date(Date.now() - 6e4).toISOString() } });
+await rest(`/fila_publicacao?id=eq.${pid2}`, { method: "PATCH", body: { agendado_para: new Date(Date.now() - 6e4).toISOString() } });
 check((await rpc("publicacoes_enfileirar_vencidas", {})).data === 1, "agendada vencida é enfileirada pelo cron");
 await worker();
-check(((await rest(`/publicacoes?id=eq.${pid2}`)).data as any[])[0].status === "publicado", "agendada publicada pelo worker");
+check(((await rest(`/fila_publicacao?id=eq.${pid2}`)).data as any[])[0].status === "publicado", "agendada publicada pelo worker");
 
 const pidX = (await rpc("publicacao_criar", { p_canal: "instagram", p_tipo: "feed", p_skus: [sku(4, 2)], p_payload: { legenda: "x", midias: ["https://evil.example/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"] } }, USER));
 check(pidX.status < 300, "URL com o padrão do bucket mas host de outro projeto passa na RPC (a barreira é o worker)");
 await rpc("publicacao_aprovar", { p_id: pidX.data }, USER); await worker();
-const px = ((await rest(`/publicacoes?id=eq.${pidX.data}`)).data as any[])[0];
+const px = ((await rest(`/fila_publicacao?id=eq.${pidX.data}`)).data as any[])[0];
 check(px.status === "cancelado" && /fora do bucket/.test(px.erro), "worker recusa mídia de host que não é o do projeto", px);
 
 console.log("== 5. Mercado Livre: inbox validada ==");

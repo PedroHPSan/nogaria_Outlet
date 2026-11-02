@@ -27,6 +27,8 @@ OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_omnichannel.sql 2>&1)
 echo "$OUT"
 echo "$OUT" | grep -q "^FAIL" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }
+# tabela legada em produção com o nome `publicacoes` (outra coisa): a fila nova NÃO pode colidir com ela
+$PSQL -c "create table if not exists public.publicacoes (id bigint primary key, sku text references itens(sku) on update cascade, canal text, listing_id text, url text, status text default 'exportado', erro text, exportado_em timestamptz default now(), publicado_em timestamptz, updated_at timestamptz default now(), created_at timestamptz default now()); alter table public.publicacoes enable row level security;" || exit 1
 # E0-2: RPCs
 $PSQL -c "alter table itens add column if not exists taxa_venda numeric, add column if not exists frete_pago numeric;" || exit 1
 MIG2=supabase/migrations/20261102130000_omnichannel_rpcs.sql

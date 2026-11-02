@@ -23,7 +23,7 @@ alter table public.instagram_oauth enable row level security;
 update public.canais set config = config || '{"aprovacao_propria": true, "comentar_vendido": true}'::jsonb
  where codigo = 'instagram' and not (config ? 'aprovacao_propria');
 
-create table if not exists public.publicacoes (
+create table if not exists public.fila_publicacao (
   id             uuid primary key default gen_random_uuid(),
   canal          text not null references public.canais(codigo),
   tipo           text not null check (tipo in ('feed','carrossel','story')),
@@ -42,11 +42,11 @@ create table if not exists public.publicacoes (
   criado_em      timestamptz not null default now(),
   atualizado_em  timestamptz not null default now()
 );
-create index if not exists idx_publicacoes_status on public.publicacoes (status, criado_em desc);
-create index if not exists idx_publicacoes_agendadas on public.publicacoes (agendado_para) where status = 'agendado';
-alter table public.publicacoes enable row level security;
-drop policy if exists publicacoes_ler on public.publicacoes;
-create policy publicacoes_ler on public.publicacoes for select to authenticated using (true);
+create index if not exists idx_fila_pub_status on public.fila_publicacao (status, criado_em desc);
+create index if not exists idx_fila_pub_agendadas on public.fila_publicacao (agendado_para) where status = 'agendado';
+alter table public.fila_publicacao enable row level security;
+drop policy if exists fila_publicacao_ler on public.fila_publicacao;
+create policy fila_publicacao_ler on public.fila_publicacao for select to authenticated using (true);
 -- escrita só pelas RPCs abaixo (SECURITY DEFINER) e pelo worker (service_role)
 
 create or replace function public.usuario_atual() returns text language sql stable as $$
@@ -75,7 +75,7 @@ begin
   if length(coalesce(p_payload->>'legenda', '')) > 2200 then raise exception 'legenda acima de 2.200 caracteres'; end if;
   if exists (select 1 from unnest(p_skus) s where not exists (select 1 from itens where sku = s)) then
     raise exception 'SKU inexistente'; end if;
-  insert into publicacoes (canal, tipo, skus, payload, agendado_para, criado_por)
+  insert into fila_publicacao (canal, tipo, skus, payload, agendado_para, criado_por)
   values (p_canal, p_tipo, p_skus, p_payload, p_agendado_para, usuario_atual()) returning id into v_id;
   return v_id;
 end $$;
@@ -85,7 +85,7 @@ create or replace function public.publicacao_agendar(p_id uuid, p_quando timesta
 language plpgsql security definer set search_path = public as $$
 begin
   if p_quando is not null and p_quando < now() - interval '1 minute' then raise exception 'horário no passado'; end if;
-  update publicacoes set agendado_para = p_quando, atualizado_em = now() where id = p_id and status = 'rascunho';
+  update fila_publicacao set agendado_para = p_quando, atualizado_em = now() where id = p_id and status = 'rascunho';
   if not found then raise exception 'só rascunho pode ser agendado'; end if;
 end $$;
 revoke all on function public.publicacao_agendar(uuid, timestamptz) from public, anon;
@@ -94,9 +94,9 @@ grant execute on function public.publicacao_agendar(uuid, timestamptz) to authen
 -- Aprova: publica já (enfileira o job) ou deixa agendado. Revalida estoque; aplica a regra de aprovação própria.
 create or replace function public.publicacao_aprovar(p_id uuid) returns text
 language plpgsql security definer set search_path = public as $$
-declare p publicacoes%rowtype; v_user text := usuario_atual(); v_proprio boolean; s text; v_novo text;
+declare p fila_publicacao%rowtype; v_user text := usuario_atual(); v_proprio boolean; s text; v_novo text;
 begin
-  select * into p from publicacoes where id = p_id for update;
+  select * into p from fila_publicacao where id = p_id for update;
   if not found then raise exception 'publicação não encontrada'; end if;
   if p.status <> 'rascunho' then raise exception 'só rascunho pode ser aprovado (status: %)', p.status; end if;
   select coalesce((config->>'aprovacao_propria')::boolean, true) into v_proprio from canais where codigo = p.canal;
@@ -105,7 +105,7 @@ begin
     if not item_disponivel(s) then raise exception '%: indisponível (vendido ou reservado)', s; end if;
   end loop;
   v_novo := case when p.agendado_para is not null and p.agendado_para > now() then 'agendado' else 'aprovado' end;
-  update publicacoes set status = v_novo, aprovado_por = v_user, aprovado_em = now(), erro = null, atualizado_em = now() where id = p_id;
+  update fila_publicacao set status = v_novo, aprovado_por = v_user, aprovado_em = now(), erro = null, atualizado_em = now() where id = p_id;
   if v_novo = 'aprovado' then perform enfileirar_job('ig.publicar', jsonb_build_object('publicacao_id', p_id), 'pub:' || p_id); end if;
   return v_novo;
 end $$;
@@ -113,7 +113,7 @@ end $$;
 create or replace function public.publicacao_cancelar(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  update publicacoes set status = 'cancelado', atualizado_em = now()
+  update fila_publicacao set status = 'cancelado', atualizado_em = now()
    where id = p_id and status in ('rascunho','aprovado','agendado','erro');
   if not found then raise exception 'esta publicação não pode ser cancelada'; end if;
 end $$;
@@ -122,7 +122,7 @@ end $$;
 create or replace function public.publicacao_reenfileirar(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  update publicacoes set status = 'aprovado', erro = null, atualizado_em = now() where id = p_id and status = 'erro';
+  update fila_publicacao set status = 'aprovado', erro = null, atualizado_em = now() where id = p_id and status = 'erro';
   if not found then raise exception 'só publicação com erro pode ser reenviada'; end if;
   update integracao_jobs set status = 'pendente', tentativas = 0, erro = null, proximo_em = now(), atualizado_em = now()
    where idem_key = 'pub:' || p_id;
@@ -133,8 +133,8 @@ create or replace function public.publicacoes_enfileirar_vencidas() returns inte
 language plpgsql security definer set search_path = public as $$
 declare r record; n integer := 0;
 begin
-  for r in select id from publicacoes where status = 'agendado' and agendado_para <= now() for update skip locked loop
-    update publicacoes set status = 'aprovado', atualizado_em = now() where id = r.id;
+  for r in select id from fila_publicacao where status = 'agendado' and agendado_para <= now() for update skip locked loop
+    update fila_publicacao set status = 'aprovado', atualizado_em = now() where id = r.id;
     perform enfileirar_job('ig.publicar', jsonb_build_object('publicacao_id', r.id), 'pub:' || r.id);
     n := n + 1;
   end loop;
@@ -186,7 +186,7 @@ begin
     end loop;
   end if;
   -- publicação cujos itens todos saíram do estoque fica 'esgotado'
-  update publicacoes p set status = 'esgotado', atualizado_em = now()
+  update fila_publicacao p set status = 'esgotado', atualizado_em = now()
    where p.canal = 'instagram' and p.status = 'publicado' and new.sku = any (p.skus)
      and not exists (select 1 from unnest(p.skus) k join itens i on i.sku = k
                       where i.status not in ('VENDIDO','ENTREGUE','DESCARTE'));
@@ -211,5 +211,5 @@ end $$;
 -- drop function if exists public.publicacoes_enfileirar_vencidas(); drop function if exists public.publicacao_reenfileirar(uuid);
 -- drop function if exists public.publicacao_cancelar(uuid); drop function if exists public.publicacao_aprovar(uuid);
 -- drop function if exists public.publicacao_agendar(uuid, timestamptz); drop function if exists public.publicacao_criar(text, text, text[], jsonb, timestamptz); drop function if exists public.usuario_atual();
--- drop table if exists public.publicacoes, public.instagram_oauth;
+-- drop table if exists public.fila_publicacao, public.instagram_oauth;
 -- (restaurar cron_chamar_worker da migration 20261102140000 se necessário)

@@ -46,7 +46,7 @@ export async function enviarParaFilaInstagram(itens, { formato = "feed", titulo,
 }
 
 export async function listarFila(limite = 100) {
-  const { data, error } = await supabase.from("publicacoes").select("*").order("criado_em", { ascending: false }).limit(limite);
+  const { data, error } = await supabase.from("fila_publicacao").select("*").order("criado_em", { ascending: false }).limit(limite);
   if (error) throw error;
   return data || [];
 }

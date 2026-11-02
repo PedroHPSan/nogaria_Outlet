@@ -20,21 +20,21 @@ async function credenciais(ctx: Ctx) {
 export async function publicarInstagram(payload: Record<string, unknown>, ctx: Ctx) {
   const id = String(payload.publicacao_id);
   // claim: só aprovado (ou retomada de 'publicando'); cancelada/publicada/esgotada → nada a fazer
-  const { data: pub } = await ctx.admin.from("publicacoes").update({ status: "publicando", atualizado_em: new Date().toISOString() })
+  const { data: pub } = await ctx.admin.from("fila_publicacao").update({ status: "publicando", atualizado_em: new Date().toISOString() })
     .eq("id", id).in("status", ["aprovado", "publicando"]).select("id, tipo, skus, payload, container_id").maybeSingle();
   if (!pub) return;
   try {
     for (const sku of pub.skus as string[]) {
       const { data: livre } = await ctx.admin.rpc("item_disponivel", { p_sku: sku });
       if (!livre) {
-        await ctx.admin.from("publicacoes").update({ status: "cancelado", erro: `${sku} ficou indisponível antes de publicar`, atualizado_em: new Date().toISOString() }).eq("id", id);
+        await ctx.admin.from("fila_publicacao").update({ status: "cancelado", erro: `${sku} ficou indisponível antes de publicar`, atualizado_em: new Date().toISOString() }).eq("id", id);
         return;
       }
     }
     // defesa em profundidade: só publica imagem do bucket público do próprio projeto (a aprovação é de quem VIU esse conteúdo)
     const prefixo = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/ig-media/`;
     if (!(pub.payload as Pub["payload"]).midias.every((u) => u.startsWith(prefixo) && !u.includes(".."))) {
-      await ctx.admin.from("publicacoes").update({ status: "cancelado", erro: "mídia fora do bucket ig-media do projeto", atualizado_em: new Date().toISOString() }).eq("id", id);
+      await ctx.admin.from("fila_publicacao").update({ status: "cancelado", erro: "mídia fora do bucket ig-media do projeto", atualizado_em: new Date().toISOString() }).eq("id", id);
       return;
     }
     let mediaId: string, permalink: string | null = null;
@@ -46,11 +46,11 @@ export async function publicarInstagram(payload: Record<string, unknown>, ctx: C
       if (!cred) throw new Error("Instagram não conectado (tabela instagram_oauth vazia)");
       const r = await publicarNoInstagram(pub as unknown as Pub, {
         ...cred, versao: versao(),
-        salvarContainer: async (c) => { await ctx.admin.from("publicacoes").update({ container_id: c }).eq("id", id); },
+        salvarContainer: async (c) => { await ctx.admin.from("fila_publicacao").update({ container_id: c }).eq("id", id); },
       });
       mediaId = r.mediaId; permalink = r.permalink;
     }
-    await ctx.admin.from("publicacoes").update({ status: "publicado", external_id: mediaId, publicado_em: new Date().toISOString(), erro: null, atualizado_em: new Date().toISOString() }).eq("id", id);
+    await ctx.admin.from("fila_publicacao").update({ status: "publicado", external_id: mediaId, publicado_em: new Date().toISOString(), erro: null, atualizado_em: new Date().toISOString() }).eq("id", id);
     const linhas = (pub.skus as string[]).map((sku) => ({
       sku, canal: "instagram", estado: "publicado", external_listing_id: mediaId, url_publica: permalink, sync_em: new Date().toISOString(), updated_at: new Date().toISOString(),
     }));
@@ -58,7 +58,7 @@ export async function publicarInstagram(payload: Record<string, unknown>, ctx: C
   } catch (e) {
     const msg = redigir(e instanceof Error ? e.message : String(e));
     // última tentativa: a tela passa a mostrar "erro" com botão de reenviar; antes disso só guarda o motivo
-    await ctx.admin.from("publicacoes").update({
+    await ctx.admin.from("fila_publicacao").update({
       erro: msg.slice(0, 500), ...(ctx.job.tentativas >= MAX_TENTATIVAS ? { status: "erro" } : {}), atualizado_em: new Date().toISOString(),
     }).eq("id", id);
     throw e;
