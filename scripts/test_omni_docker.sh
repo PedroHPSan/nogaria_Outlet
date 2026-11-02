@@ -70,6 +70,14 @@ OUT6=$($PSQL -A -t -F' | ' < scripts/sql/test_catalogo_meta.sql 2>&1)
 echo "$OUT6"
 echo "$OUT6" | grep -q "^FAIL" && { echo "HÁ FALHAS (catálogo Meta)"; exit 1; }
 echo "$OUT6" | grep -q "^PASS" || { echo "nenhum PASS no catálogo Meta"; exit 1; }
+# Fila de publicação + Instagram (E5-2 / #57 F2 / E2-1)
+MIG7=supabase/migrations/20261102180000_fila_publicacao.sql
+$PSQL < $MIG7 || { echo "FALHA ao aplicar a migration da fila"; exit 1; }
+$PSQL < $MIG7 || { echo "FALHA: migration da fila não é idempotente"; exit 1; }
+OUT7=$($PSQL -A -t -F' | ' < scripts/sql/test_fila.sql 2>&1)
+echo "$OUT7"
+echo "$OUT7" | grep -q "^FAIL" && { echo "HÁ FALHAS (fila)"; exit 1; }
+echo "$OUT7" | grep -q "^PASS" || { echo "nenhum PASS na fila"; exit 1; }
 # Teto por número sob concorrência: 6 sessões do mesmo número reservam SKUs diferentes → no máximo 3.
 $PSQL -c "insert into itens (sku, produto, status) select 'TT'||g, 'T', 'PRONTO' from generate_series(1,6) g; insert into contatos_whatsapp (wa_id) values ('5599'); insert into listing_state (sku, canal, estado) select 'TT'||g, 'whatsapp', 'publicado' from generate_series(1,6) g;" || exit 1
 for i in $(seq 1 6); do

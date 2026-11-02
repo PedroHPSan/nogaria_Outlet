@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     try {
       const h = handlers[job.tipo];
       if (!h) throw new Error(`handler não registrado: ${job.tipo}`);
-      await h(job.payload ?? {}, { dryRun, admin });
+      await h(job.payload ?? {}, { dryRun, admin, job: { id: job.id, tentativas: job.tentativas } });
     } catch (e) {
       erro = e instanceof Error ? e.message : String(e);
     }
