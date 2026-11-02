@@ -52,13 +52,30 @@ export function cardProduto(it, formato, ctx = {}) {
     ops.push({ k: "rect", x: MARGEM + 24, y: fotoY + 24, w: badge.txt.length * 17 + 44, h: 48, fill: bg, r: 24 });
     ops.push({ k: "text", x: MARGEM + 46, y: fotoY + 57, s: badge.txt.toUpperCase(), size: 24, bold: true, color: fg });
   }
+  // selos no canto superior direito da foto: código (NOG) e tamanho (calçado: EU · BR)
+  const selosX = fmt.w - MARGEM - 24;
+  if (it.sku) {
+    const w = it.sku.length * 17 + 40;
+    ops.push({ k: "rect", x: selosX - w, y: fotoY + 24, w, h: 48, fill: "#0b162d", r: 24 });
+    ops.push({ k: "text", x: selosX - w + 20, y: fotoY + 57, s: it.sku, size: 26, bold: true, color: "#52ff7f" });
+  }
+  if (tamanhoEtiqueta(it)) {
+    const s = `TAM ${tamanhoEtiqueta(it)}`;
+    const w = s.length * 22 + 44;
+    ops.push({ k: "rect", x: selosX - w, y: fotoY + 84, w, h: 60, fill: "#52ff7f", r: 30 });
+    ops.push({ k: "text", x: selosX - w + 22, y: fotoY + 128, s, size: 36, bold: true, color: "#0b162d" });
+  }
   let y = fotoY + fotoH + 62;
   ops.push({ k: "text", x: MARGEM, y, s: it.produto || it.sku, size: 52, bold: true, color: tx, maxW: fmt.w - 2 * MARGEM, maxLines: 2, lineH: 60 });
   y += 130;
   const frase = fraseCondicao(it);
   if (frase) ops.push({ k: "text", x: MARGEM, y, s: frase, size: 28, color: escuro ? tema.acento : tema.forte, maxW: fmt.w - 2 * MARGEM, maxLines: 1 });
   const p = precoVenda(it);
-  if (ctx.mostrarPreco !== false && p > 0) ops.push({ k: "text", x: MARGEM, y: y + 86, s: brl(p), size: 84, bold: true, color: tx });
+  if (ctx.mostrarPreco !== false && p > 0) {
+    ops.push({ k: "text", x: MARGEM, y: y + 86, s: brl(p), size: 84, bold: true, color: tx });
+    const dupla = fmtDupla(p, ctx.euro); // € só quando pedido (ctx.euro = { taxa, em }); padrão do Instagram é só R$
+    if (dupla) ops.push({ k: "text", x: MARGEM, y: y + 130, s: `${dupla.eur} · cotação ${fmtDataCotacao(ctx.euro.em)}`, size: 34, bold: true, color: escuro ? tema.acento : tema.forte });
+  }
   rodapeContato(ops, fmt, tema, ctx);
   return { formato, w: fmt.w, h: fmt.h, ops };
 }

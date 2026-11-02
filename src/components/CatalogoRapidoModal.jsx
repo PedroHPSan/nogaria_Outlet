@@ -12,7 +12,7 @@ import { publicarOferta, separarDisponiveis, textoBloqueados } from "../lib/ofer
 import { destinosInternacionais } from "../lib/destinos";
 import { textoGrupoEuro } from "../lib/precoEuro";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
-import { textoWhatsApp, textoInstagram, csvCatalogo } from "../lib/divulgacao";
+import { textoWhatsApp, textoInstagram, legendaProduto, csvCatalogo } from "../lib/divulgacao";
 import { FORMATOS } from "../lib/cardCore";
 import { normalizarSpec } from "../lib/catalogoSpec";
 import { carregarContato } from "../lib/empresaConfig";
@@ -181,17 +181,21 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   });
 
   const legendaIg = () => executar(async () => {
-    await navigator.clipboard.writeText(textoInstagram(itens, { titulo, validade, contato: rotuloContato(), mostrarPreco }));
-    registrar("texto");
-    setAviso("Legenda copiada (≤ 2.200 caracteres, com hashtags).");
+    // 1 item → legenda de produto (condição, tamanho, preço, código); vários → legenda de destaques
+    const legenda = itens.length === 1
+      ? legendaProduto(itens[0], { contato: rotuloContato(), mostrarPreco })
+      : textoInstagram(itens, { titulo, validade, contato: rotuloContato(), mostrarPreco });
+    await navigator.clipboard.writeText(legenda);
+    registrar("instagram");
+    setAviso("Legenda copiada (até 5 hashtags, limite do Instagram). Cole no post e use \"link na bio\" para o catálogo.");
   });
 
   const cardsPng = () => executar(async (signal) => {
     const c = contato();
     const arqs = await gerarCardsDivulgacao(itens, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco }, { signal, onProgress: setProgresso });
     const r = await compartilharArquivos(arqs, { titulo });
-    registrar("cards");
-    if (r !== "cancelado") setAviso(`${arqs.length} imagens ${r === "baixado" ? "baixadas" : "compartilhadas"}.`);
+    registrar(formatoCard === "status" ? "cards" : "instagram");
+    if (r !== "cancelado") setAviso(`${arqs.length} imagens (JPEG) ${r === "baixado" ? "baixadas" : "compartilhadas"}.`);
   });
 
   const baixarCsv = () => executar(async () => {
@@ -297,7 +301,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
                 <select value={formatoCard} onChange={(e) => setFormatoCard(e.target.value)} className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm">
                   {Object.entries(FORMATOS).map(([id, f]) => <option key={id} value={id}>{f.nome}</option>)}
                 </select>
-                <button onClick={cardsPng} disabled={gerando || !itens.length} className="rounded-lg bg-gray-900 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">Cards (PNG)</button>
+                <button onClick={cardsPng} disabled={gerando || !itens.length} className="rounded-lg bg-gray-900 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">Cards (JPEG)</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={ofertaLote} disabled={gerando || !itens.length} className="rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"><Link2 className="w-4 h-4" /> Oferta (1 link)</button>
