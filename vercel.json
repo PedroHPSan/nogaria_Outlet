@@ -12,6 +12,10 @@
       "destination": "/api/og?slug=:slug&t=p"
     },
     {
+      "source": "/i/:slug",
+      "destination": "/api/og?slug=:slug&t=i"
+    },
+    {
       "source": "/c/:slug",
       "destination": "/api/og?slug=:slug&t=c"
     },

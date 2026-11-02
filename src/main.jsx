@@ -12,11 +12,14 @@ const m = window.location.pathname.match(/^\/c\/([^/]+)/);
 const mo = window.location.pathname.match(/^\/o\/([^/]+)/);
 // Rota pública da oferta (produto/lote para o grupo de WhatsApp): /p/<slug>.
 const mp = window.location.pathname.match(/^\/p\/([^/]+)/);
+// Rota pública permanente de um item publicado no catálogo: /i/<sku>.
+const mi = window.location.pathname.match(/^\/i\/([^/]+)/);
 const raiz = ReactDOM.createRoot(document.getElementById("root"));
 
 raiz.render(
   <React.StrictMode>
     {m ? <CatalogoPublicoView slug={decodeURIComponent(m[1])} />
+      : mi ? <ProdutoPublicoView sku={decodeURIComponent(mi[1]).toUpperCase()} />
       : mp ? <ProdutoPublicoView slug={decodeURIComponent(mp[1])} />
       : mo ? <OrcamentoPublicoView slug={decodeURIComponent(mo[1])} />
       : <App />}

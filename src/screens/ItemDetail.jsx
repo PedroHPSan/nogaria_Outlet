@@ -19,6 +19,7 @@ import { gerarLinkGrupo } from "../lib/ofertaPublica";
 import { tamanhoEU } from "../lib/tamanhos";
 import { cotacaoEuro } from "../lib/cotacao";
 import SepararModal from "../components/SepararModal";
+import CatalogoMetaButton from "../components/CatalogoMetaButton";
 import PricingCard from "../components/PricingCard";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
@@ -617,6 +618,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
               {linkWpp === "gerando" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
               {linkWpp?.texto ? (linkWpp.semImagem ? "Copiado (sem preview)" : linkWpp.semCotacao ? "Copiado (sem €)" : "Link copiado") : linkWpp === "erro" ? "Falhou" : "Link WhatsApp"}
             </button>
+            <CatalogoMetaButton item={it} bloqueado={bloqueadoVenda} />
             <button onClick={() => setSeparando(true)} disabled={bloqueadoVenda}
               className="flex items-center gap-1 bg-orange-600 rounded-full pl-2.5 pr-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
               title={bloqueadoVenda ? `Não pode separar: item ${motivoIndisponivel(it)}` : "Separar este item para um cliente do WhatsApp"}>

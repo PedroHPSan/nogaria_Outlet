@@ -6,6 +6,7 @@ import { listarSacolas, tirarDaSacola, registrarPagamento, registrarEntrega, can
 import { statusEfetivo, totais } from "../lib/orcamentosCore";
 import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO } from "../lib/sacolasCore";
 import { fmtBRL } from "../lib/model";
+import { WA_API_ATIVA, eventoDaSacola, ROTULO_EVENTO, previaEnvio, enviarPelaApi, situacaoEnvios, rotuloEnvio } from "../lib/waEnvio";
 
 const COR = {
   ABERTA: "bg-amber-100 text-amber-700", VENDIDO: "bg-emerald-100 text-emerald-700", ENTREGUE: "bg-sky-100 text-sky-700",
@@ -22,12 +23,20 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   const [erro, setErro] = useState(null);
   const [ocupado, setOcupado] = useState(null);
   const [pagando, setPagando] = useState(null); // { id, forma, valor }
+  const [previa, setPrevia] = useState(null); // { sacola, evento } — confirmação do envio pela API
+  const [envios, setEnvios] = useState({}); // codigo -> situação dos envios (WhatsApp API)
 
   const carregar = useCallback(async () => {
     try { setErro(null); setTodas(await listarSacolas()); }
     catch (e) { setErro(e.message || String(e)); setTodas([]); }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+  const carregarEnvios = useCallback(async (lista) => {
+    if (!WA_API_ATIVA) return;
+    const pares = await Promise.all(lista.map(async (s) => [s.codigo, await situacaoEnvios(s).catch(() => [])]));
+    setEnvios((prev) => ({ ...prev, ...Object.fromEntries(pares) }));
+  }, []);
+  useEffect(() => { if (todas?.length) carregarEnvios(todas.filter((s) => ["ABERTA", "VENDIDO", "ENTREGUE"].includes(statusEfetivo(s)))); }, [todas, carregarEnvios]);
 
   const resumo = useMemo(() => resumoSacolas(todas || []), [todas]);
   const hoje = useMemo(() => resumoDoDia(todas || []), [todas]);
@@ -133,16 +142,38 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
               )}
 
               <div className="flex flex-wrap gap-2 pt-1">
+                {WA_API_ATIVA && eventoDaSacola(ef) && s.cliente_whatsapp && !(envios[s.codigo] || []).some((e) => e.evento === eventoDaSacola(ef) && !rotuloEnvio(e).falhou) && (
+                  <button disabled={ocup} onClick={() => setPrevia({ sacola: s, evento: eventoDaSacola(ef) })} className="px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 text-xs font-semibold">Enviar pela API · {ROTULO_EVENTO[eventoDaSacola(ef)]}</button>
+                )}
                 {wa && <a href={wa} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> Cobrar</a>}
                 {ef === "ABERTA" && pagando?.id !== s.id && <button disabled={ocup} onClick={() => setPagando({ id: s.id, forma: FORMAS_PAGAMENTO[0], valor: String(t.total) })} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Registrar pagamento</button>}
                 {ef === "VENDIDO" && <button disabled={ocup} onClick={() => agir(s, () => registrarEntrega(s, user))} className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-bold">Marcar entregue</button>}
                 {ef === "ABERTA" && <button disabled={ocup} onClick={() => window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
+                {(envios[s.codigo] || []).map((e) => { const r = rotuloEnvio(e); return (
+                  <span key={e.evento} className={`text-[11px] self-center ${r.falhou ? "text-red-600 font-bold" : "text-gray-500"}`}>{ROTULO_EVENTO[e.evento]}: {r.texto}</span>
+                ); })}
                 {ocup && <Loader2 className="w-4 h-4 animate-spin text-orange-500 self-center" />}
               </div>
             </div>
           );
         })}
       </div>
+      {previa && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-label="Prévia do envio">
+          <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3">
+            <p className="font-bold text-gray-900">Enviar pelo WhatsApp (API) · {ROTULO_EVENTO[previa.evento]}</p>
+            <p className="text-[11px] text-gray-400 font-mono">template {previaEnvio(previa.evento, previa.sacola).template} · para {previa.sacola.cliente_whatsapp}</p>
+            <p className="text-sm text-gray-800 bg-emerald-50 rounded-lg p-3 whitespace-pre-wrap">{previaEnvio(previa.evento, previa.sacola).texto}</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setPrevia(null)} className="px-3 py-1.5 text-xs text-gray-500">Cancelar</button>
+              <button onClick={async () => {
+                const { sacola, evento } = previa; setPrevia(null);
+                try { await enviarPelaApi(sacola, evento); await carregarEnvios([sacola]); } catch (e) { setErro(e.message || String(e)); }
+              }} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Enviar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
