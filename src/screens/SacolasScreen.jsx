@@ -2,9 +2,9 @@
 // Regras em sacolasCore; operações em sacolas.js (pagar reaproveita confirmarVenda).
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Loader2, Search, AlertTriangle, MessageCircle } from "lucide-react";
-import { listarSacolas, tirarDaSacola, registrarPagamento, registrarEntrega, cancelarSacola } from "../lib/sacolas";
+import { listarSacolas, tirarDaSacola, registrarPagamento, registrarEntrega, cancelarSacola, renovarSacola } from "../lib/sacolas";
 import { statusEfetivo, totais } from "../lib/orcamentosCore";
-import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO } from "../lib/sacolasCore";
+import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO, PRAZOS_RENOVACAO, rotuloPrazo } from "../lib/sacolasCore";
 import { fmtBRL } from "../lib/model";
 import { WA_API_ATIVA, eventoDaSacola, ROTULO_EVENTO, previaEnvio, enviarPelaApi, situacaoEnvios, rotuloEnvio } from "../lib/waEnvio";
 
@@ -13,7 +13,7 @@ const COR = {
   CANCELADO: "bg-red-100 text-red-700", EXPIRADO: "bg-gray-200 text-gray-500",
 };
 const ROTULO = { ABERTA: "A pagar", VENDIDO: "Pago · a entregar", ENTREGUE: "Entregue", CANCELADO: "Cancelada", EXPIRADO: "Vencida" };
-const FILTROS = [["ABERTA", "A pagar"], ["VENDIDO", "A entregar"], ["ENTREGUE", "Entregues"], ["", "Todas"], ["CLIENTES", "Por cliente"]];
+const FILTROS = [["ABERTA", "A pagar"], ["EXPIRADO", "Vencidas"], ["VENDIDO", "A entregar"], ["ENTREGUE", "Entregues"], ["", "Todas"], ["CLIENTES", "Por cliente"]];
 const fmtData = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function SacolasScreen({ user, onClose, onMudou }) {
@@ -23,6 +23,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   const [erro, setErro] = useState(null);
   const [ocupado, setOcupado] = useState(null);
   const [pagando, setPagando] = useState(null); // { id, forma, valor }
+  const [dias, setDias] = useState({}); // id da sacola -> dias para reabrir/estender (padrão 3)
   const [previa, setPrevia] = useState(null); // { sacola, evento } — confirmação do envio pela API
   const [envios, setEnvios] = useState({}); // codigo -> situação dos envios (WhatsApp API)
 
@@ -113,13 +114,13 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${COR[ef]}`}>{ROTULO[ef] || ef}</span>
                 <span className="ml-auto font-bold text-gray-900">{fmtBRL(t.total)}</span>
               </div>
-              <p className="text-[11px] text-gray-400 font-mono">{s.codigo}{ef === "ABERTA" ? <span className={vencendo ? "text-red-600 font-bold" : ""}> · seguro até {fmtData(s.validade)}</span> : null}{s.forma_pagamento ? ` · ${s.forma_pagamento}` : ""}</p>
+              <p className="text-[11px] text-gray-400 font-mono">{s.codigo}{ef === "ABERTA" ? <span className={vencendo ? "text-red-600 font-bold" : ""}> · seguro até {fmtData(s.validade)}</span> : ef === "EXPIRADO" ? <span className="text-red-600 font-bold"> · venceu em {fmtData(s.validade)} (itens liberados)</span> : null}{s.forma_pagamento ? ` · ${s.forma_pagamento}` : ""}</p>
               <ul className="text-xs text-gray-700 space-y-0.5">
                 {s.itens.map((i) => (
                   <li key={i.sku} className="flex items-center gap-2">
                     <span className="truncate">{i.produto} <span className="font-mono text-gray-400">({i.sku})</span></span>
                     <span className="ml-auto">{fmtBRL(i.preco)}</span>
-                    {ef === "ABERTA" && (
+                    {(ef === "ABERTA" || ef === "EXPIRADO") && (
                       <button disabled={ocup} aria-label={`Tirar ${i.sku}`} onClick={() => window.confirm(`Tirar ${i.sku} da sacola e liberar o item?`) && agir(s, () => tirarDaSacola(s, i.sku))}>
                         <X className="w-3.5 h-3.5 text-gray-400" />
                       </button>
@@ -148,7 +149,17 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                 {wa && <a href={wa} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> Cobrar</a>}
                 {ef === "ABERTA" && pagando?.id !== s.id && <button disabled={ocup} onClick={() => setPagando({ id: s.id, forma: FORMAS_PAGAMENTO[0], valor: String(t.total) })} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Registrar pagamento</button>}
                 {ef === "VENDIDO" && <button disabled={ocup} onClick={() => agir(s, () => registrarEntrega(s, user))} className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-bold">Marcar entregue</button>}
-                {ef === "ABERTA" && <button disabled={ocup} onClick={() => window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
+                {(ef === "ABERTA" || ef === "EXPIRADO") && (
+                  <span className="flex items-center gap-1">
+                    <select value={dias[s.id] || 3} onChange={(e) => setDias({ ...dias, [s.id]: Number(e.target.value) })} aria-label="Prazo"
+                      className="rounded-lg border border-gray-300 px-1.5 py-1.5 text-xs">
+                      {PRAZOS_RENOVACAO.map((d) => <option key={d} value={d}>{rotuloPrazo(d)}</option>)}
+                    </select>
+                    <button disabled={ocup} onClick={() => agir(s, () => renovarSacola(s, dias[s.id] || 3, user))}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">{ef === "EXPIRADO" ? "Reabrir" : "Estender"}</button>
+                  </span>
+                )}
+                {(ef === "ABERTA" || ef === "EXPIRADO") && <button disabled={ocup} onClick={() => window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
                 {(envios[s.codigo] || []).map((e) => { const r = rotuloEnvio(e); return (
                   <span key={e.evento} className={`text-[11px] self-center ${r.falhou ? "text-red-600 font-bold" : "text-gray-500"}`}>{ROTULO_EVENTO[e.evento]}: {r.texto}</span>
                 ); })}

@@ -27,6 +27,8 @@ OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_omnichannel.sql 2>&1)
 echo "$OUT"
 echo "$OUT" | grep -q "^FAIL" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }
+# tabela legada em produção com o nome `publicacoes` (outra coisa): a fila nova NÃO pode colidir com ela
+$PSQL -c "create table if not exists public.publicacoes (id bigint primary key, sku text references itens(sku) on update cascade, canal text, listing_id text, url text, status text default 'exportado', erro text, exportado_em timestamptz default now(), publicado_em timestamptz, updated_at timestamptz default now(), created_at timestamptz default now()); alter table public.publicacoes enable row level security;" || exit 1
 # E0-2: RPCs
 $PSQL -c "alter table itens add column if not exists taxa_venda numeric, add column if not exists frete_pago numeric;" || exit 1
 MIG2=supabase/migrations/20261102130000_omnichannel_rpcs.sql
@@ -70,6 +72,14 @@ OUT6=$($PSQL -A -t -F' | ' < scripts/sql/test_catalogo_meta.sql 2>&1)
 echo "$OUT6"
 echo "$OUT6" | grep -q "^FAIL" && { echo "HÁ FALHAS (catálogo Meta)"; exit 1; }
 echo "$OUT6" | grep -q "^PASS" || { echo "nenhum PASS no catálogo Meta"; exit 1; }
+# Fila de publicação + Instagram (E5-2 / #57 F2 / E2-1)
+MIG7=supabase/migrations/20261102180000_fila_publicacao.sql
+$PSQL < $MIG7 || { echo "FALHA ao aplicar a migration da fila"; exit 1; }
+$PSQL < $MIG7 || { echo "FALHA: migration da fila não é idempotente"; exit 1; }
+OUT7=$($PSQL -A -t -F' | ' < scripts/sql/test_fila.sql 2>&1)
+echo "$OUT7"
+echo "$OUT7" | grep -q "^FAIL" && { echo "HÁ FALHAS (fila)"; exit 1; }
+echo "$OUT7" | grep -q "^PASS" || { echo "nenhum PASS na fila"; exit 1; }
 # Teto por número sob concorrência: 6 sessões do mesmo número reservam SKUs diferentes → no máximo 3.
 $PSQL -c "insert into itens (sku, produto, status) select 'TT'||g, 'T', 'PRONTO' from generate_series(1,6) g; insert into contatos_whatsapp (wa_id) values ('5599'); insert into listing_state (sku, canal, estado) select 'TT'||g, 'whatsapp', 'publicado' from generate_series(1,6) g;" || exit 1
 for i in $(seq 1 6); do

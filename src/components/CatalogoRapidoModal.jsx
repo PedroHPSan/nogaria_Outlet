@@ -13,6 +13,7 @@ import { destinosInternacionais } from "../lib/destinos";
 import { textoGrupoEuro } from "../lib/precoEuro";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, legendaProduto, csvCatalogo } from "../lib/divulgacao";
+import { enviarParaFilaInstagram } from "../lib/filaPublicacao";
 import { FORMATOS } from "../lib/cardCore";
 import { normalizarSpec } from "../lib/catalogoSpec";
 import { carregarContato } from "../lib/empresaConfig";
@@ -198,6 +199,16 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     if (r !== "cancelado") setAviso(`${arqs.length} imagens (JPEG) ${r === "baixado" ? "baixadas" : "compartilhadas"}.`);
   });
 
+  const paraFilaIg = () => executar(async (signal) => {
+    const c = contato();
+    const legenda = itens.length === 1
+      ? legendaProduto(itens[0], { contato: rotuloContato(), mostrarPreco })
+      : textoInstagram(itens, { titulo, validade, contato: rotuloContato(), mostrarPreco });
+    await enviarParaFilaInstagram(itens, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco, legenda }, { signal, onProgress: setProgresso });
+    registrar("instagram");
+    setAviso("Rascunho criado na fila do Instagram (Vendas → Fila do Instagram). Revise e aprove lá.");
+  });
+
   const baixarCsv = () => executar(async () => {
     const blob = new Blob([csvCatalogo(itens, { linkDe: (it) => linkInteresseItem(it, contato().whatsapp) })], { type: "text/csv;charset=utf-8" });
     baixarArquivo(blob, "catalogo-nogaria.csv"); registrar("csv");
@@ -302,6 +313,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
                   {Object.entries(FORMATOS).map(([id, f]) => <option key={id} value={id}>{f.nome}</option>)}
                 </select>
                 <button onClick={cardsPng} disabled={gerando || !itens.length} className="rounded-lg bg-gray-900 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">Cards (JPEG)</button>
+                <button onClick={paraFilaIg} disabled={gerando || !itens.length} className="rounded-lg bg-pink-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">Enviar p/ fila do Instagram</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={ofertaLote} disabled={gerando || !itens.length} className="rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"><Link2 className="w-4 h-4" /> Oferta (1 link)</button>
