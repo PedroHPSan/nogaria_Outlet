@@ -1,0 +1,31 @@
+# Config do Supabase CLI para o stack LOCAL (`supabase start` / `functions serve`).
+# Os valores verify_jwt espelham o que está em produção (conferido em 2026-11-02): o `functions deploy`
+# pela CLI aplica estes valores, então NÃO mude sem conferir.
+project_id = "nogaria-outlet"
+
+[api]
+port = 55621
+
+[db]
+port = 55622
+major_version = 17
+
+[studio]
+port = 55623
+
+[functions.sync-canais]
+verify_jwt = false
+[functions.cotacao]
+verify_jwt = false
+[functions.ml-notifications]
+verify_jwt = false
+[functions.publicar-amazon]
+verify_jwt = false
+[functions.amazon-listings]
+verify_jwt = false
+[functions.enriquecer-produto]
+verify_jwt = false
+[functions.precos-mercado]
+verify_jwt = true
+[functions.buscar-imagens]
+verify_jwt = true

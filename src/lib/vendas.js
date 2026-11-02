@@ -3,26 +3,22 @@
 // com o item, gravada como colunas em `itens` (sem tabela `vendas`).
 import { supabase } from "./supabase";
 
-// Registra a venda de um item: grava os detalhes (valor bruto, canal real, taxa, frete,
-// comprador, nº do pedido) + status VENDIDO + carimbo `vendido_em` + auditoria.
+// Registra a venda de um item pela RPC `baixar_venda` (atômica): grava os detalhes (valor bruto,
+// canal real, taxa, frete, comprador, nº do pedido) + VENDIDO + `vendido_em` + auditoria, e recusa
+// item já vendido ou reservado por outra origem.
 // `dados` traz os campos do card "Venda" do ItemDetail.
 export async function registrarVenda(sku, dados, user) {
-  const { error } = await supabase
-    .from("itens")
-    .update({
-      valor_vendido: dados.valor_vendido ?? null,
-      canal_venda: dados.canal_venda || null,
-      taxa_venda: dados.taxa_venda ?? null,
-      frete_pago: dados.frete_pago ?? null,
-      comprador: dados.comprador?.trim() || null,
-      pedido_ref: dados.pedido_ref?.trim() || null,
-      status: "VENDIDO",
-      vendido_em: new Date().toISOString(),
-      upd_by: user.email,
-    })
-    .eq("sku", sku);
+  const { error } = await supabase.rpc("baixar_venda", {
+    p_sku: sku,
+    p_valor: dados.valor_vendido ?? null,
+    p_canal_venda: dados.canal_venda || null,
+    p_pedido_ref: dados.pedido_ref?.trim() || null,
+    p_comprador: dados.comprador?.trim() || null,
+    p_taxa: dados.taxa_venda ?? null,
+    p_frete: dados.frete_pago ?? null,
+    p_user: user.email,
+  });
   if (error) throw error;
-  await supabase.from("eventos").insert({ sku, acao: "status:VENDIDO", usuario: user.email });
 }
 
 // Marca um item já vendido como entregue/enviado ao comprador (carimbo + auditoria).
