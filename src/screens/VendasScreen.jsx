@@ -3,19 +3,20 @@ import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMetaItem, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
 import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
-import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag, Instagram } from "lucide-react";
+import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag, Instagram, Tag } from "lucide-react";
 
 const OrcamentosScreen = lazySeguro(() => import("./OrcamentosScreen"));
 const SacolasScreen = lazySeguro(() => import("./SacolasScreen"));
 const PedidosEuroScreen = lazySeguro(() => import("./PedidosEuroScreen"));
 const FilaPublicacaoScreen = lazySeguro(() => import("./FilaPublicacaoScreen"));
+const FilaPrecoScreen = lazySeguro(() => import("./FilaPrecoScreen"));
 
 const PAGE = 50;
 
 // Data curta (dd/mm) de um timestamptz, ou "—".
 const fmtData = (ts) => (ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—");
 
-export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onGoFiltered }) {
+export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onGoFiltered, params }) {
   const [resultado, setResultado] = useState(null); // linhas de vw_lote_resultado
   const [porCanal, setPorCanal] = useState(null); // vendas agregadas por método (canal_venda)
   const [itens, setItens] = useState([]);
@@ -28,6 +29,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
   const [sacolasOpen, setSacolasOpen] = useState(false);
   const [pedidosEuroOpen, setPedidosEuroOpen] = useState(false);
   const [filaOpen, setFilaOpen] = useState(false);
+  const [filaPrecoOpen, setFilaPrecoOpen] = useState(false);
 
   const refLote = useCallback((lote) => {
     const l = lotes.find((x) => String(x.lote) === String(lote));
@@ -113,6 +115,15 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
         className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
         <Instagram className="w-4 h-4 text-pink-600" /> Fila do Instagram
       </button>
+      <button onClick={() => setFilaPrecoOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
+        <Tag className="w-4 h-4 text-emerald-600" /> Fila de preço do catálogo
+      </button>
+      {filaPrecoOpen && (
+        <Suspense fallback={null}>
+          <FilaPrecoScreen params={params} user={user} onOpen={onOpen} onClose={() => setFilaPrecoOpen(false)} />
+        </Suspense>
+      )}
       {filaOpen && (
         <Suspense fallback={null}>
           <FilaPublicacaoScreen onClose={() => setFilaOpen(false)} />

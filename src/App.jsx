@@ -171,7 +171,7 @@ export default function App() {
         />
       )}
       {tab === "vendas" && (
-        <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} />
+        <VendasScreen lotes={lotes} onOpen={setOpenItem} user={user} refreshKey={refreshKey} onGoFiltered={goFiltered} params={params} />
       )}
       {tab === "portfolio" && <PortfolioScreen refreshKey={refreshKey} onOpen={setOpenItem} user={user} params={params} lotes={lotes} onBarraAcao={setBarraAcao} />}
       {tab === "planilha" && (
