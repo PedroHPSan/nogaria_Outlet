@@ -104,7 +104,9 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
         {lista.map((s) => {
           const ef = statusEfetivo(s);
           const t = totais(s.itens, s.desconto_pct);
-          const vencendo = ef === "ABERTA" && new Date(s.validade) - new Date() < 86400000;
+          const restante = new Date(s.validade) - new Date();
+          const vencendo = ef === "ABERTA" && restante < 86400000;
+          const venceEm2h = ef === "ABERTA" && restante > 0 && restante < 7200000;
           const wa = ef === "ABERTA" ? linkCobranca(s) : null;
           const ocup = ocupado === s.id;
           return (
@@ -114,7 +116,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${COR[ef]}`}>{ROTULO[ef] || ef}</span>
                 <span className="ml-auto font-bold text-gray-900">{fmtBRL(t.total)}</span>
               </div>
-              <p className="text-[11px] text-gray-400 font-mono">{s.codigo}{ef === "ABERTA" ? <span className={vencendo ? "text-red-600 font-bold" : ""}> · seguro até {fmtData(s.validade)}</span> : ef === "EXPIRADO" ? <span className="text-red-600 font-bold"> · venceu em {fmtData(s.validade)} (itens liberados)</span> : null}{s.forma_pagamento ? ` · ${s.forma_pagamento}` : ""}</p>
+              <p className="text-[11px] text-gray-400 font-mono">{s.codigo}{ef === "ABERTA" ? <span className={vencendo ? "text-red-600 font-bold" : ""}> · seguro até {fmtData(s.validade)}{venceEm2h ? ` · vence em ${Math.max(1, Math.round(restante / 60000))} min` : ""}</span> : ef === "EXPIRADO" ? <span className="text-red-600 font-bold"> · venceu em {fmtData(s.validade)} (itens liberados)</span> : null}{s.forma_pagamento ? ` · ${s.forma_pagamento}` : ""}</p>
               <ul className="text-xs text-gray-700 space-y-0.5">
                 {s.itens.map((i) => (
                   <li key={i.sku} className="flex items-center gap-2">
