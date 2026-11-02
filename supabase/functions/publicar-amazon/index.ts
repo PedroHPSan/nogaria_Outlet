@@ -144,9 +144,20 @@ Deno.serve(async (req) => {
     if (!item) return json({ error: "item não encontrado" }, 404);
 
     if (acao === "pausar") {
-      await salvarEstado(sku, { estado: "pausado" });
+      await salvarEstado(sku, { estado: "pausado", pausado_motivo: "manual" });
+      // Pausar de verdade na Amazon: quantidade 0 pelo worker (idempotente por minuto).
+      await admin.rpc("enfileirar_job", {
+        p_tipo: "amazon.quantidade", p_payload: { sku, quantidade: 0, motivo: "manual" },
+        p_idem_key: `amazon.quantidade:${sku}:pausa:${new Date().toISOString().slice(0, 16)}`,
+      });
       return json({ ok: true, estado: "pausado" });
     }
+
+    // Nunca publicar peça vendida/descartada nem reservada por outra origem.
+    if (["VENDIDO", "ENTREGUE", "DESCARTE"].includes(item.status)) return json({ error: `item ${item.status}: fora de estoque` }, 409);
+    await admin.rpc("reservas_expirar", { p_sku: sku });
+    const { data: disp } = await admin.rpc("item_disponivel", { p_sku: sku });
+    if (disp === false) return json({ error: "item reservado: libere a reserva antes de publicar" }, 409);
 
     // Pre-flight no servidor (autoridade).
     const pf = preflightAmazon(item);
@@ -184,10 +195,8 @@ Deno.serve(async (req) => {
     // Reflete no próprio item que o anúncio foi feito — evita a divergência itens × listing_state
     // (a app lê status/anuncio_feito na lista e filtros). Guarda p/ não rebaixar item já vendido.
     try {
-      await admin.from("itens").update({
-        anuncio_feito: true,
-        status: ["VENDIDO", "ENTREGUE", "DESCARTE"].includes(item.status) ? item.status : "ANUNCIADO",
-      }).eq("sku", sku);
+      await admin.from("itens").update({ anuncio_feito: true }).eq("sku", sku);
+      await admin.rpc("marcar_anunciado", { p_sku: sku, p_user: u.user.email ?? null });
     } catch { /* best-effort: o listing_state já é a autoridade da publicação */ }
     return json({ ok: true, estado: "publicado", external_listing_id: external, modo: "oferta" });
   } catch (e: any) {

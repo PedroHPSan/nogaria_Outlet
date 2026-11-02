@@ -5,7 +5,7 @@
 // Secrets (já configurados p/ publicar-amazon): LWA_CLIENT_ID, LWA_CLIENT_SECRET, AMZ_SELLER_ID.
 // Auth (verify_jwt off, igual publicar-amazon): bearer == SUPABASE_SERVICE_ROLE_KEY (admin)
 //   OU um JWT de usuário logado (quando chamado pela app).
-// Body opcional: { reconcile?: boolean }
+// Body opcional: { reconcile?: boolean, verificar?: boolean } (verificar = cron diário: pausa o que está à venda sem estoque)
 //   - false (padrão): só LÊ a Amazon e devolve a comparação (não grava nada).
 //   - true: faz upsert em listing_state marcando 'publicado' os SKUs encontrados na Amazon
 //     que existem em `itens` (não rebaixa os ausentes — só relata).
@@ -100,14 +100,16 @@ Deno.serve(async (req) => {
     // valida a ASSINATURA da apikey antes de rotear; aqui basta conferir o claim `role`
     // (cobre legado JWT e variações de valor do SERVICE_ROLE injetado) ou getUser p/ sessão.
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
-    let autorizado = !!bearer && (bearer === SERVICE_ROLE || jwtRole(bearer) === "service_role");
+    const cron = Deno.env.get("CRON_SECRET");
+    let autorizado = (!!cron && req.headers.get("x-cron-secret") === cron)
+      || (!!bearer && (bearer === SERVICE_ROLE || jwtRole(bearer) === "service_role"));
     if (!autorizado && bearer) {
       const { data: u } = await admin.auth.getUser(bearer);
       autorizado = !!u?.user;
     }
     if (!autorizado) return json({ error: "não autenticado" }, 401);
 
-    const { reconcile } = (await req.json().catch(() => ({}))) ?? {};
+    const { reconcile, verificar } = (await req.json().catch(() => ({}))) ?? {};
     const sellerId = Deno.env.get("AMZ_SELLER_ID");
     if (!sellerId) return json({ error: "AMZ_SELLER_ID não configurado" }, 500);
 
@@ -130,10 +132,28 @@ Deno.serve(async (req) => {
     const em_ambos = amazon.filter((a) => publicadosLocais.has(a.sku)).map((a) => a.sku);
     const fora_do_catalogo = amazon.filter((a) => !a.no_catalogo).map((a) => a.sku); // na Amazon mas não em itens
 
+    // Divergência = à venda na Amazon (BUYABLE ou qtd > 0) com a peça já vendida/entregue/descartada.
+    // `verificar` (cron diário) zera a quantidade pelo worker; reservada só é avisada (volta ao ar quando liberar).
+    const ativas = amazon.filter((a) => a.no_catalogo && ((a.status ?? []).includes("BUYABLE") || (a.qtd ?? 0) > 0));
+    const { data: finais } = await admin.from("itens").select("sku").in("sku", ativas.map((a) => a.sku))
+      .in("status", ["VENDIDO", "ENTREGUE", "DESCARTE"]);
+    const divergentes = (finais ?? []).map((r: any) => r.sku);
+    const finalSet = new Set(divergentes);
+    if (verificar) {
+      const dia = new Date().toISOString().slice(0, 10);
+      for (const sku of divergentes) {
+        await admin.rpc("enfileirar_job", {
+          p_tipo: "amazon.quantidade", p_payload: { sku, quantidade: 0, motivo: "divergente" },
+          p_idem_key: `amazon.quantidade:${sku}:divergente:${dia}`,
+        });
+      }
+      if (divergentes.length) console.error(`[amazon verificar] ${divergentes.length} divergência(s) a pausar: ${divergentes.join(", ")}`);
+    }
+
     let reconciliados = 0;
     if (reconcile) {
       for (const a of amazon) {
-        if (!a.no_catalogo) continue; // FK: só upsert de SKU que existe em itens
+        if (!a.no_catalogo || finalSet.has(a.sku)) continue; // FK: só SKU que existe em itens; nunca marcar vendido como publicado
         await admin.from("listing_state").upsert({
           sku: a.sku, canal: "amazon", estado: "publicado",
           external_listing_id: a.asin || a.sku, ultimo_erro: null,
@@ -162,6 +182,7 @@ Deno.serve(async (req) => {
       em_ambos,
       fora_do_catalogo,
       reconciliados,
+      divergentes,
       amazon, // detalhe item a item (sku, asin, status, preço, qtd, condição, issues)
     });
   } catch (e: any) {
