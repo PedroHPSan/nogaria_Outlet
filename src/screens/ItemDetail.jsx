@@ -22,6 +22,7 @@ import { cotacaoEuro } from "../lib/cotacao";
 import SepararModal from "../components/SepararModal";
 import CatalogoMetaButton from "../components/CatalogoMetaButton";
 import PricingCard from "../components/PricingCard";
+import OndeEstaPeca from "../components/OndeEstaPeca";
 import PublishPanel from "../components/PublishPanel";
 import CategoriaPicker from "../components/CategoriaPicker";
 import FotoInputs from "../components/FotoInputs";
@@ -1108,6 +1109,13 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         {/* Publicar em marketplace (Amazon) — após revisão; gate de preço/GTIN no PublishPanel */}
         <PublishPanel item={it} params={params} />
 
+        {/* Onde está esta peça (canais, reserva) + retirar de todos / vendi aqui */}
+        <OndeEstaPeca item={it} user={user} onVendiAqui={(canal) => {
+          const nome = { amazon: "Amazon", mercadolivre: "Mercado Livre", whatsapp: "Grupo WhatsApp", instagram: "B2C / Venda direta" }[canal];
+          if (nome) set({ canal_venda: nome });
+          setTimeout(() => document.getElementById("canal-venda")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
+        }} />
+
         {/* Venda — detalhe da venda real (a partir de Triado, p/ vendas diretas) p/ apurar o lucro líquido */}
         {statusIdx(it.status) >= statusIdx("TRIADO") && (
           <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
@@ -1120,7 +1128,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
                   onChange={(e) => set({ valor_vendido: e.target.value })} placeholder="bruto recebido" />
               </Field>
               <Field label="Canal da venda">
-                <select className={inputCls} value={it.canal_venda || ""}
+                <select id="canal-venda" className={inputCls} value={it.canal_venda || ""}
                   onChange={(e) => set({ canal_venda: e.target.value || null })}>
                   <option value="">Selecione…</option>
                   {CANAIS_VENDA.map((c) => <option key={c} value={c}>{c}</option>)}
