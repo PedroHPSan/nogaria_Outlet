@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { X, Loader2, Tag } from "lucide-react";
 import { lazySeguro } from "../lib/lazySeguro";
+import { elegiveisNaoPublicados, publicarLote } from "../lib/catalogoMeta";
 import { listarIncompletas, carregarItens, MOTIVOS_FILA, MOTIVO_ROTULO, TAMANHOS_LOTE } from "../lib/filaPreco";
 
 const RevisaoPrecosModal = lazySeguro(() => import("../components/RevisaoPrecosModal"));
@@ -14,6 +15,20 @@ export default function FilaPrecoScreen({ params, user, onClose, onOpen }) {
   const [tamanho, setTamanho] = useState(TAMANHOS_LOTE[0]);
   const [revisao, setRevisao] = useState(null);
   const [abrindo, setAbrindo] = useState(false);
+  const [pendentesCat, setPendentesCat] = useState(null); // SKUs elegíveis ainda fora do catálogo
+  const [pub, setPub] = useState(null); // { ok, falhas, total, erros? } do lote em andamento/concluído
+
+  const contarPendentes = useCallback(() => elegiveisNaoPublicados().then(setPendentesCat).catch(() => setPendentesCat(null)), []);
+  useEffect(() => { contarPendentes(); }, [contarPendentes]);
+  const publicar = async () => {
+    const skus = pendentesCat.slice(0, 100); // lotes de 100
+    setPub({ ok: 0, falhas: 0, total: skus.length }); setErro(null);
+    try {
+      const r = await publicarLote(await carregarItens(skus), { onProgresso: (p) => setPub((a) => ({ ...a, ...p })) });
+      setPub((a) => ({ ...a, erros: r.erros }));
+    } catch (e) { setErro(e.message || String(e)); setPub(null); }
+    contarPendentes();
+  };
 
   const carregar = useCallback(async () => {
     try { setErro(null); setLista(await listarIncompletas()); } catch (e) { setErro(e.message || String(e)); setLista([]); }
@@ -44,6 +59,18 @@ export default function FilaPrecoScreen({ params, user, onClose, onOpen }) {
           </button>
         ))}
       </div>
+      {pendentesCat && pendentesCat.length > 0 && (
+        <div className="mx-4 mb-2 bg-white border border-gray-200 rounded-xl p-3 text-xs space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-700"><b>{pendentesCat.length}</b> peça(s) elegível(is) ainda fora do catálogo.</span>
+            <button onClick={publicar} disabled={pub && !pub.erros} className="ml-auto px-3 py-1.5 rounded-lg bg-sky-600 text-white font-bold disabled:opacity-50">
+              {pub && !pub.erros ? `Publicando ${pub.ok + pub.falhas}/${pub.total}…` : `Publicar ${Math.min(100, pendentesCat.length)} no catálogo`}
+            </button>
+          </div>
+          {pub?.erros && <p className={pub.erros.length ? "text-red-600" : "text-emerald-700"}>
+            {pub.ok} publicada(s){pub.erros.length ? `, ${pub.erros.length} com erro: ${pub.erros.slice(0, 3).map((e) => `${e.sku} (${e.erro})`).join("; ")}` : "."}</p>}
+        </div>
+      )}
       {filtro === "sem_preco" && lista && visiveis.length > 0 && (
         <div className="mx-4 mb-2 bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-600">Lote:</span>
