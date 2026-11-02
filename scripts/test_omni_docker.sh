@@ -60,6 +60,16 @@ OUT5=$($PSQL -A -t -F' | ' < scripts/sql/test_whatsapp_envio.sql 2>&1)
 echo "$OUT5"
 echo "$OUT5" | grep -q "^FAIL" && { echo "HÁ FALHAS (envio)"; exit 1; }
 echo "$OUT5" | grep -q "^PASS" || { echo "nenhum PASS no envio"; exit 1; }
+# E1-4: catálogo Meta + página pública
+# O Postgres descartável não tem o schema `storage` do Supabase: stub mínimo só para a migration aplicar.
+$PSQL -c "create schema if not exists storage; create table if not exists storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]); create table if not exists storage.objects (id uuid default gen_random_uuid(), bucket_id text, name text); alter table storage.objects enable row level security;" || exit 1
+MIG6=supabase/migrations/20261102170000_catalogo_meta.sql
+$PSQL < $MIG6 || { echo "FALHA ao aplicar a migration do catálogo Meta"; exit 1; }
+$PSQL < $MIG6 || { echo "FALHA: migration do catálogo Meta não é idempotente"; exit 1; }
+OUT6=$($PSQL -A -t -F' | ' < scripts/sql/test_catalogo_meta.sql 2>&1)
+echo "$OUT6"
+echo "$OUT6" | grep -q "^FAIL" && { echo "HÁ FALHAS (catálogo Meta)"; exit 1; }
+echo "$OUT6" | grep -q "^PASS" || { echo "nenhum PASS no catálogo Meta"; exit 1; }
 # Teto por número sob concorrência: 6 sessões do mesmo número reservam SKUs diferentes → no máximo 3.
 $PSQL -c "insert into itens (sku, produto, status) select 'TT'||g, 'T', 'PRONTO' from generate_series(1,6) g; insert into contatos_whatsapp (wa_id) values ('5599'); insert into listing_state (sku, canal, estado) select 'TT'||g, 'whatsapp', 'publicado' from generate_series(1,6) g;" || exit 1
 for i in $(seq 1 6); do

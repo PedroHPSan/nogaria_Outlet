@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { buscarCatalogoPublico, registrarVisualizacao } from "../lib/catalogoPublico";
 import { skusIndisponiveis } from "../lib/ofertaPublica";
+import { buscarItemPublico } from "../lib/catalogoMeta";
 import { linkInteresseOferta, linkWa } from "../lib/ofertaCore";
 import { registrarInteresse } from "../lib/interesses";
 import { EMPRESA } from "../lib/empresa";
@@ -22,7 +23,7 @@ const BADGE_CLS = {
 
 // Página PÚBLICA (sem login) de uma oferta: 1 produto (destaque) ou vários (grade).
 // Renderiza só do snapshot do slug; "Quero este" abre o WhatsApp da Nogária.
-export default function ProdutoPublicoView({ slug }) {
+export default function ProdutoPublicoView({ slug, sku }) {
   const [estado, setEstado] = useState("carregando"); // carregando | ok | indisponivel
   const [dados, setDados] = useState(null);
   const [vendidos, setVendidos] = useState([]);
@@ -33,6 +34,14 @@ export default function ProdutoPublicoView({ slug }) {
 
   useEffect(() => {
     let vivo = true;
+    if (sku) { // /i/<sku>: item permanente do catálogo; a disponibilidade vem ao vivo do banco
+      buscarItemPublico(sku).then((r) => {
+        if (!vivo) return;
+        if (!r || !Array.isArray(r.payload?.itens)) { setEstado("indisponivel"); return; }
+        setDados({ payload: r.payload }); setVendidos(r.disponivel ? [] : [sku]); setEstado("ok");
+      });
+      return () => { vivo = false; };
+    }
     buscarCatalogoPublico(slug).then(async (d) => {
       if (!vivo) return;
       if (!d || !Array.isArray(d.payload?.itens)) { setEstado("indisponivel"); return; }
@@ -43,7 +52,7 @@ export default function ProdutoPublicoView({ slug }) {
       if (vivo) setVendidos(v);
     });
     return () => { vivo = false; };
-  }, [slug]);
+  }, [slug, sku]);
 
   const euro = !!dados?.payload?.euro && pub === "eu";
   useEffect(() => { document.documentElement.lang = euro ? lang : "pt-BR"; }, [euro, lang]);
