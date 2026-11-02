@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { marcarSemEstoque } from "./metaCatalogo.ts";
+import { marcarEmEstoque, marcarSemEstoque } from "./metaCatalogo.ts";
 import { atualizarQuantidade } from "./amazon.ts";
 import { mensagemVendido } from "./instagram.ts";
 
@@ -49,4 +49,11 @@ Deno.test("comentário do Instagram: vendido x indisponível", () => {
   assert.equal(mensagemVendido("NOG-1"), "NOG-1 VENDIDO ✅");
   assert.equal(mensagemVendido("NOG-1", "vendido"), "NOG-1 VENDIDO ✅");
   assert.equal(mensagemVendido("NOG-1", "indisponivel"), "NOG-1 INDISPONÍVEL");
+});
+
+Deno.test("catálogo Meta: repor marca in stock", async () => {
+  let corpo: URLSearchParams | undefined;
+  const fetchFn = ((_u: string, init: RequestInit) => { corpo = init.body as URLSearchParams; return resp({ handles: ["h"] }); }) as unknown as typeof fetch;
+  await marcarEmEstoque(["NOG-1-1"], { catalogId: "C", token: "T", fetchFn });
+  assert.deepEqual(JSON.parse(corpo!.get("requests")!), [{ method: "UPDATE", data: { id: "NOG-1-1", availability: "in stock" } }]);
 });
