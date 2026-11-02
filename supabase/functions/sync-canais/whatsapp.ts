@@ -87,8 +87,14 @@ export async function processarWhatsapp(payload: Record<string, unknown>, ctx: C
     .eq("canal", String(payload.canal)).eq("external_id", String(payload.external_id)).single();
   if (error) throw new Error(error.message);
   if (ev.processado_em) return;
-  const { mensagens, statuses } = extrairEventos(ev.payload);
+  const { mensagens, statuses, ecos } = extrairEventos(ev.payload);
   for (const m of mensagens) await tratarMensagem(ctx, m);
+  for (const e of ecos) { // resposta da equipe pelo aplicativo: entra no histórico da conversa como saída
+    const { error: eEco } = await ctx.admin.from("mensagens_whatsapp").upsert(
+      { wa_message_id: e.id, wa_id: e.para, direcao: "out", tipo: e.tipo, texto: e.texto, status: "sent" },
+      { onConflict: "wa_message_id", ignoreDuplicates: true });
+    if (eEco) throw new Error(eEco.message);
+  }
   for (const s of statuses) {
     // `statuses` traz o custo real: categoria/billable/pricing_model (só no status "sent"/"delivered").
     const { error: e } = await ctx.admin.from("mensagens_whatsapp").upsert({

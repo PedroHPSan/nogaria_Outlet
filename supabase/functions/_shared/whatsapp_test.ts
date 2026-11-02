@@ -49,3 +49,11 @@ Deno.test("extrairEventos: referral de anúncio Click-to-WhatsApp", () => {
   assert.deepEqual(mensagens[0].referral, { ctwaClid: "CLID123", sourceId: "123456", sourceType: "ad", headline: "Calçados com desconto", sourceUrl: "https://fb.me/x" });
   assert.equal(mensagens[1].referral, null);
 });
+
+Deno.test("extrairEventos: eco da coexistência (resposta enviada pelo app)", () => {
+  const payload = { entry: [{ changes: [{ field: "smb_message_echoes", value: { message_echoes: [
+    { id: "wamid.E1", from: "5591992561815", to: "5591988887777", type: "text", text: { body: "Oi! Já separo para você." } }] } }] }] };
+  const { ecos, mensagens } = extrairEventos(payload);
+  assert.deepEqual(ecos, [{ id: "wamid.E1", para: "5591988887777", tipo: "text", texto: "Oi! Já separo para você." }]);
+  assert.equal(mensagens.length, 0);
+});
