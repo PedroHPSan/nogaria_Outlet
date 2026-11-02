@@ -66,8 +66,12 @@ begin
   n := jsonb_array_length(p_payload->'midias');
   if n < 1 or n > 10 or (p_tipo <> 'carrossel' and n <> 1) or (p_tipo = 'carrossel' and n < 2) then
     raise exception 'quantidade de mídias inválida para %', p_tipo; end if;
-  if exists (select 1 from jsonb_array_elements_text(p_payload->'midias') u where u !~ '^https://[^ ]+\.jpe?g(\?.*)?$') then
-    raise exception 'mídias devem ser URLs https de JPEG'; end if;
+  -- só imagens enviadas ao bucket público ig-media (caminho <uuid>/<arquivo>.jpg, sem query string); o worker
+  -- ainda confere o host contra SUPABASE_URL. O bucket só aceita INSERT (sem update/delete): conteúdo imutável.
+  if exists (select 1 from jsonb_array_elements_text(p_payload->'midias') u
+              where u !~ '^https?://[A-Za-z0-9.:-]+/storage/v1/object/public/ig-media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[A-Za-z0-9._-]+\.jpe?g$'
+                 or u like '%..%') then
+    raise exception 'mídias devem ser JPEGs do bucket ig-media'; end if;
   if length(coalesce(p_payload->>'legenda', '')) > 2200 then raise exception 'legenda acima de 2.200 caracteres'; end if;
   if exists (select 1 from unnest(p_skus) s where not exists (select 1 from itens where sku = s)) then
     raise exception 'SKU inexistente'; end if;

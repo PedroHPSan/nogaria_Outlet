@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { comentar, mensagemVendido, publicarNoInstagram } from "./instagram.ts";
+import { comentar, mensagemVendido, publicarNoInstagram, redigir, renovarToken } from "./instagram.ts";
 
 function fake(estados: string[] = ["FINISHED"]) {
   const chamadas: { m: string; p: string; corpo: Record<string, string> }[] = [];
@@ -60,3 +60,12 @@ Deno.test("erro HTTP da API vira exceção legível; comentário VENDIDO", async
   await comentar("M1", mensagemVendido("NOG-1"), { ...base, fetchFn });
   assert.equal(chamadas[0].p.endsWith("/M1/comments"), true); assert.equal(chamadas[0].corpo.message, "NOG-1 VENDIDO ✅");
 });
+
+Deno.test("redigir remove tokens; renovarToken não vaza a URL em falha de rede", async () => {
+  assert.equal(redigir("GET https://graph.instagram.com/refresh_access_token?grant_type=x&access_token=IGAAabc123&y=1 falhou"), "GET https://graph.instagram.com/refresh_access_token?grant_type=x&access_token=***&y=1 falhou");
+  assert.equal(redigir("Authorization: Bearer abc.def-ghi"), "Authorization: Bearer ***");
+  const rede = (() => Promise.reject(new TypeError("error sending request for url (https://graph.instagram.com/refresh_access_token?access_token=SEGREDO)"))) as unknown as typeof fetch;
+  await assert.rejects(renovarToken({ ...base, fetchFn: rede }), (e: Error) => !/SEGREDO/.test(e.message) && /rede/.test(e.message));
+  const ruim = (() => Promise.resolve(new Response(JSON.stringify({ error: { message: "invalid access_token=SEGREDO" } }), { status: 400 }))) as unknown as typeof fetch;
+  await assert.rejects(renovarToken({ ...base, fetchFn: ruim }), (e: Error) => !/SEGREDO/.test(e.message));
+}); 

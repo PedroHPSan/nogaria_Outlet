@@ -8,23 +8,32 @@ set role authenticated;
 
 create temp table ids (nome text, id uuid);
 grant all on ids to authenticated;
-insert into ids select 'feed', publicacao_criar('instagram','feed',array['F1'],'{"legenda":"oi","midias":["https://x/ig/a.jpg"]}');
-insert into ids select 'car', publicacao_criar('instagram','carrossel',array['F2','F3'],'{"legenda":"oi","midias":["https://x/ig/a.jpg","https://x/ig/b.jpg"]}');
+insert into ids select 'feed', publicacao_criar('instagram','feed',array['F1'],'{"legenda":"oi","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"]}');
+insert into ids select 'car', publicacao_criar('instagram','carrossel',array['F2','F3'],'{"legenda":"oi","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg","https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/b.jpg"]}');
 
 -- validações do rascunho
 do $$ declare m text; begin
   begin perform publicacao_criar('instagram','feed',array['F1'],'{"legenda":"x","midias":["https://x/a.png"]}'); exception when others then m := sqlerrm; end;
   insert into res values ('mídia que não é JPEG recusada', m like '%JPEG%', m); m := null;
-  begin perform publicacao_criar('instagram','carrossel',array['F1'],'{"legenda":"x","midias":["https://x/a.jpg"]}'); exception when others then m := sqlerrm; end;
+  begin perform publicacao_criar('instagram','carrossel',array['F1'],'{"legenda":"x","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"]}'); exception when others then m := sqlerrm; end;
   insert into res values ('carrossel com 1 mídia recusado', m like '%quantidade%', m); m := null;
-  begin perform publicacao_criar('instagram','feed',array['F1'],'{"legenda":"x","midias":["https://x/a.jpg","https://x/b.jpg"]}'); exception when others then m := sqlerrm; end;
+  begin perform publicacao_criar('instagram','feed',array['F1'],'{"legenda":"x","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg","https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/b.jpg"]}'); exception when others then m := sqlerrm; end;
   insert into res values ('feed com 2 mídias recusado', m like '%quantidade%', m); m := null;
-  begin perform publicacao_criar('instagram','feed',array['F1'], jsonb_build_object('legenda', repeat('a',2201), 'midias', jsonb_build_array('https://x/a.jpg'))); exception when others then m := sqlerrm; end;
+  begin perform publicacao_criar('instagram','feed',array['F1'], jsonb_build_object('legenda', repeat('a',2201), 'midias', jsonb_build_array('https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg'))); exception when others then m := sqlerrm; end;
   insert into res values ('legenda acima de 2.200 recusada', m like '%2.200%', m); m := null;
-  begin perform publicacao_criar('instagram','feed',array['NAO-EXISTE'],'{"legenda":"x","midias":["https://x/a.jpg"]}'); exception when others then m := sqlerrm; end;
+  begin perform publicacao_criar('instagram','feed',array['NAO-EXISTE'],'{"legenda":"x","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"]}'); exception when others then m := sqlerrm; end;
   insert into res values ('SKU inexistente recusado', m like '%SKU%', m); m := null;
-  begin perform publicacao_criar('tiktok','feed',array['F1'],'{"legenda":"x","midias":["https://x/a.jpg"]}'); exception when others then m := sqlerrm; end;
+  begin perform publicacao_criar('tiktok','feed',array['F1'],'{"legenda":"x","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"]}'); exception when others then m := sqlerrm; end;
   insert into res values ('canal desconhecido recusado', m like '%canal%', m);
+end $$;
+
+do $$ declare m text; u text; begin
+  foreach u in array array['https://evil.example/a.jpg', 'https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg?x=1',
+                           'https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/../a.jpg', 'https://x/storage/v1/object/public/outro-bucket/11111111-1111-1111-1111-111111111111/a.jpg'] loop
+    m := null;
+    begin perform publicacao_criar('instagram','feed',array['F1'], jsonb_build_object('legenda','x','midias',jsonb_build_array(u))); exception when others then m := sqlerrm; end;
+    insert into res values ('URL fora do padrão do bucket recusada', m like '%ig-media%', u);
+  end loop;
 end $$;
 
 -- escrita direta na tabela não passa (só pelas RPCs)
@@ -59,7 +68,7 @@ insert into res select 'cancelar muda o status', (select status from publicacoes
 
 -- agendamento: futuro fica agendado; o cron enfileira quando vence
 set role authenticated;
-create temp table ag as select publicacao_criar('instagram','feed',array['F4'],'{"legenda":"x","midias":["https://x/a.jpg"]}') as id;
+create temp table ag as select publicacao_criar('instagram','feed',array['F4'],'{"legenda":"x","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"]}') as id;
 grant all on ag to authenticated;
 do $$ declare m text; begin
   begin perform publicacao_agendar((select id from ag), now() - interval '1 day'); exception when others then m := sqlerrm; end;
@@ -78,7 +87,7 @@ insert into res select 'cron enfileira agendada vencida', (select n from venc)=1
 update canais set config = config || '{"aprovacao_propria": false}' where codigo='instagram';
 select set_config('request.jwt.claims', '{"email":"ana@x"}', false);
 set role authenticated;
-create temp table r2 as select publicacao_criar('instagram','feed',array['F1'],'{"legenda":"x","midias":["https://x/a.jpg"]}') as id;
+create temp table r2 as select publicacao_criar('instagram','feed',array['F1'],'{"legenda":"x","midias":["https://x/storage/v1/object/public/ig-media/11111111-1111-1111-1111-111111111111/a.jpg"]}') as id;
 grant all on r2 to authenticated;
 do $$ declare m text; begin
   begin perform publicacao_aprovar((select id from r2)); exception when others then m := sqlerrm; end;

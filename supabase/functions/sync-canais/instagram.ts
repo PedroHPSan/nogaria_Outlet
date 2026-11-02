@@ -2,7 +2,7 @@
 // IG_DRY_RUN=1 (ou SYNC_DRY_RUN=1) simula: nada vai à API e o id da mídia fica "dry_<id>" (a tela mostra "simulado").
 // Sem token e sem dry-run, falha de forma explícita — nunca marca como publicado sem ter publicado.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { comentar, mensagemVendido, publicarNoInstagram, renovarToken, type Pub } from "../_shared/instagram.ts";
+import { comentar, mensagemVendido, publicarNoInstagram, redigir, renovarToken, type Pub } from "../_shared/instagram.ts";
 
 type Ctx = { dryRun: boolean; admin: SupabaseClient; job: { id: number; tentativas: number } };
 const MAX_TENTATIVAS = 5;
@@ -31,6 +31,12 @@ export async function publicarInstagram(payload: Record<string, unknown>, ctx: C
         return;
       }
     }
+    // defesa em profundidade: só publica imagem do bucket público do próprio projeto (a aprovação é de quem VIU esse conteúdo)
+    const prefixo = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/ig-media/`;
+    if (!(pub.payload as Pub["payload"]).midias.every((u) => u.startsWith(prefixo) && !u.includes(".."))) {
+      await ctx.admin.from("publicacoes").update({ status: "cancelado", erro: "mídia fora do bucket ig-media do projeto", atualizado_em: new Date().toISOString() }).eq("id", id);
+      return;
+    }
     let mediaId: string, permalink: string | null = null;
     if (simular(ctx)) {
       console.log(`[ig dry-run] publicaria ${pub.tipo} (${(pub.payload as Pub["payload"]).midias.length} mídia(s)) da publicação ${id}`);
@@ -50,7 +56,7 @@ export async function publicarInstagram(payload: Record<string, unknown>, ctx: C
     }));
     if (linhas.length) await ctx.admin.from("listing_state").upsert(linhas, { onConflict: "sku,canal" });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = redigir(e instanceof Error ? e.message : String(e));
     // última tentativa: a tela passa a mostrar "erro" com botão de reenviar; antes disso só guarda o motivo
     await ctx.admin.from("publicacoes").update({
       erro: msg.slice(0, 500), ...(ctx.job.tentativas >= MAX_TENTATIVAS ? { status: "erro" } : {}), atualizado_em: new Date().toISOString(),

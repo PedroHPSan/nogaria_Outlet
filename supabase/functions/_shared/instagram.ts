@@ -68,9 +68,19 @@ export async function renovarToken(o: Opcoes): Promise<{ token: string; expiraEm
   const f = o.fetchFn ?? fetch;
   const url = new URL("https://graph.instagram.com/refresh_access_token");
   url.searchParams.set("grant_type", "ig_refresh_token"); url.searchParams.set("access_token", o.token);
-  const r = await f(url); const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`Instagram ${r.status}: ${JSON.stringify(j?.error ?? j).slice(0, 300)}`);
+  let r: Response;
+  try { r = await f(url); } catch { throw new Error("falha de rede ao renovar o token do Instagram"); } // a URL carrega o token: não propagar o erro cru
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(redigir(`Instagram ${r.status}: ${JSON.stringify(j?.error ?? j).slice(0, 300)}`));
   return { token: String(j.access_token), expiraEm: new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() };
+}
+
+// Remove tokens de qualquer texto antes de gravar em erro/log (o refresh do Instagram leva o token na URL).
+export function redigir(texto: string): string {
+  return texto
+    .replace(/(access_token|client_secret|fb_exchange_token)=[^&\s"']+/gi, "$1=***")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer ***")
+    .replace(/\bIG[A-Za-z0-9_-]{30,}\b/g, "***");
 }
 
 export const mensagemVendido = (sku: string) => `${sku} VENDIDO ✅`;

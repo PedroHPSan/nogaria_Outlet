@@ -5,6 +5,7 @@
 // Body opcional: { limite?: number } (padrão 10, máx. 50).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { handlers } from "./handlers.ts";
+import { redigir } from "../_shared/instagram.ts";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
       if (!h) throw new Error(`handler não registrado: ${job.tipo}`);
       await h(job.payload ?? {}, { dryRun, admin, job: { id: job.id, tentativas: job.tentativas } });
     } catch (e) {
-      erro = e instanceof Error ? e.message : String(e);
+      erro = redigir(e instanceof Error ? e.message : String(e));
     }
     const { data: status } = await admin.rpc("job_concluir", { p_id: job.id, p_ok: erro === null, p_erro: erro });
     if (status === "ok") resumo.ok++; else if (status === "morto") resumo.morto++; else resumo.erro++;

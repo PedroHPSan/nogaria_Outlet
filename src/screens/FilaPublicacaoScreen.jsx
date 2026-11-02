@@ -63,6 +63,11 @@ export default function FilaPublicacaoScreen({ onClose }) {
                   <p className="text-xs text-gray-700 line-clamp-3 whitespace-pre-line">{p.payload?.legenda || "(sem legenda)"}</p>
                 </div>
               </div>
+              {p.payload?.midias?.length > 1 && (
+                <div className="flex gap-1.5 overflow-x-auto" aria-label="Todas as imagens do carrossel">
+                  {p.payload.midias.map((u, i) => <img key={u} src={u} alt={`Imagem ${i + 1}`} className="w-14 h-14 rounded object-cover bg-gray-100 shrink-0" loading="lazy" />)}
+                </div>
+              )}
               <p className="text-[11px] text-gray-500">
                 criado por {p.criado_por}{p.aprovado_por ? ` · aprovado por ${p.aprovado_por}` : ""}
                 {p.agendado_para ? ` · agendado para ${fmtBrasilia(p.agendado_para)} (Brasília)` : ""}
