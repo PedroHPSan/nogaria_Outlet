@@ -44,7 +44,8 @@
     "prebuild": "node scripts/copiar_modelo_fundo.mjs",
     "test:oferta": "node scripts/test_oferta.mjs",
     "test:sacolas": "node scripts/test_sacolas.mjs",
-    "test:elegibilidade": "node scripts/test_catalogo_elegibilidade.mjs"
+    "test:elegibilidade": "node scripts/test_catalogo_elegibilidade.mjs",
+    "test:paginar": "node scripts/test_paginar.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",

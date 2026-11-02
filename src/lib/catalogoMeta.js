@@ -5,6 +5,7 @@ import { montarPayloadOferta } from "./ofertaCore.js";
 import { carregarContato } from "./empresaConfig.js";
 import { separarDisponiveis, textoBloqueados } from "./ofertaPublica.js";
 import { primeirasFotos } from "./fotos.js";
+import { lerTodas } from "./paginar.js";
 
 const LADO_MAX = 1600;
 
@@ -66,14 +67,12 @@ export async function buscarItemPublico(sku) {
 // Elegíveis (C1) que ainda não estão no catálogo, prontos para publicar em lote.
 export async function elegiveisNaoPublicados() {
   const [el, pub] = await Promise.all([
-    supabase.rpc("catalogo_elegibilidade", { p_sku: null }),
+    lerTodas((de, ate) => supabase.rpc("catalogo_elegibilidade", { p_sku: null }).order("sku").range(de, ate)),
     // publicadas e as que a Bárbara tirou de propósito (excluídas) não voltam a ser oferecidas
-    supabase.from("listing_state").select("sku,estado,pausado_motivo").eq("canal", "whatsapp").limit(10000),
+    lerTodas((de, ate) => supabase.from("listing_state").select("sku,estado,pausado_motivo").eq("canal", "whatsapp").order("sku").range(de, ate)),
   ]);
-  if (el.error) throw el.error;
-  if (pub.error) throw pub.error;
-  const publicados = new Set((pub.data || []).filter((r) => r.estado === "publicado" || r.pausado_motivo === "excluido").map((r) => r.sku));
-  return (el.data || []).filter((r) => r.elegivel && !publicados.has(r.sku)).map((r) => r.sku).sort();
+  const fora = new Set(pub.filter((r) => r.estado === "publicado" || r.pausado_motivo === "excluido").map((r) => r.sku));
+  return el.filter((r) => r.elegivel && !fora.has(r.sku)).map((r) => r.sku).sort();
 }
 
 // Publica as peças em paralelo limitado (conversão de foto é pesada). Cada falha vira entrada em `erros`; o resto segue.

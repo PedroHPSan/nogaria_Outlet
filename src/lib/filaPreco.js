@@ -1,11 +1,13 @@
 // Fila de preço do catálogo (C2): peças em Foto OK ou além que ainda não são elegíveis, com o motivo.
 // A regra vem do banco (catalogo_elegibilidade); aqui só junta o nome da peça para a tela.
 import { supabase } from "./supabase.js";
+import { lerTodas } from "./paginar.js";
 import { MOTIVO_ROTULO } from "./catalogoElegibilidade.js";
 
 export const MOTIVOS_FILA = ["sem_preco", "sem_categoria", "sem_estado", "sem_foto"];
 export { MOTIVO_ROTULO };
 export const TAMANHOS_LOTE = [50, 200, 1000];
+export const TAMANHOS_PUBLICACAO = [5, 100, 500]; // 5 = lote de teste
 
 const em = async (tabela, colunas, chave, valores, tam = 150) => {
   const partes = [];
@@ -16,9 +18,8 @@ const em = async (tabela, colunas, chave, valores, tam = 150) => {
 
 // Incompletas em Foto OK+ (ignora etapa anterior, vendido e reservado — não são pendência de cadastro).
 export async function listarIncompletas() {
-  const { data, error } = await supabase.rpc("catalogo_elegibilidade", { p_sku: null });
-  if (error) throw error;
-  const pend = (data || []).filter((r) => !r.elegivel && !r.motivos.includes("etapa") && !r.motivos.includes("vendido")
+  const data = await lerTodas((de, ate) => supabase.rpc("catalogo_elegibilidade", { p_sku: null }).order("sku").range(de, ate));
+  const pend = data.filter((r) => !r.elegivel && !r.motivos.includes("etapa") && !r.motivos.includes("vendido")
     && r.motivos.some((m) => MOTIVOS_FILA.includes(m)));
   const itens = await em("itens", "sku,produto,grupo,estado,lote,preco_sugerido", "sku", pend.map((r) => r.sku));
   const porSku = new Map(itens.map((i) => [i.sku, i]));
