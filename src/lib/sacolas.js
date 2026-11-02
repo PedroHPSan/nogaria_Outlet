@@ -6,7 +6,7 @@ import { EMPRESA } from "./empresa";
 import { marcarEntregue } from "./vendas";
 import { listarOrcamentos, confirmarVenda, cancelarOrcamento, mudarStatus } from "./orcamentos";
 import { codigoOrcamento, proximoSeq, totais, prazoSacola } from "./orcamentosCore";
-import { sacolaAbertaDe, adicionarItem, removerItem, soDigitos } from "./sacolasCore";
+import { sacolaAbertaDe, adicionarItem, removerItem, soDigitos, PRAZOS_RENOVACAO } from "./sacolasCore";
 
 export const listarSacolas = async (opts = {}) =>
   (await listarOrcamentos(opts)).filter((o) => o.origem === "whatsapp");
@@ -61,6 +61,25 @@ export async function separar(item, cliente, user) {
     throw e2;
   }
   return sacola;
+}
+
+// Reabre uma sacola vencida (a reserva dos itens expirou) ou estende o prazo de uma a pagar: reserva TODOS os
+// itens de novo por `dias` a partir de agora (tudo ou nada, RPC reservar_itens) e só então atualiza a validade.
+// Se algum item foi vendido ou separado por outra origem no meio tempo, a RPC recusa com o motivo e nada muda
+// (a tela permite tirar o item da sacola e tentar de novo).
+export async function renovarSacola(sacola, dias, user) {
+  if (sacola.status !== "ABERTA") throw new Error("Só sacola a pagar pode ser reaberta ou estendida.");
+  if (!PRAZOS_RENOVACAO.includes(Number(dias))) throw new Error("Prazo inválido.");
+  const validade = prazoSacola(new Date(), Number(dias));
+  const { error: eRes } = await supabase.rpc("reservar_itens", {
+    p_skus: sacola.itens.map((i) => i.sku), p_canal: "whatsapp", p_origem_tipo: "sacola",
+    p_origem_ref: sacola.codigo, p_expira_em: validade, p_user: user?.email,
+  });
+  if (eRes) throw eRes;
+  const { data, error } = await supabase.from("orcamentos")
+    .update({ validade, atualizado_em: new Date().toISOString() }).eq("id", sacola.id).eq("status", "ABERTA").select("*").single();
+  if (error) throw error;
+  return data;
 }
 
 export async function tirarDaSacola(sacola, sku) {

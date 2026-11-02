@@ -1,7 +1,7 @@
 // Teste das regras puras da sacola de WhatsApp (sacolasCore + transições). Rode: npm run test:sacolas
 import assert from "node:assert/strict";
 import { podeTransitar, statusEfetivo, prazoSacola } from "../src/lib/orcamentosCore.js";
-import { mesmoCliente, sacolaAbertaDe, adicionarItem, removerItem, resumoSacolas, mensagemCobranca, linkCobranca, resumoDoDia, porCliente } from "../src/lib/sacolasCore.js";
+import { PRAZOS_RENOVACAO, rotuloPrazo, mesmoCliente, sacolaAbertaDe, adicionarItem, removerItem, resumoSacolas, mensagemCobranca, linkCobranca, resumoDoDia, porCliente } from "../src/lib/sacolasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -16,6 +16,13 @@ ok(!podeTransitar("ENTREGUE", "VENDIDO"), "ENTREGUE é terminal");
 ok(!podeTransitar("ABERTA", "ENTREGUE"), "não entrega sem pagar");
 eq(statusEfetivo(sac({ validade: "2026-10-27T00:00:00Z" }), agora), "EXPIRADO", "sacola vencida expira");
 ok(new Date(prazoSacola(agora)) - agora === 3 * 86400000, "prazo padrão 3 dias");
+
+console.log("renovação");
+eq(PRAZOS_RENOVACAO, [1, 3, 7, 15, 30], "prazos oferecidos para reabrir/estender");
+eq([rotuloPrazo(1), rotuloPrazo(7)], ["1 dia", "7 dias"], "rótulos");
+eq(statusEfetivo(sac({ validade: "2026-10-27T00:00:00Z" }), agora), "EXPIRADO", "vencida é EXPIRADO (reabrir aparece)");
+eq(statusEfetivo(sac({ validade: new Date(+agora + 7 * 86400000).toISOString() }), agora), "ABERTA", "prazo novo de 7 dias volta a ABERTA");
+ok(new Date(prazoSacola(agora, 30)) - agora === 30 * 86400000, "prazoSacola aceita dias a partir de agora");
 
 console.log("cliente");
 ok(mesmoCliente({ cliente_whatsapp: "5511999990000" }, { whatsapp: "+55 (11) 99999-0000" }), "casa por WhatsApp ignorando máscara");

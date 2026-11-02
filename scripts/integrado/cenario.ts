@@ -143,7 +143,21 @@ check((await ml({ ...evt, user_id: 1 })).status === 403, "origem inválida → 4
 await worker();
 check(((await rest(`/webhook_eventos?canal=eq.mercadolivre`)).data as any[]).every((e) => e.processado_em), "worker marca o evento do ML como processado");
 
-console.log("== 6. Saúde geral ==");
+console.log("== 6. Reabrir sacola vencida (renovarSacola → reservar_itens) ==");
+const [r1s, r2s, r3s] = [sku(6, 1), sku(6, 2), sku(6, 3)];
+await insere("itens", [r1s, r2s, r3s, sku(6, 9)].map((k) => ({ sku: k, produto: "R", status: "PRONTO" })));
+const reservaSacola = (skus: string[], ref: string, dias: number) => rpc("reservar_itens", { p_skus: skus, p_canal: "whatsapp", p_origem_tipo: "sacola", p_origem_ref: ref, p_expira_em: new Date(Date.now() + dias * 864e5).toISOString(), p_user: "teste" }, USER);
+check((await reservaSacola([r1s, r2s], "ORC-R1", -1)).status < 300, "sacola separada (prazo já vencido)");
+const rr = await reservaSacola([r1s, r2s], "ORC-R1", 7);
+const at = (await rest(`/reservas?sku=in.(${r1s},${r2s})&status=eq.ATIVA`)).data as any[];
+check(rr.status < 300 && at.length === 2 && at.every((r) => new Date(r.expira_em) > new Date(Date.now() + 6 * 864e5)), "reabrir: itens reservados de novo por 7 dias", at);
+await reservaSacola([r3s], "ORC-R2", -1);
+await rpc("reservas_expirar", {}, USER);
+check((await reservaSacola([r3s], "ORC-OUTRO", 3)).status < 300, "outra origem pegou o item enquanto a sacola estava vencida");
+const conflito = await reservaSacola([r3s, sku(6, 9)], "ORC-R2", 3);
+check(conflito.status >= 400 && /ORC-OUTRO/.test(JSON.stringify(conflito.data)), "reabrir com item já separado por outro é recusado com o motivo", conflito.data);
+
+console.log("== 7. Saúde geral ==");
 const ruins = (await rest(`/integracao_jobs?status=in.(erro,morto)`)).data as any[];
 check(ruins.length === 0, "nenhum job em erro/morto ao final", ruins);
 

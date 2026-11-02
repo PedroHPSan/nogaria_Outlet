@@ -94,3 +94,7 @@ export function porCliente(sacolas, agora = new Date()) {
   }
   return [...mapa.values()].sort((a, b) => (b.pago + b.aPagar) - (a.pago + a.aPagar));
 }
+
+// Reabrir sacola vencida / estender o prazo: opções em dias a partir de AGORA (o prazo antigo não é somado).
+export const PRAZOS_RENOVACAO = [1, 3, 7, 15, 30];
+export const rotuloPrazo = (dias) => (dias === 1 ? "1 dia" : `${dias} dias`);
