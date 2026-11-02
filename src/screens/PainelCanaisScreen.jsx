@@ -1,20 +1,26 @@
 // Painel catálogo × triagem (C6) + integrações com problema (N6): o que trava o catálogo e o que o worker não conseguiu fazer.
 import React, { useCallback, useEffect, useState } from "react";
 import { X, Loader2, LayoutDashboard } from "lucide-react";
-import { painelCatalogo, jobsComProblema, reenfileirarJob } from "../lib/canais";
+import { painelCatalogo, jobsComProblema, reenfileirarJob, listarCanais, definirCanalAtivo, CANAL_ROTULO } from "../lib/canais";
 import { fmtBrasilia } from "../lib/filaPublicacao";
 
 const BLOQUEIOS = [["sem_preco", "Sem preço"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
 const N = (v) => Number(v ?? 0).toLocaleString("pt-BR");
 
-export default function PainelCanaisScreen({ onClose }) {
+export default function PainelCanaisScreen({ onClose, user }) {
   const [p, setP] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [canais, setCanais] = useState([]);
   const [erro, setErro] = useState(null);
   const carregar = useCallback(async () => {
-    try { setErro(null); const [a, b] = await Promise.all([painelCatalogo(), jobsComProblema()]); setP(a); setJobs(b); } catch (e) { setErro(e.message || String(e)); }
+    try { setErro(null); const [a, b, c] = await Promise.all([painelCatalogo(), jobsComProblema(), listarCanais()]); setP(a); setJobs(b); setCanais(c); } catch (e) { setErro(e.message || String(e)); }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+  const alternarCanal = async (c) => {
+    const novo = !c.ativo;
+    if (!novo && !window.confirm(`Desativar ${CANAL_ROTULO[c.codigo] || c.nome}? Deixa de aceitar reservas e publicações (as retiradas continuam).`)) return;
+    try { await definirCanalAtivo(c.codigo, novo, user); await carregar(); } catch (e) { setErro(e.message || String(e)); }
+  };
   const tentar = async (id) => { try { await reenfileirarJob(id); await carregar(); } catch (e) { setErro(e.message || String(e)); } };
 
   const maxBloq = p ? Math.max(1, ...BLOQUEIOS.map(([k]) => p.bloqueios[k])) : 1;
@@ -51,6 +57,17 @@ export default function PainelCanaisScreen({ onClose }) {
             <p className="text-gray-400">Atualizado {fmtBrasilia(p.atualizado_em)}</p>
           </div>
         </>)}
+        <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
+          <p className="text-xs font-bold text-gray-700">Canais</p>
+          <p className="text-[11px] text-gray-500">Desativado: recusa reserva, publicação e feed do canal. Venda e retirada continuam funcionando.</p>
+          {canais.map((c) => (
+            <div key={c.codigo} className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-gray-800">{CANAL_ROTULO[c.codigo] || c.nome}</span>
+              <span className={c.ativo ? "text-emerald-700" : "text-red-600"}>{c.ativo ? "Ativo" : "Desativado"}</span>
+              <button onClick={() => alternarCanal(c)} className="ml-auto px-2 py-0.5 rounded border border-gray-300 font-semibold">{c.ativo ? "Desativar" : "Ativar"}</button>
+            </div>
+          ))}
+        </div>
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
           <p className="text-xs font-bold text-gray-700">Integrações com problema</p>
           {jobs.length === 0 && <p className="text-xs text-gray-500">Nenhum job com erro ou morto.</p>}
