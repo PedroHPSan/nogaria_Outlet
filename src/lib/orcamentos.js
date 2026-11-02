@@ -2,10 +2,9 @@
 // venda (via registrarVenda, 1 SKU = 1 venda). Regras puras em orcamentosCore.js.
 import { supabase } from "./supabase";
 import { gerarSlug } from "./catalogoPublico";
-import { registrarVenda } from "./vendas";
 import { EMPRESA } from "./empresa";
 import {
-  codigoOrcamento, proximoSeq, snapshotItens, totais, validadeEm, podeTransitar, valoresPorItem, reservaAtiva,
+  codigoOrcamento, proximoSeq, snapshotItens, totais, validadeEm, podeTransitar, valoresPorItem,
 } from "./orcamentosCore";
 
 export const linkOrcamento = (slug) => `${window.location.origin}/o/${slug}`;
@@ -52,23 +51,20 @@ export async function mudarStatus(orc, para, extra = {}) {
 
 export const marcarEnviado = (orc) => mudarStatus(orc, "ENVIADO");
 
-// Reserva os itens por 48 h. Recusa se algum já estiver reservado por OUTRO orçamento.
+// Reserva os itens por 48 h (tudo ou nada). Recusa se algum já estiver reservado por OUTRA origem.
 export async function reservarOrcamento(orc, user) {
-  const skus = orc.itens.map((i) => i.sku);
-  const { data: atuais, error } = await supabase.from("itens").select("sku, status, reservado_ate, reservado_por_orc").in("sku", skus);
-  if (error) throw error;
-  const conflito = (atuais || []).filter((i) => reservaAtiva(i) && i.reservado_por_orc !== orc.codigo);
-  if (conflito.length) throw new Error(`Já reservado em outro orçamento: ${conflito.map((i) => i.sku).join(", ")}`);
-  const indisponiveis = (atuais || []).filter((i) => ["VENDIDO", "ENTREGUE", "DESCARTE"].includes(i.status));
-  if (indisponiveis.length) throw new Error(`Fora de estoque: ${indisponiveis.map((i) => i.sku).join(", ")}`);
   const ate = validadeEm();
-  const { error: e2 } = await supabase.from("itens").update({ reservado_ate: ate, reservado_por_orc: orc.codigo, upd_by: user.email }).in("sku", skus);
-  if (e2) throw e2;
+  const { error } = await supabase.rpc("reservar_itens", {
+    p_skus: orc.itens.map((i) => i.sku), p_canal: "direto", p_origem_tipo: "sacola",
+    p_origem_ref: orc.codigo, p_expira_em: ate, p_user: user.email,
+  });
+  if (error) throw error;
   return mudarStatus(orc, "RESERVADO", { validade: ate });
 }
 
 async function liberarReserva(orc) {
-  await supabase.from("itens").update({ reservado_ate: null, reservado_por_orc: null }).eq("reservado_por_orc", orc.codigo);
+  const { error } = await supabase.rpc("liberar_reserva", { p_origem_tipo: "sacola", p_origem_ref: orc.codigo });
+  if (error) throw error;
 }
 
 export async function cancelarOrcamento(orc) {
@@ -77,22 +73,15 @@ export async function cancelarOrcamento(orc) {
   return novo;
 }
 
-// Converte em venda: 1 registrarVenda por SKU com o valor já com desconto rateado.
+// Converte em venda: `baixar_vendas` (tudo ou nada) com o valor já com desconto rateado. Item vendido
+// ou reservado por outra origem faz a RPC falhar sem venda parcial.
 export async function confirmarVenda(orc, user, { canal = "B2C / Venda direta" } = {}) {
   if (!podeTransitar(orc.status, "VENDIDO")) throw new Error(`Orçamento ${orc.codigo} está ${orc.status}.`);
-  // Trava contra revenda: outro orçamento (ou venda avulsa) pode ter levado o item antes.
-  const { data: atuais, error: eSel } = await supabase.from("itens").select("sku, status").in("sku", orc.itens.map((i) => i.sku));
-  if (eSel) throw eSel;
-  const jaVendidos = (atuais || []).filter((i) => ["VENDIDO", "ENTREGUE", "DESCARTE"].includes(i.status));
-  if (jaVendidos.length) throw new Error(`Já vendido/fora de estoque: ${jaVendidos.map((i) => i.sku).join(", ")}. Cancele ou ajuste o orçamento.`);
-  const valores = valoresPorItem(orc.itens, orc.desconto_pct);
-  const falhas = [];
-  for (const v of valores) {
-    try {
-      await registrarVenda(v.sku, { valor_vendido: v.valor, canal_venda: canal, comprador: orc.cliente_nome, pedido_ref: orc.codigo }, user);
-    } catch (e) { falhas.push(`${v.sku}: ${e.message || e}`); }
-  }
-  if (falhas.length) throw new Error(`Venda parcial — falhou: ${falhas.join("; ")}`);
+  const { error } = await supabase.rpc("baixar_vendas", {
+    p_itens: valoresPorItem(orc.itens, orc.desconto_pct).map((v) => ({ sku: v.sku, valor: v.valor })),
+    p_canal_venda: canal, p_pedido_ref: orc.codigo, p_comprador: orc.cliente_nome || null, p_user: user.email,
+  });
+  if (error) throw error;
   const novo = await mudarStatus(orc, "VENDIDO");
   await liberarReserva(orc);
   return novo;

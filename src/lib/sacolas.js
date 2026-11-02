@@ -5,7 +5,7 @@ import { gerarSlug } from "./catalogoPublico";
 import { EMPRESA } from "./empresa";
 import { marcarEntregue } from "./vendas";
 import { listarOrcamentos, confirmarVenda, cancelarOrcamento, mudarStatus } from "./orcamentos";
-import { codigoOrcamento, proximoSeq, totais, prazoSacola, reservaAtiva } from "./orcamentosCore";
+import { codigoOrcamento, proximoSeq, totais, prazoSacola } from "./orcamentosCore";
 import { sacolaAbertaDe, adicionarItem, removerItem, soDigitos } from "./sacolasCore";
 
 export const listarSacolas = async (opts = {}) =>
@@ -17,17 +17,11 @@ async function codigoNovo() {
 }
 
 // Separa 1 item para o cliente: cria a sacola (se não houver aberta) ou soma nela, e reserva
-// o item até o prazo. Recusa item reservado por outra sacola ou fora de estoque.
+// todos os itens dela até o prazo (RPC `reservar_itens`, atômica). Se a reserva falhar (item
+// separado por outra origem ou fora de estoque), desfaz a alteração na sacola.
 export async function separar(item, cliente, user) {
-  const { data: atual, error } = await supabase.from("itens")
-    .select("sku, status, reservado_ate, reservado_por_orc").eq("sku", item.sku).single();
-  if (error) throw error;
-  if (["VENDIDO", "ENTREGUE", "DESCARTE"].includes(atual.status)) throw new Error(`${item.sku}: fora de estoque.`);
-
   const sacolas = await listarSacolas({ status: "ABERTA" });
   const existente = sacolaAbertaDe(sacolas, cliente);
-  if (reservaAtiva(atual) && atual.reservado_por_orc !== existente?.codigo)
-    throw new Error(`${item.sku}: já separado em ${atual.reservado_por_orc}.`);
 
   const itens = adicionarItem(existente?.itens, item);
   const t = totais(itens, existente?.desconto_pct || 0);
@@ -53,16 +47,26 @@ export async function separar(item, cliente, user) {
     if (!sacola) throw new Error("Não foi possível gerar o código da sacola. Tente novamente.");
   }
   // A validade da sacola vale para todos os itens dela.
-  const { error: e2 } = await supabase.from("itens")
-    .update({ reservado_ate: validade, reservado_por_orc: sacola.codigo, upd_by: user?.email })
-    .in("sku", itens.map((i) => i.sku));
-  if (e2) throw e2;
+  const { error: e2 } = await supabase.rpc("reservar_itens", {
+    p_skus: itens.map((i) => i.sku), p_canal: "whatsapp", p_origem_tipo: "sacola",
+    p_origem_ref: sacola.codigo, p_expira_em: validade, p_user: user?.email,
+  });
+  if (e2) {
+    if (existente) {
+      await supabase.from("orcamentos")
+        .update({ itens: existente.itens, total: existente.total, validade: existente.validade }).eq("id", existente.id);
+    } else {
+      await supabase.from("orcamentos").delete().eq("id", sacola.id);
+    }
+    throw e2;
+  }
   return sacola;
 }
 
 export async function tirarDaSacola(sacola, sku) {
   const itens = removerItem(sacola.itens, sku);
-  await supabase.from("itens").update({ reservado_ate: null, reservado_por_orc: null }).eq("sku", sku).eq("reservado_por_orc", sacola.codigo);
+  const { error: eLib } = await supabase.rpc("liberar_reserva", { p_origem_tipo: "sacola", p_origem_ref: sacola.codigo, p_sku: sku });
+  if (eLib) throw eLib;
   if (!itens.length) return cancelarOrcamento(sacola);
   const { data, error } = await supabase.from("orcamentos")
     .update({ itens, total: totais(itens, sacola.desconto_pct).total, atualizado_em: new Date().toISOString() })
