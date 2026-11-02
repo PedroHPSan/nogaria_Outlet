@@ -1,7 +1,7 @@
 // Edge Function: ml-notifications — webhook do Mercado Livre (inbox).
 // O ML faz POST a cada evento (orders_v2, items...). Validamos a origem (application_id + user_id),
 // gravamos em `webhook_eventos` (idempotente) e respondemos 200 rápido; o worker processa.
-// Secrets: ML_APP_ID, ML_USER_ID (sem eles todo POST é recusado). Publicar SEM verify_jwt:
+// Secrets: ML_APP_ID (cai para ML_CLIENT_ID: o "App ID" do ML é o client_id) e ML_USER_ID (sem eles todo POST é recusado). Publicar SEM verify_jwt:
 //   supabase functions deploy ml-notifications --no-verify-jwt
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { idExternoML, registrarEvento, resposta, validarOrigemML, type EventoML } from "../_shared/webhook.ts";
@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return resposta({ error: "método não permitido" }, 405);
 
   const evt = (await req.json().catch(() => null)) as EventoML | null;
-  const origemOk = validarOrigemML(evt, { applicationId: Deno.env.get("ML_APP_ID"), userId: Deno.env.get("ML_USER_ID") });
+  const origemOk = validarOrigemML(evt, { applicationId: Deno.env.get("ML_APP_ID") ?? Deno.env.get("ML_CLIENT_ID"), userId: Deno.env.get("ML_USER_ID") });
   if (!origemOk || !evt) return resposta({ error: "origem inválida" }, 403);
 
   try {
