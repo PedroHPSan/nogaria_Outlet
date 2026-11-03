@@ -38,6 +38,15 @@ export function custoRealLote(lote, todosLotes = [], opts = {}) {
   const somaPesos = todosLotes.reduce((s, l) => s + pesoFrete(l), 0);
   const frete = somaPesos > 0 ? r2(freteTotal * pesoFrete(lote) / somaPesos) : 0;
 
+  // Custo cadastrado na tela de custeio (lotes.custo_origem='composto'): custo_total é mantido por trigger
+  // (valor do lote ou soma dos itens + custos adicionais) e é a fonte única.
+  if (lote.custo_origem === "composto") {
+    return {
+      lote: lote.lote, lance: num(lote.lance_final), comissao: num(lote.comissao_leiloeiro), taxaHisa: num(lote.taxa_hisa),
+      taxaOrigem: "real", frete: 0, freteOrigem: "real", total: r2(num(lote.custo_total)),
+      origem: lote.modo_custeio === "soma" ? "custeio por produto (soma dos itens + adicionais)" : "custeio do lote (valor + adicionais)",
+    };
+  }
   // Composição REAL gravada no banco (migration lotes_custo_composicao): tem prioridade sobre as
   // estimativas. Frete NULL = ainda sem dado → mantém a estimativa (nunca assume 0).
   if (lote.valor_pago_hisa != null || lote.taxa_hisa != null) {

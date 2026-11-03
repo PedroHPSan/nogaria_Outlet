@@ -38,7 +38,8 @@ function useDebounced(valor, ms) {
   return v;
 }
 const pctDe = (a, b) => (b ? Math.round((a / b) * 100) : 0);
-const custoDoLote = (l) => Number(l.custo_composto ?? l.custo_total) || 0;
+// Lote com custeio cadastrado: custo_total (já com adicionais). Legado: custo composto do motor ou custo_total.
+const custoDoLote = (l) => Number(l.custo_origem === "composto" ? l.custo_total : (l.custo_composto ?? l.custo_total)) || 0;
 
 export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBruto, onOpenSalas, onOpenDestinos, onLotesChanged }) {
   const refreshKey = useDebounced(refreshBruto, 700);

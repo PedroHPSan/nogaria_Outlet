@@ -47,11 +47,11 @@ async function itensDoLote(lote, force = false) {
   const rows = [];
   for (let from = 0; ; from += 1000) { // PostgREST limita 1000 por página (lote 103 tem 700+)
     let data, error;
-    for (const cols of colunaPeso ? [`${COLS}, peso_rateio, peso_rateio_motivo`, COLS] : [COLS]) {
+    for (const cols of colunaPeso ? [`${COLS}, peso_rateio, peso_rateio_motivo, custo_direto`, `${COLS}, peso_rateio, peso_rateio_motivo`, COLS] : [COLS]) {
       const q = sb.from("itens").select(cols).range(from, from + 999);
       ({ data, error } = lote == null ? await q.is("lote", null) : await q.eq("lote", lote));
       if (!error) break;
-      if (cols !== COLS && /peso_rateio/.test(error.message || "")) colunaPeso = false; // sem a migration
+      if (cols !== COLS && /peso_rateio/.test(error.message || "")) colunaPeso = false; // sem a migration (custo_direto ausente só cai na variante seguinte)
     }
     if (error) throw error;
     rows.push(...(data || []));
@@ -59,6 +59,13 @@ async function itensDoLote(lote, force = false) {
   }
   cache.itens.set(lote, { t: Date.now(), rows });
   return rows;
+}
+
+async function extrasDoLote(lote) {
+  try {
+    const { data, error } = await sb.from("lote_custos_extra").select("sku, valor").eq("lote", lote);
+    return error ? [] : data || [];
+  } catch { return []; } // tabela inexistente (migration não aplicada)
 }
 
 async function snapshotDoLote(lote) {
@@ -94,15 +101,43 @@ export async function calcularLote(lote, params, { force = false, pesos = null }
     sku: it.sku, alvo: alvoDe(it, params), grupo: it.grupo, canal: canalV2(it.canal_principal),
     pesoKg: it.peso_real_kg ?? it.peso_kg, k: kDe(it, pesos),
   }));
-  const rateio = custo ? ratearLote(base, custo.total) : new Map();
+  // Custeio cadastrado: base do lote (rateada) + adicionais do lote (rateados entre todos) + adicionais
+  // e custo direto de cada item. Itens com custo direto saem da divisão da base.
+  const composto = custo && cadastro?.custo_origem === "composto";
+  const diretoDe = (it) => (it.custo_direto != null && it.custo_direto !== "" ? Number(it.custo_direto) : null);
+  let rateio = new Map(), direto = new Map(), adicItem = new Map(), rateioAdic = new Map();
+  if (composto) {
+    const extras = await extrasDoLote(lote);
+    let E = 0, X = 0;
+    for (const e of extras) {
+      const v = Number(e.valor) || 0;
+      if (e.sku) { adicItem.set(e.sku, (adicItem.get(e.sku) || 0) + v); X += v; } else E += v;
+    }
+    const comDireto = todos.filter((it) => diretoDe(it) != null);
+    for (const it of comDireto) direto.set(it.sku, diretoDe(it));
+    const somaDireto = comDireto.reduce((s2, it) => s2 + diretoDe(it), 0);
+    rateioAdic = ratearLote(base, E);
+    if (cadastro.modo_custeio === "soma") {
+      rateio = new Map(); // sem base a ratear: o custo vem do custo direto de cada item
+    } else {
+      const pool = Math.max(0, custo.total - E - X - somaDireto);
+      rateio = ratearLote(base.filter((b) => !direto.has(b.sku)), pool);
+    }
+  } else {
+    rateio = custo ? ratearLote(base, custo.total) : new Map();
+  }
   const fechado = !!cadastro?.fechado_em && !pesos; // pré-visualização ignora o snapshot
   const snap = fechado ? await snapshotDoLote(lote) : null;
   const linhas = todos.map((it, i) => {
     const rt = rateio.get(it.sku);
-    const custoItem = snap?.has(it.sku) ? snap.get(it.sku) : (rt?.custo ?? 0);
+    const calculado = composto
+      ? (direto.has(it.sku) ? direto.get(it.sku) : (rt?.custo ?? 0)) + (rateioAdic.get(it.sku)?.custo ?? 0) + (adicItem.get(it.sku) ?? 0)
+      : (rt?.custo ?? 0);
+    const custoItem = snap?.has(it.sku) ? snap.get(it.sku) : Math.round(calculado * 100) / 100;
+    const rw = rt || rateioAdic.get(it.sku);
     return {
-      it, alvo: base[i].alvo, k: base[i].k, custo: custoItem, w: rt?.w ?? 0, contrib: rt?.contrib ?? 0,
-      refEstimada: !!rt?.refEstimada, fechado: !!snap?.has(it.sku),
+      it, alvo: base[i].alvo, k: base[i].k, custo: custoItem, w: rw?.w ?? 0, contrib: rw?.contrib ?? 0,
+      refEstimada: !!rw?.refEstimada, fechado: !!snap?.has(it.sku),
     };
   });
   return { lote, cadastro, custo, linhas, fechado };
