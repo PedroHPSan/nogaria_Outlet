@@ -68,7 +68,7 @@ export async function separar(item, cliente, user) {
 // Se algum item foi vendido ou separado por outra origem no meio tempo, a RPC recusa com o motivo e nada muda
 // (a tela permite tirar o item da sacola e tentar de novo).
 export async function renovarSacola(sacola, dias, user) {
-  if (sacola.status !== "ABERTA") throw new Error("Só sacola a pagar pode ser reaberta ou estendida.");
+  if (!["ABERTA", "EXPIRADO"].includes(sacola.status)) throw new Error("Só sacola a pagar pode ser reaberta ou estendida.");
   if (!PRAZOS_RENOVACAO.includes(Number(dias))) throw new Error("Prazo inválido.");
   const validade = prazoSacola(new Date(), Number(dias));
   const { error: eRes } = await supabase.rpc("reservar_itens", {
@@ -77,7 +77,7 @@ export async function renovarSacola(sacola, dias, user) {
   });
   if (eRes) throw eRes;
   const { data, error } = await supabase.from("orcamentos")
-    .update({ validade, atualizado_em: new Date().toISOString() }).eq("id", sacola.id).eq("status", "ABERTA").select("*").single();
+    .update({ status: "ABERTA", validade, atualizado_em: new Date().toISOString() }).eq("id", sacola.id).in("status", ["ABERTA", "EXPIRADO"]).select("*").single();
   if (error) throw error;
   return data;
 }
