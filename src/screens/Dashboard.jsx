@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { ehInternacional } from "../lib/destinos";
 import { supabase } from "../lib/supabase";
-import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx, LOTE_SEM } from "../lib/model";
+import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx, LOTE_SEM, foraDoEstoque } from "../lib/model";
 import { pendenteMedida } from "../lib/medidas";
 import { carregarResultadoLotes } from "../lib/vendas";
+import CustoLoteModal from "../components/CustoLoteModal";
 import {
   Loader2, Ruler, ChevronRight, Package, TrendingUp, Gauge, ListChecks,
-  Users, MapPin, Boxes, Coins, Tag, Camera, Sparkles, DoorOpen,
+  Users, MapPin, Boxes, Coins, Tag, Camera, Sparkles, DoorOpen, Wallet, ShoppingBag, Layers, Store,
 } from "lucide-react";
 
 const DEST_ORDER = ["Belém", "SP storage", "Venda local SP", "A definir"];
@@ -29,7 +30,20 @@ function QueueRow({ icon: Icon, color, label, hint, n, onClick }) {
   );
 }
 
-export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas, onOpenDestinos }) {
+// Rajadas de alterações (importação, cadastro em massa) disparam muitos refreshKey seguidos:
+// o painel espera a poeira baixar antes de reagregar tudo.
+function useDebounced(valor, ms) {
+  const [v, setV] = useState(valor);
+  useEffect(() => { const t = setTimeout(() => setV(valor), ms); return () => clearTimeout(t); }, [valor, ms]);
+  return v;
+}
+const pctDe = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const custoDoLote = (l) => Number(l.custo_composto ?? l.custo_total) || 0;
+
+export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBruto, onOpenSalas, onOpenDestinos, onLotesChanged }) {
+  const refreshKey = useDebounced(refreshBruto, 700);
+  const [verTodosLotes, setVerTodosLotes] = useState(false);
+  const [editandoCusto, setEditandoCusto] = useState(null); // lote (linha de `lotes`) em edição
   const [stats, setStats] = useState(null);
   const [resultado, setResultado] = useState(null); // vw_lote_resultado (lucro realizado por lote)
   const [throughput, setThroughput] = useState(null); // vw_throughput_dia (ritmo)
@@ -47,15 +61,18 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
       let data = [];
       for (let from = 0; ; from += PAGE) {
         const { data: chunk, error } = await supabase
-          .from("itens").select("lote,classe,status,destino,preco_sugerido,valor_vendido,medidas_fonte,caixa_id,etiqueta_impressa,foto_feita")
+          .from("itens").select("lote,grupo,classe,status,destino,preco_sugerido,valor_vendido,vendido_em,canal_venda,medidas_fonte,caixa_id,etiqueta_impressa,foto_feita")
           .order("sku").range(from, from + PAGE - 1);
         if (error || !chunk) break;
         data = data.concat(chunk);
         if (chunk.length < PAGE) break;
       }
       if (!data.length) return;
-      const byStatus = {}, byClasse = {}, byLote = {}, byDestino = {};
+      const byStatus = {}, byClasse = {}, byLote = {}, byDestino = {}, byGrupo = {}, byCanal = {};
       let valSug = 0, valVendido = 0, pendMedida = 0, semCaixa = 0;
+      let nEstoque = 0, valEstoque = 0, nVendidos = 0, semPreco = 0;
+      const venda7 = { n: 0, val: 0 }, venda30 = { n: 0, val: 0 };
+      const t7 = Date.now() - 7 * 86400000, t30 = Date.now() - 30 * 86400000;
       let semClasse = 0, destinoADefinir = 0, triSemEtiq = 0, triSemFoto = 0, triSemCaixa = 0;
       for (const it of data) {
         byStatus[it.status] = (byStatus[it.status] || 0) + 1;
@@ -66,8 +83,28 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
         c.n++; c.val += Number(it.preco_sugerido) || 0;
         const done = statusIdx(it.status) >= 1 || it.status === "DESCARTE";
         if (done) c.done++;
-        const l = (byLote[it.lote] = byLote[it.lote] || { n: 0, done: 0, val: 0 });
+        const l = (byLote[it.lote] = byLote[it.lote] || { n: 0, done: 0, val: 0, vendidos: 0, valEstoque: 0, receita: 0 });
         l.n++; l.val += Number(it.preco_sugerido) || 0; if (done) l.done++;
+        const vendido = it.status === "VENDIDO" || it.status === "ENTREGUE";
+        const sug = Number(it.preco_sugerido) || 0;
+        if (vendido) { l.vendidos++; l.receita += Number(it.valor_vendido) || 0; }
+        else if (!foraDoEstoque(it.status)) {
+          l.valEstoque += sug; nEstoque++; valEstoque += sug;
+          if (it.status !== "A_CATALOGAR" && !sug) semPreco++;
+          const g = it.grupo || "Sem categoria";
+          const gg = (byGrupo[g] = byGrupo[g] || { n: 0, val: 0 });
+          gg.n++; gg.val += sug;
+        }
+        if (vendido) {
+          nVendidos++;
+          const rec = Number(it.valor_vendido) || 0;
+          const tv = it.vendido_em ? new Date(it.vendido_em).getTime() : 0;
+          if (tv >= t7) { venda7.n++; venda7.val += rec; }
+          if (tv >= t30) { venda30.n++; venda30.val += rec; }
+          const ch = it.canal_venda || "Não informado";
+          const cc = (byCanal[ch] = byCanal[ch] || { n: 0, val: 0 });
+          cc.n++; cc.val += rec;
+        }
         // Destino logístico (null/legado vira "A definir").
         const dest = it.destino || "A definir";
         const dd = (byDestino[dest] = byDestino[dest] || { n: 0, val: 0 });
@@ -84,6 +121,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
       setStats({
         byStatus, byClasse, byLote, byDestino, valSug, valVendido, pendMedida, semCaixa,
         semClasse, destinoADefinir, triSemEtiq, triSemFoto, triSemCaixa, total: data.length,
+        byGrupo, byCanal, nEstoque, valEstoque, nVendidos, semPreco, venda7, venda30,
       });
     })();
   }, [refreshKey]);
@@ -123,12 +161,26 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
   const catalogados = stats.total - (stats.byStatus["A_CATALOGAR"] || 0);
   const aCatalogar = stats.byStatus["A_CATALOGAR"] || 0;
   const pct = stats.total ? Math.round((catalogados / stats.total) * 100) : 0;
-  const loteList = lotes
-    .map((l) => ({ ...l, ...(stats.byLote[l.lote] || { n: 0, done: 0, val: 0 }) }))
+  // União: lotes cadastrados + qualquer lote que apareça nos itens (mesmo sem linha em `lotes`).
+  const vazio = { n: 0, done: 0, val: 0, vendidos: 0, valEstoque: 0, receita: 0 };
+  const cadastrados = new Set(lotes.map((l) => String(l.lote)));
+  const loteList = [
+    ...lotes,
+    ...Object.keys(stats.byLote).filter((k) => k !== "null" && !cadastrados.has(k)).map((k) => ({ lote: Number(k), referencia: null })),
+  ]
+    .map((l) => ({ ...l, ...vazio, ...(stats.byLote[l.lote] || {}), custo: custoDoLote(l) }))
     .sort((a, b) => b.val - a.val);
+  const investido = loteList.reduce((s, l) => s + l.custo, 0);
+  const receitaLotesComCusto = loteList.filter((l) => l.custo > 0).reduce((s, l) => s + l.receita, 0);
+  const sellThrough = pctDe(stats.nVendidos, stats.nVendidos + stats.nEstoque);
+  const canaisList = Object.entries(stats.byCanal).sort((a, b) => b[1].val - a[1].val);
+  const gruposList = Object.entries(stats.byGrupo).sort((a, b) => b[1].val - a[1].val);
+  const maxGrupo = Math.max(1, ...gruposList.map(([, g]) => g.val));
   // Itens sem lote (lote=null): vira a chave "null" no agregador.
   const semLote = stats.byLote["null"];
-  if (semLote) loteList.unshift({ lote: LOTE_SEM, referencia: "Sem lote", ...semLote });
+  if (semLote) loteList.unshift({ lote: LOTE_SEM, referencia: "Sem lote", custo: 0, ...vazio, ...semLote });
+  const semCusto = loteList.filter((l) => l.lote !== LOTE_SEM && l.n > 0 && !(l.custo > 0));
+  const lotesVisiveis = verTodosLotes ? loteList : loteList.slice(0, 8);
 
   // ---- Ritmo de catalogação (últimos 7 dias) + previsão de término ----
   const thr = throughput || [];
@@ -179,6 +231,57 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
         </div>
       </div>
 
+      {/* Visão do outlet: estoque, vendas e retorno do investimento */}
+      <div className="grid grid-cols-2 gap-3">
+        <button onClick={() => onGoFiltered({})} className="bg-white rounded-2xl border border-gray-200 p-3.5 text-left active:bg-gray-50">
+          <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1"><Layers className="w-3 h-3" /> Em estoque</p>
+          <p className="text-2xl font-bold text-gray-900 mt-0.5">{stats.nEstoque.toLocaleString("pt-BR")}</p>
+          <p className="text-xs text-gray-500">{fmtBRL(stats.valEstoque)} sugerido</p>
+        </button>
+        <div className="bg-white rounded-2xl border border-gray-200 p-3.5">
+          <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1"><ShoppingBag className="w-3 h-3" /> Vendidos</p>
+          <p className="text-2xl font-bold text-emerald-600 mt-0.5">{stats.nVendidos.toLocaleString("pt-BR")}</p>
+          <p className="text-xs text-gray-500">{sellThrough}% do estoque total já saiu</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-200 p-3.5">
+          <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Vendas · 7 dias</p>
+          <p className="text-xl font-bold text-gray-900 mt-0.5">{fmtBRL(stats.venda7.val)}</p>
+          <p className="text-xs text-gray-500">{stats.venda7.n} peça(s)</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-200 p-3.5">
+          <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Vendas · 30 dias</p>
+          <p className="text-xl font-bold text-gray-900 mt-0.5">{fmtBRL(stats.venda30.val)}</p>
+          <p className="text-xs text-gray-500">{stats.venda30.n} peça(s){stats.venda30.n ? ` · ticket ${fmtBRL(stats.venda30.val / stats.venda30.n)}` : ""}</p>
+        </div>
+        {semCusto.length > 0 && (
+          <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
+            <p className="text-sm font-bold text-amber-800">{semCusto.length} lote(s) sem custo cadastrado</p>
+            <p className="text-xs text-amber-700 mt-0.5">Sem o custo não há como medir a lucratividade. Cadastre o valor pago em cada lote:</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {semCusto.map((l) => (
+                <button key={l.lote} onClick={() => setEditandoCusto(l)}
+                  className="px-2.5 py-1 rounded-full bg-white border border-amber-300 text-xs font-bold text-amber-800 active:bg-amber-100">
+                  Lote {l.lote}{l.referencia ? ` · ${String(l.referencia).slice(0, 18)}` : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {investido > 0 && (
+          <div className="col-span-2 bg-white rounded-2xl border border-gray-200 p-3.5">
+            <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1"><Wallet className="w-3 h-3" /> Retorno do investimento (lotes com custo)</p>
+            <div className="flex items-baseline justify-between mt-0.5">
+              <span className="text-sm text-gray-600">Investido <b className="text-gray-900">{fmtBRL(investido)}</b></span>
+              <span className="text-sm text-gray-600">Recuperado <b className={receitaLotesComCusto >= investido ? "text-emerald-600" : "text-orange-500"}>{fmtBRL(receitaLotesComCusto)}</b></span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
+              <div className={`h-full rounded-full ${receitaLotesComCusto >= investido ? "bg-emerald-500" : "bg-orange-400"}`} style={{ width: `${Math.min(100, pctDe(receitaLotesComCusto, investido))}%` }} />
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">{pctDe(receitaLotesComCusto, investido)}% recuperado · estoque restante sugerido em {fmtBRL(loteList.filter((l) => l.custo > 0).reduce((s, l) => s + l.valEstoque, 0))}</p>
+          </div>
+        )}
+      </div>
+
       {/* Ritmo de catalogação + previsão de término */}
       {thr.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
@@ -217,7 +320,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
       )}
 
       {/* Filas de trabalho — pendências acionáveis */}
-      {(stats.pendMedida + stats.semClasse + stats.destinoADefinir + stats.triSemEtiq + stats.triSemFoto) > 0 && (
+      {(stats.pendMedida + stats.semClasse + stats.destinoADefinir + stats.triSemEtiq + stats.triSemFoto + stats.semPreco) > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1 flex items-center gap-1.5">
             <ListChecks className="w-3.5 h-3.5" /> Filas de trabalho
@@ -229,6 +332,8 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
               label="sem classe" hint="Classificar (A+ … E)" onClick={() => onGoFiltered({ semClasse: true })} />
             <QueueRow icon={MapPin} color="bg-rose-100 text-rose-700" n={stats.destinoADefinir}
               label="com destino a definir" hint="Decidir Belém / storage / venda local" onClick={() => onGoFiltered({ destino: "A definir" })} />
+            <QueueRow icon={Coins} color="bg-emerald-100 text-emerald-700" n={stats.semPreco}
+              label="catalogados sem preço" hint="Definir preço antes de publicar" onClick={() => onGoFiltered({})} />
             <QueueRow icon={Tag} color="bg-sky-100 text-sky-700" n={stats.triSemEtiq}
               label="triados sem etiqueta" hint="Imprimir etiqueta" onClick={() => onGoFiltered({ semEtiqueta: true })} />
             <QueueRow icon={Camera} color="bg-indigo-100 text-indigo-700" n={stats.triSemFoto}
@@ -421,23 +526,84 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey, onOpenSalas
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Lotes (por valor sugerido)</h3>
-        <div className="space-y-2.5">
-          {loteList.map((l) => {
-            const p = l.n ? Math.round((l.done / l.n) * 100) : 0;
-            return (
-              <button key={l.lote} onClick={() => onGoFiltered({ lote: String(l.lote) })} className="w-full text-left">
+      {/* Categorias em estoque */}
+      {gruposList.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1.5">
+            <Store className="w-3.5 h-3.5" /> Estoque por categoria
+          </h3>
+          <div className="space-y-2">
+            {gruposList.slice(0, 8).map(([g, v]) => (
+              <button key={g} onClick={() => onGoFiltered({ grupo: g })} className="w-full text-left active:opacity-70">
                 <div className="flex justify-between text-sm">
-                  <span className="font-semibold text-gray-800">{l.lote === LOTE_SEM ? "Sem lote" : `Lote ${l.lote}`}</span>
-                  <span className="text-gray-500">{fmtBRL(l.val)} · {l.done}/{l.n}</span>
+                  <span className="font-semibold text-gray-800 truncate">{g}</span>
+                  <span className="text-gray-500 flex-shrink-0 ml-2">{v.n.toLocaleString("pt-BR")} · {fmtBRL(v.val)}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden"><div className="h-full bg-orange-400 rounded-full" style={{ width: `${(v.val / maxGrupo) * 100}%` }} /></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Canais de venda */}
+      {canaisList.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1.5">
+            <ShoppingBag className="w-3.5 h-3.5" /> Vendas por canal
+          </h3>
+          <div className="divide-y divide-gray-100">
+            {canaisList.map(([c, v]) => (
+              <div key={c} className="flex items-center justify-between py-1.5 text-sm">
+                <span className="font-semibold text-gray-800">{c}</span>
+                <span className="text-gray-500">{v.n} · <b className="text-gray-900">{fmtBRL(v.val)}</b></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Lotes ({loteList.length})</h3>
+        <div className="space-y-3">
+          {lotesVisiveis.map((l) => {
+            const p = pctDe(l.done, l.n);
+            const semItens = l.n === 0;
+            return (
+              <div key={l.lote}>
+              <button onClick={() => onGoFiltered({ lote: String(l.lote) })} className="w-full text-left active:opacity-70">
+                <div className="flex justify-between text-sm gap-2">
+                  <span className="font-semibold text-gray-800 truncate">
+                    {l.lote === LOTE_SEM ? "Sem lote" : `Lote ${l.lote}`}
+                    {l.referencia && l.lote !== LOTE_SEM && <span className="text-gray-400 font-normal"> · {l.referencia}</span>}
+                  </span>
+                  <span className="text-gray-500 flex-shrink-0">{fmtBRL(l.val)} · {l.done}/{l.n}</span>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden"><div className="h-full bg-gray-800 rounded-full" style={{ width: `${p}%` }} /></div>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {semItens ? "Sem itens cadastrados ainda"
+                    : <>{l.vendidos} vendido(s) · {fmtBRL(l.valEstoque)} em estoque{l.custo > 0 ? ` · custo ${fmtBRL(l.custo)} (${(l.val / l.custo).toFixed(1).replace(".", ",")}× sugerido)` : " · custo não informado"}</>}
+                </p>
               </button>
+              {l.lote !== LOTE_SEM && (
+                <button onClick={() => setEditandoCusto(l)} className="text-[11px] font-bold text-orange-600 mt-0.5">
+                  {l.custo > 0 ? "Editar custo" : "Cadastrar custo"}
+                </button>
+              )}
+              </div>
             );
           })}
         </div>
+        {loteList.length > 8 && (
+          <button onClick={() => setVerTodosLotes((v) => !v)} className="w-full mt-3 text-xs font-bold text-orange-600 py-1.5">
+            {verTodosLotes ? "Mostrar menos" : `Ver todos os ${loteList.length} lotes`}
+          </button>
+        )}
       </div>
+      {editandoCusto && (
+        <CustoLoteModal lote={editandoCusto} onClose={() => setEditandoCusto(null)}
+          onSaved={() => { onLotesChanged?.(); }} />
+      )}
     </div>
   );
 }

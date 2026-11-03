@@ -125,12 +125,21 @@ export default function App() {
     const ch = supabase
       .channel("itens-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "itens" }, () => setRefreshKey((k) => k + 1))
+      .on("postgres_changes", { event: "*", schema: "public", table: "lotes" }, () => { loadLotes(); setRefreshKey((k) => k + 1); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "eventos" }, (p) =>
         setEventos((prev) => [p.new, ...prev].slice(0, 80))
       )
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [userId, loadLotes]);
+
+  // Lote criado fora do formulário (conferência, importação, SQL): qualquer mudança nos itens
+  // recarrega a lista (37 linhas — barato), com debounce p/ não disparar em rajada.
+  useEffect(() => {
+    if (!userId || !refreshKey) return;
+    const t = setTimeout(loadLotes, 600);
+    return () => clearTimeout(t);
+  }, [refreshKey, userId, loadLotes]);
 
   const onSaved = useCallback(() => setRefreshKey((k) => k + 1), []);
   const onCreated = useCallback(() => { loadLotes(); setRefreshKey((k) => k + 1); setShowNew(false); }, [loadLotes]);
@@ -155,7 +164,7 @@ export default function App() {
         </button>
       </div>
 
-      {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} onOpenSalas={() => setShowSalas(true)} onOpenDestinos={() => setShowDestinos(true)} />}
+      {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} onOpenSalas={() => setShowSalas(true)} onOpenDestinos={() => setShowDestinos(true)} onLotesChanged={() => { loadLotes(); onSaved(); }} />}
       {tab === "itens" && (
         <ItemsScreen
           key={preFilter ? JSON.stringify(preFilter) : "all"}
