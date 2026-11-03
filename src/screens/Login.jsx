@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../lib/supabase";
-import { Package, Loader2, LogIn } from "lucide-react";
+import { Loader2, LogIn } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -20,10 +20,8 @@ export default function Login() {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-orange-500 flex items-center justify-center mb-4">
-            <Package className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">NOGÁRIA OUTLET</h1>
+          <img src="/logo-nogaria.png" alt="Nogária" className="mx-auto h-10 w-auto" />
+          <span className="inline-block mt-2 bg-orange-500 text-brand-deep font-extrabold text-xs tracking-[0.35em] pl-3 pr-2 py-1.5 rounded-md leading-none">OUTLET</span>
           <p className="text-gray-500 mt-1">Catálogo & checklist da operação</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-3">

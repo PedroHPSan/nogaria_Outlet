@@ -15,7 +15,7 @@ import PortfolioScreen from "./screens/PortfolioScreen";
 import { statusMeta } from "./lib/model";
 import { carregarParametros } from "./lib/pricingParams";
 import { DEFAULT_PARAMS } from "./lib/pricing";
-import { Package, BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, BookOpen, DoorOpen, Table2, MapPin } from "lucide-react";
+import { BarChart3, ClipboardList, History, Upload, LogOut, Loader2, Plus, ClipboardCheck, QrCode, Boxes, Receipt, BookOpen, DoorOpen, Table2, MapPin } from "lucide-react";
 import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixasScreen from "./screens/CaixasScreen";
 import SalasScreen from "./screens/SalasScreen";
@@ -177,10 +177,10 @@ export default function App() {
         modo={layoutModo} onAlternarLayout={alternarLayout}
         acoes={{ novoItem: () => setShowNew(true), salas: () => setShowSalas(true), ondeEsta: () => setShowOndeEsta(true), caixaQr: () => setShowCaixaQr(true), fotoQr: () => setShowFotoQr(true) }}
       />
-      <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20 desk:justify-end">
+      <div className="bg-gradient-to-b from-brand to-brand-deep text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-lg desk:justify-end">
         <div className="flex items-center gap-2 desk:hidden">
-          <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center"><Package className="w-4 h-4 text-white" /></div>
-          <span className="font-bold tracking-tight">NOGÁRIA OUTLET</span>
+          <img src="/logo-nogaria-branca.png" alt="Nogária" className="h-5 w-auto" />
+          <span className="bg-orange-500 text-brand-deep font-extrabold text-[9px] tracking-[0.3em] pl-[7px] pr-[3px] py-1 rounded leading-none">OUTLET</span>
         </div>
         {/* Visão mobile ativa num PC: botão para voltar ao layout desktop (só aparece em tela larga) */}
         <button onClick={alternarLayout} className="hidden lg:[.layout-mobile_&]:inline-flex items-center gap-1.5 bg-gray-800 rounded-full px-3 py-1 text-xs font-semibold mr-2">

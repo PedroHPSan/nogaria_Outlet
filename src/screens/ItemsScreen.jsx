@@ -423,13 +423,13 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </div>
       )}
 
-      <div className="px-3 pt-2 space-y-1.5 desk:px-0 desk:space-y-0 desk:grid desk:grid-cols-2 desk-xl:grid-cols-3 desk:gap-2 desk:items-start">
+      <div className="px-3 pt-2 space-y-1.5 desk:px-0 desk:space-y-0 desk:grid desk:grid-cols-2 desk-xl:grid-cols-3 desk:gap-2 desk:items-stretch">
         {itens.map((it) => {
           const sm = statusMetaItem(it);
           const sel = selected.has(it.sku);
           return (
             <div key={it.sku}
-              className={`bg-white rounded-xl border px-3 py-2.5 flex items-center gap-3 ${sel ? "border-orange-500 ring-1 ring-orange-300" : "border-gray-200"}`}>
+              className={`bg-white rounded-xl border px-3 py-2.5 flex items-center gap-3 desk:h-full desk:min-h-[7.75rem] ${sel ? "border-orange-500 ring-1 ring-orange-300" : "border-gray-200"}`}>
               <button onClick={() => abrirItem(it)} className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-70">
                 {selectMode && (
                   sel
@@ -447,15 +447,15 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 desk:flex-wrap desk:gap-y-1">
                     {it.sku in viab && (
                       <span
                         title={viab[it.sku] ? "Preço viável" : "Rever preço/custo"}
                         className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${viab[it.sku] ? "bg-emerald-500" : "bg-red-500"}`}
                       />
                     )}
-                    <span className="font-mono text-xs font-bold text-gray-900">{it.sku}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sm.color}`}>{sm.short}</span>
+                    <span className="font-mono text-xs font-bold text-gray-900 desk:whitespace-nowrap">{it.sku}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold desk:whitespace-nowrap ${sm.color}`}>{sm.short}</span>
                     {viasMap[it.sku]?.vias > 0 && (
                       <span title={`Etiqueta já impressa · ${viasMap[it.sku].vias} via(s)`}
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 flex-shrink-0">

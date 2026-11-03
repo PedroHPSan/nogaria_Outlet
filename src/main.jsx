@@ -4,6 +4,8 @@ import App from "./App.jsx";
 import CatalogoPublicoView from "./screens/CatalogoPublicoView.jsx";
 import ProdutoPublicoView from "./screens/ProdutoPublicoView.jsx";
 import OrcamentoPublicoView from "./screens/OrcamentoPublicoView.jsx";
+import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 
 // Rota pública do catálogo compartilhado: /c/<slug>. Renderiza SEM o gate de login.
