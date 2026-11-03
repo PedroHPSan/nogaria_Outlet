@@ -159,7 +159,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col desk:left-auto desk:shadow-[0_0_0_100vmax_rgba(0,0,0,0.45)] desk:w-[min(760px,calc(100%-15rem))]">
       <div className="bg-gray-900 text-white px-4 pt-4 pb-3 shadow-md flex items-center justify-between">
         <button onClick={onClose} className="flex items-center gap-1 text-gray-300 text-sm py-1">
           <ChevronLeft className="w-5 h-5" /> Voltar

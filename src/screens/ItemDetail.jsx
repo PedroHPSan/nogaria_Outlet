@@ -616,7 +616,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
   const bloqueadoVenda = indisponivelParaVenda(it);
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col desk:left-auto desk:shadow-[0_0_0_100vmax_rgba(0,0,0,0.45)] desk:w-[min(1100px,calc(100%-15rem))]">
       <div className="bg-gray-900 text-white px-4 pt-4 pb-3 shadow-md">
         <div className="flex items-center justify-between">
           <button onClick={fechar} className="flex items-center gap-1 text-gray-300 text-sm py-1">
@@ -677,7 +677,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-32 desk:px-6 desk:columns-2 desk:gap-5 desk:[&>*]:break-inside-avoid">
         {it.caixa_id && (
           <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 mb-4 shadow-sm">
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pb-1.5 flex items-center gap-1.5">

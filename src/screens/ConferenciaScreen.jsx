@@ -249,7 +249,7 @@ function DefinirLote({ lotes, user, refreshKey, onChanged }) {
       {erro && <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {erro}</p>}
 
       {!!itens.length && (
-        <div className="sticky bottom-20 pt-1">
+        <div className="sticky bottom-20 pt-1 desk:bottom-4">
           <button disabled={busy || !sel.size} onClick={atribuir}
             className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-40">
             {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <PackageCheck className="w-5 h-5" />}
@@ -467,7 +467,7 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
           )}
 
           {!!sel.size && (
-            <div className="sticky bottom-20 pt-1">
+            <div className="sticky bottom-20 pt-1 desk:bottom-4">
               <button disabled={busy} onClick={salvar}
                 className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-40">
                 {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Tags className="w-5 h-5" />}
@@ -599,7 +599,7 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
           )}
 
           {!!sel.size && (
-            <div className="sticky bottom-20 pt-1">
+            <div className="sticky bottom-20 pt-1 desk:bottom-4">
               <button disabled={busy || destino === origem} onClick={aplicar}
                 className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600 disabled:opacity-40">
                 {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowLeftRight className="w-5 h-5" />}

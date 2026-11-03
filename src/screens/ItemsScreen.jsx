@@ -268,7 +268,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
 
   return (
     <div className={selectMode ? "pb-60" : "pb-24"}>
-      <div className="sticky top-14 z-10 bg-gray-50 px-4 pt-3 pb-2 border-b border-gray-200">
+      <div className="sticky top-14 z-10 bg-gray-50 px-4 pt-3 pb-2 border-b border-gray-200 desk:px-0">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -281,14 +281,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
           </button>
         </div>
         {showFilters && (
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 space-y-2 desk:space-y-0 desk:grid desk:grid-cols-3 desk:gap-2 desk:items-start">
             <select value={fLote} onChange={(e) => setFLote(e.target.value)} className={inputCls}>
               <option value="">Todos os lotes</option>
               <option value={LOTE_SEM}>Sem lote</option>
               {lotes.map((l) => <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>)}
             </select>
             {fLote && fLote !== LOTE_SEM && (
-              <button onClick={() => setRateioLote(Number(fLote))} className="w-full rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-sm font-semibold py-2">
+              <button onClick={() => setRateioLote(Number(fLote))} className="w-full desk:col-span-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-sm font-semibold py-2">
                 Rateio e custo do lote {fLote} (pesos)
               </button>
             )}
@@ -423,7 +423,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </div>
       )}
 
-      <div className="px-3 pt-2 space-y-1.5">
+      <div className="px-3 pt-2 space-y-1.5 desk:px-0 desk:space-y-0 desk:grid desk:grid-cols-2 desk-xl:grid-cols-3 desk:gap-2 desk:items-start">
         {itens.map((it) => {
           const sm = statusMetaItem(it);
           const sel = selected.has(it.sku);
@@ -499,14 +499,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             </div>
           );
         })}
-        {loading && <div className="py-6 text-center"><Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" /></div>}
+        {loading && <div className="py-6 text-center desk:col-span-full"><Loader2 className="w-6 h-6 animate-spin text-orange-500 mx-auto" /></div>}
         {!loading && itens.length < count && (
-          <button onClick={carregarMais} className="w-full py-3 text-sm font-semibold text-orange-600">
+          <button onClick={carregarMais} className="w-full py-3 text-sm font-semibold text-orange-600 desk:col-span-full">
             Carregar mais ({(count - itens.length).toLocaleString("pt-BR")} restantes)
           </button>
         )}
         {!loading && !itens.length && (
-          <div className="text-center py-16 text-gray-400">
+          <div className="text-center py-16 text-gray-400 desk:col-span-full">
             <Box className="w-10 h-10 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Nenhum item com esses filtros.</p>
           </div>
@@ -516,7 +516,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
       {/* Ações da seleção (acima da navegação inferior). Visível durante todo o modo seleção:
           os botões ficam desativados até haver itens marcados, para o usuário ver o que existe. */}
       {barraSelecao && (
-        <div className="fixed bottom-14 inset-x-0 z-40 px-3">
+        <div className="fixed bottom-14 inset-x-0 z-40 px-3 desk:bottom-4 desk:left-60">
           <div className="max-w-lg mx-auto bg-white/95 backdrop-blur rounded-2xl border border-gray-200 shadow-xl p-2.5 space-y-2">
             <p className="text-xs font-semibold text-gray-600 text-center">
               {selected.size === 0

@@ -165,7 +165,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
         <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold flex items-center gap-1.5">
           <Receipt className="w-3.5 h-3.5" /> Vendas realizadas
         </p>
-        <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
+        <div className="grid grid-cols-3 gap-3 mt-3 text-sm desk:grid-cols-6">
           <div className="bg-gray-800 rounded-xl p-3"><p className="text-gray-400 text-xs">Receita bruta</p><p className="font-bold text-emerald-400">{fmtBRL(tot.receita)}</p></div>
           <div className="bg-gray-800 rounded-xl p-3"><p className="text-gray-400 text-xs">Lucro realizado</p><p className={`font-bold ${tot.lucro < 0 ? "text-red-400" : "text-emerald-400"}`}>{fmtBRL(tot.lucro)}</p></div>
           <div className="bg-gray-800 rounded-xl p-3"><p className="text-gray-400 text-xs">Custo pago</p><p className="font-bold text-orange-400">{fmtBRL(tot.custo)}</p></div>
@@ -182,7 +182,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
         ) : !resultado.length ? (
           <p className="text-sm text-gray-400 py-6 text-center">Sem lotes com itens ainda.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 desk:space-y-0 desk:grid desk:grid-cols-2 desk:gap-3 desk:items-start">
             {resultado.map((r) => {
               const pct = Math.round(Number(r.pct_breakeven || 0) * 100);
               const cobriu = pct >= 100;
@@ -227,7 +227,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1.5">
               <Store className="w-3.5 h-3.5" /> Por método de venda
             </h3>
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 desk:space-y-0 desk:grid desk:grid-cols-2 desk:gap-x-6 desk:gap-y-3">
               {porCanal.map((c) => (
                 <div key={c.canal} className="w-full">
                   <div className="flex justify-between items-baseline text-sm">
@@ -260,7 +260,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 desk:space-y-0 desk:grid desk:grid-cols-2 desk:gap-2">
           {itens.map((it) => {
             const sm = statusMetaItem(it);
             return (
