@@ -215,9 +215,9 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
   };
 
   return (
-    <div className="px-4 pt-4 pb-24 space-y-4">
+    <div className="px-4 pt-4 pb-24 space-y-4 desk:px-0 desk:pb-8 desk:space-y-0 desk:columns-2 desk-xl:columns-3 desk:gap-4 desk:[&>*]:break-inside-avoid desk:[&>*]:mb-4">
       {/* Progresso geral da catalogação */}
-      <div className="bg-gray-900 rounded-2xl p-5 text-white">
+      <div className="bg-gray-900 rounded-2xl p-5 text-white desk:[column-span:all]">
         <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Progresso da catalogação</p>
         <div className="flex items-end gap-3 mt-1">
           <span className="text-4xl font-bold">{pct}%</span>
@@ -233,7 +233,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
       </div>
 
       {/* Visão do outlet: estoque, vendas e retorno do investimento */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 desk:grid-cols-4 desk:[column-span:all]">
         <button onClick={() => onGoFiltered({})} className="bg-white rounded-2xl border border-gray-200 p-3.5 text-left active:bg-gray-50">
           <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1"><Layers className="w-3 h-3" /> Em estoque</p>
           <p className="text-2xl font-bold text-gray-900 mt-0.5">{stats.nEstoque.toLocaleString("pt-BR")}</p>
@@ -255,7 +255,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
           <p className="text-xs text-gray-500">{stats.venda30.n} peça(s){stats.venda30.n ? ` · ticket ${fmtBRL(stats.venda30.val / stats.venda30.n)}` : ""}</p>
         </div>
         {semCusto.length > 0 && (
-          <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
+          <div className="col-span-2 desk:col-span-4 bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
             <p className="text-sm font-bold text-amber-800">{semCusto.length} lote(s) sem custo cadastrado</p>
             <p className="text-xs text-amber-700 mt-0.5">Sem o custo não há como medir a lucratividade. Cadastre o valor pago em cada lote:</p>
             <div className="flex flex-wrap gap-1.5 mt-2">
@@ -269,7 +269,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
           </div>
         )}
         {investido > 0 && (
-          <div className="col-span-2 bg-white rounded-2xl border border-gray-200 p-3.5">
+          <div className="col-span-2 desk:col-span-4 bg-white rounded-2xl border border-gray-200 p-3.5">
             <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1"><Wallet className="w-3 h-3" /> Retorno do investimento (lotes com custo)</p>
             <div className="flex items-baseline justify-between mt-0.5">
               <span className="text-sm text-gray-600">Investido <b className="text-gray-900">{fmtBRL(investido)}</b></span>

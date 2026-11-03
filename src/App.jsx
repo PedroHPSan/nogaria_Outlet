@@ -20,6 +20,21 @@ import FotoQrScreen from "./screens/FotoQrScreen";
 import CaixasScreen from "./screens/CaixasScreen";
 import SalasScreen from "./screens/SalasScreen";
 import OndeEstaModal from "./components/OndeEstaModal";
+import MenuLateral from "./components/MenuLateral";
+import { useLayoutPref } from "./lib/layoutPref";
+import { Monitor } from "lucide-react";
+
+// Abas principais (barra inferior no celular, menu lateral no desktop).
+const ABAS = [
+  { id: "painel", icon: BarChart3, t: "Painel" },
+  { id: "itens", icon: ClipboardList, t: "Itens" },
+  { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
+  { id: "vendas", icon: Receipt, t: "Vendas" },
+  { id: "portfolio", icon: BookOpen, t: "Catálogo" },
+  { id: "planilha", icon: Table2, t: "Planilha" },
+  { id: "exportar", icon: Upload, t: "Exportar" },
+  { id: "registro", icon: History, t: "Registro" },
+];
 
 // Rótulo amigável de um evento na aba Registro (status:*, lote:atribuido, conferido).
 const eventoLabel = (e) => {
@@ -68,6 +83,7 @@ export default function App() {
   // ocupam o mesmo canto e os flutuantes ficavam por cima dos botões da barra.
   const [barraAcao, setBarraAcao] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [layoutModo, alternarLayout] = useLayoutPref();
   const [eventos, setEventos] = useState([]);
   const [params, setParams] = useState(DEFAULT_PARAMS); // parâmetros do motor de precificação
 
@@ -141,6 +157,8 @@ export default function App() {
     return () => clearTimeout(t);
   }, [refreshKey, userId, loadLotes]);
 
+  const irParaAba = (id) => { if (id !== "itens") setPreFilter(null); setTab(id); };
+
   const onSaved = useCallback(() => setRefreshKey((k) => k + 1), []);
   const onCreated = useCallback(() => { loadLotes(); setRefreshKey((k) => k + 1); setShowNew(false); }, [loadLotes]);
   const goFiltered = (f) => { setPreFilter(f); setTab("itens"); };
@@ -153,17 +171,27 @@ export default function App() {
   const user = session.user;
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto relative">
-      <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto relative desk:max-w-none desk:pl-60">
+      <MenuLateral
+        abas={ABAS} tab={tab} onTab={irParaAba} email={user.email?.split("@")[0]} onSair={sair}
+        modo={layoutModo} onAlternarLayout={alternarLayout}
+        acoes={{ novoItem: () => setShowNew(true), salas: () => setShowSalas(true), ondeEsta: () => setShowOndeEsta(true), caixaQr: () => setShowCaixaQr(true), fotoQr: () => setShowFotoQr(true) }}
+      />
+      <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-20 desk:justify-end">
+        <div className="flex items-center gap-2 desk:hidden">
           <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center"><Package className="w-4 h-4 text-white" /></div>
           <span className="font-bold tracking-tight">NOGÁRIA OUTLET</span>
         </div>
-        <button onClick={sair} className="flex items-center gap-1.5 bg-gray-800 rounded-full pl-3 pr-2 py-1 text-xs font-semibold">
+        {/* Visão mobile ativa num PC: botão para voltar ao layout desktop (só aparece em tela larga) */}
+        <button onClick={alternarLayout} className="hidden lg:[.layout-mobile_&]:inline-flex items-center gap-1.5 bg-gray-800 rounded-full px-3 py-1 text-xs font-semibold mr-2">
+          <Monitor className="w-3.5 h-3.5" /> Visão desktop
+        </button>
+        <button onClick={sair} className="flex items-center gap-1.5 bg-gray-800 rounded-full pl-3 pr-2 py-1 text-xs font-semibold desk:hidden">
           {user.email?.split("@")[0]} <LogOut className="w-3.5 h-3.5" />
         </button>
       </div>
 
+      <div className="desk:max-w-7xl desk:mx-auto desk:px-8">
       {tab === "painel" && <Dashboard lotes={lotes} onGoFiltered={goFiltered} refreshKey={refreshKey} onOpenSalas={() => setShowSalas(true)} onOpenDestinos={() => setShowDestinos(true)} onLotesChanged={() => { loadLotes(); onSaved(); }} />}
       {tab === "itens" && (
         <ItemsScreen
@@ -208,19 +236,12 @@ export default function App() {
         </div>
       )}
 
-      <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-200">
+      </div>
+
+      <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-200 desk:hidden">
         <div className="max-w-lg mx-auto grid grid-cols-8">
-          {[
-            { id: "painel", icon: BarChart3, t: "Painel" },
-            { id: "itens", icon: ClipboardList, t: "Itens" },
-            { id: "conferencia", icon: ClipboardCheck, t: "Conferir" },
-            { id: "vendas", icon: Receipt, t: "Vendas" },
-            { id: "portfolio", icon: BookOpen, t: "Catálogo" },
-            { id: "planilha", icon: Table2, t: "Planilha" },
-            { id: "exportar", icon: Upload, t: "Exportar" },
-            { id: "registro", icon: History, t: "Registro" },
-          ].map((n) => (
-            <button key={n.id} onClick={() => { if (n.id !== "itens") setPreFilter(null); setTab(n.id); }}
+          {ABAS.map((n) => (
+            <button key={n.id} onClick={() => irParaAba(n.id)}
               className={`py-2.5 flex flex-col items-center gap-0.5 text-[10px] leading-tight font-semibold ${tab === n.id ? "text-orange-600" : "text-gray-400"}`}>
               <n.icon className="w-5 h-5" /> {n.t}
             </button>
@@ -231,7 +252,7 @@ export default function App() {
       {/* Botões flutuantes: caixa por QR + foto por QR + criar novo item
           (somem com modal aberto ou com a barra de ação da tela ativa) */}
       {!openItem && !showNew && !showFotoQr && !showCaixaQr && !showSalas && !showOndeEsta && !barraAcao && (
-        <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none">
+        <div className="fixed bottom-16 inset-x-0 z-30 pointer-events-none desk:hidden">
           <div className="max-w-lg mx-auto px-4 flex justify-end items-center gap-2.5">
             <button onClick={() => setShowSalas(true)} aria-label="Salas"
               className="pointer-events-auto h-12 rounded-full bg-gray-900 text-white shadow-lg flex items-center gap-1.5 pl-3.5 pr-4 text-sm font-semibold active:bg-gray-800">

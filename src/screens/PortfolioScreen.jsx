@@ -235,7 +235,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
                 <span className="text-sm font-bold bg-gray-900 text-white rounded-lg px-2.5 py-1">{g.titulo}</span>
                 <span className="text-xs text-gray-400">{g.itens.length} {g.itens.length === 1 ? "item" : "itens"}</span>
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5 desk:grid-cols-4 desk-xl:grid-cols-5">
                 {g.itens.map((it) => {
                   const preco = precoVenda(it);
                   const badge = CATALOGO_ESTADO_BADGE[(it.estado || "").trim()];
@@ -273,7 +273,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
 
       {/* Barra de geração (acima da navegação inferior) */}
       {total > 0 && (
-        <div className="fixed bottom-14 inset-x-0 z-40 px-3">
+        <div className="fixed bottom-14 inset-x-0 z-40 px-3 desk:bottom-4 desk:left-60">
           <div className="max-w-lg mx-auto">
             <button onClick={() => setCatalogoAberto(true)}
               className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white rounded-2xl py-3.5 font-bold shadow-lg active:bg-orange-600">
@@ -283,7 +283,7 @@ export default function PortfolioScreen({ refreshKey, onOpen, user, params, lote
         </div>
       )}
       {wpp?.msg && (
-        <div role="status" className={`fixed bottom-32 inset-x-0 z-50 mx-auto w-fit max-w-[90%] rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg ${wpp.estado === "erro" ? "bg-red-600" : "bg-emerald-700"}`}>{wpp.msg}</div>
+        <div role="status" className={`fixed bottom-32 inset-x-0 z-50 mx-auto desk:bottom-6 desk:left-60 w-fit max-w-[90%] rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg ${wpp.estado === "erro" ? "bg-red-600" : "bg-emerald-700"}`}>{wpp.msg}</div>
       )}
       {catalogoAberto && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
