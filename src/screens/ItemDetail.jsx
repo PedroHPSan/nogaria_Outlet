@@ -1,3 +1,4 @@
+import CustoItemCard from "../components/CustoItemCard";
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
@@ -678,6 +679,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
       )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32 desk:px-6 desk:columns-2 desk:gap-5 desk:[&>*]:break-inside-avoid">
+        <CustoItemCard item={it} params={params} />
         {it.caixa_id && (
           <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 mb-4 shadow-sm">
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pb-1.5 flex items-center gap-1.5">

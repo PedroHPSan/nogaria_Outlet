@@ -45,6 +45,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
   const refreshKey = useDebounced(refreshBruto, 700);
   const [verTodosLotes, setVerTodosLotes] = useState(false);
   const [editandoCusto, setEditandoCusto] = useState(null); // lote (linha de `lotes`) em edição
+  const [abaCusto, setAbaCusto] = useState("lote");
   const [stats, setStats] = useState(null);
   const [resultado, setResultado] = useState(null); // vw_lote_resultado (lucro realizado por lote)
   const [throughput, setThroughput] = useState(null); // vw_throughput_dia (ritmo)
@@ -62,7 +63,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
       let data = [];
       for (let from = 0; ; from += PAGE) {
         const { data: chunk, error } = await supabase
-          .from("itens").select("lote,grupo,classe,status,destino,preco_sugerido,valor_vendido,vendido_em,canal_venda,medidas_fonte,caixa_id,etiqueta_impressa,foto_feita")
+          .from("itens").select("lote,grupo,classe,status,destino,preco_sugerido,valor_vendido,vendido_em,canal_venda,custo_direto,medidas_fonte,caixa_id,etiqueta_impressa,foto_feita")
           .order("sku").range(from, from + PAGE - 1);
         if (error || !chunk) break;
         data = data.concat(chunk);
@@ -84,8 +85,9 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
         c.n++; c.val += Number(it.preco_sugerido) || 0;
         const done = statusIdx(it.status) >= 1 || it.status === "DESCARTE";
         if (done) c.done++;
-        const l = (byLote[it.lote] = byLote[it.lote] || { n: 0, done: 0, val: 0, vendidos: 0, valEstoque: 0, receita: 0 });
-        l.n++; l.val += Number(it.preco_sugerido) || 0; if (done) l.done++;
+        const l = (byLote[it.lote] = byLote[it.lote] || { n: 0, done: 0, val: 0, vendidos: 0, valEstoque: 0, receita: 0, semDireto: 0 });
+        l.n++;
+        if (it.custo_direto == null) l.semDireto++; l.val += Number(it.preco_sugerido) || 0; if (done) l.done++;
         const vendido = it.status === "VENDIDO" || it.status === "ENTREGUE";
         const sug = Number(it.preco_sugerido) || 0;
         if (vendido) { l.vendidos++; l.receita += Number(it.valor_vendido) || 0; }
@@ -163,7 +165,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
   const aCatalogar = stats.byStatus["A_CATALOGAR"] || 0;
   const pct = stats.total ? Math.round((catalogados / stats.total) * 100) : 0;
   // União: lotes cadastrados + qualquer lote que apareça nos itens (mesmo sem linha em `lotes`).
-  const vazio = { n: 0, done: 0, val: 0, vendidos: 0, valEstoque: 0, receita: 0 };
+  const vazio = { n: 0, done: 0, val: 0, vendidos: 0, valEstoque: 0, receita: 0, semDireto: 0 };
   const cadastrados = new Set(lotes.map((l) => String(l.lote)));
   const loteList = [
     ...lotes,
@@ -181,6 +183,8 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
   const semLote = stats.byLote["null"];
   if (semLote) loteList.unshift({ lote: LOTE_SEM, referencia: "Sem lote", custo: 0, ...vazio, ...semLote });
   const semCusto = loteList.filter((l) => l.lote !== LOTE_SEM && l.n > 0 && !(l.custo > 0));
+  // Lotes no modo "soma dos itens": cada produto precisa de custo direto, senão entra com custo zero.
+  const semCustoItem = loteList.filter((l) => l.lote !== LOTE_SEM && l.custo_origem === "composto" && l.modo_custeio === "soma" && l.semDireto > 0);
   const lotesVisiveis = verTodosLotes ? loteList : loteList.slice(0, 8);
 
   // ---- Ritmo de catalogação (últimos 7 dias) + previsão de término ----
@@ -264,6 +268,20 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
                 <button key={l.lote} onClick={() => setEditandoCusto(l)}
                   className="px-2.5 py-1 rounded-full bg-white border border-amber-300 text-xs font-bold text-amber-800 active:bg-amber-100">
                   Lote {l.lote}{l.referencia ? ` · ${String(l.referencia).slice(0, 18)}` : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {semCustoItem.length > 0 && (
+          <div className="col-span-2 desk:col-span-4 bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
+            <p className="text-sm font-bold text-amber-800">{semCustoItem.reduce((s, l) => s + l.semDireto, 0).toLocaleString("pt-BR")} item(ns) sem custo em lotes por soma</p>
+            <p className="text-xs text-amber-700 mt-0.5">Nesses lotes o custo vem de cada produto; sem custo informado o item entra com valor zero:</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {semCustoItem.map((l) => (
+                <button key={l.lote} onClick={() => { setAbaCusto("produtos"); setEditandoCusto(l); }}
+                  className="px-2.5 py-1 rounded-full bg-white border border-amber-300 text-xs font-bold text-amber-800 active:bg-amber-100">
+                  Lote {l.lote} · {l.semDireto} sem custo
                 </button>
               ))}
             </div>
@@ -603,7 +621,7 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
         )}
       </div>
       {editandoCusto && (
-        <CustoLoteModal lote={editandoCusto} onClose={() => setEditandoCusto(null)}
+        <CustoLoteModal lote={editandoCusto} abaInicial={abaCusto} onClose={() => { setEditandoCusto(null); setAbaCusto("lote"); }}
           onSaved={() => { onLotesChanged?.(); }} />
       )}
     </div>
