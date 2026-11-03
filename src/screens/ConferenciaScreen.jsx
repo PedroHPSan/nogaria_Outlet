@@ -118,7 +118,7 @@ function ConferirCaixas({ refreshKey, onOpenCaixa }) {
   const Grupo = ({ titulo, lista, cor }) => !lista.length ? null : (
     <div>
       <p className={`text-xs font-bold uppercase tracking-wide mb-2 ${cor}`}>{titulo} · {lista.length}</p>
-      <div className="space-y-1.5">{lista.map((c) => <Linha key={c.codigo} c={c} />)}</div>
+      <div className="space-y-1.5 desk:space-y-0 desk:grid desk:grid-cols-2 desk:gap-1.5">{lista.map((c) => <Linha key={c.codigo} c={c} />)}</div>
     </div>
   );
   return (
@@ -192,7 +192,7 @@ function DefinirLote({ lotes, user, refreshKey, onChanged }) {
   if (itens === null) return <Carregando />;
 
   return (
-    <div className="px-4 pt-4 space-y-4">
+    <div className="desk:max-w-3xl desk:mx-auto px-4 pt-4 space-y-4">
       <p className="text-sm text-gray-500">
         Itens criados <b>sem lote</b>. Selecione e atribua a um lote — o SKU é regerado (ex.: <span className="font-mono">NOG-SL-001 → NOG-126-001</span>).
       </p>
@@ -380,7 +380,7 @@ function CategorizarMassa({ lotes, user, params, refreshKey, onChanged }) {
   if (itens === null) return <Carregando />;
 
   return (
-    <div className="px-4 pt-4 space-y-3">
+    <div className="desk:max-w-3xl desk:mx-auto px-4 pt-4 space-y-3">
       <p className="text-sm text-gray-500">
         Sugere a categoria pelo nome do produto. Revise e <b>salve as marcadas</b>. Aceitar uma categoria nova preenche a classe quando estiver vazia.
       </p>
@@ -537,7 +537,7 @@ function MoverEtapa({ lotes, user, refreshKey, onChanged }) {
   };
 
   return (
-    <div className="px-4 pt-4 space-y-3">
+    <div className="desk:max-w-3xl desk:mx-auto px-4 pt-4 space-y-3">
       <p className="text-sm text-gray-500">
         Move itens de uma etapa para outra com registro no histórico. Ex.: devolver itens marcados como <b>Pronto p/ anúncio</b> por engano para <b>Triado</b>.
       </p>
@@ -736,7 +736,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
     const isMala = caixa.tipo === CAIXA_TIPO.MALA;
     const voltar = () => { setCaixa(null); setItens([]); setMsg(null); };
     return (
-      <div className="px-4 pt-4 space-y-3">
+      <div className="desk:max-w-3xl desk:mx-auto px-4 pt-4 space-y-3">
         <button onClick={voltar}
           className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 -mb-1 active:text-gray-900">
           <ArrowLeft className="w-4 h-4" /> Voltar para caixas
@@ -849,7 +849,7 @@ function Encaixotar({ user, params, refreshKey, onChanged }) {
 
   // ── Sem caixa ativa: criar / escolher ──────────────────────────
   return (
-    <div className="px-4 pt-4 space-y-3">
+    <div className="desk:max-w-3xl desk:mx-auto px-4 pt-4 space-y-3">
       <p className="text-sm text-gray-500">
         Encaixotamento: abra uma caixa, escaneie os produtos e feche. Os itens <b>herdam o destino e o local</b> da caixa.
       </p>
@@ -1119,7 +1119,7 @@ function Inventario({ lotes, user, refreshKey, onChanged }) {
   };
 
   return (
-    <div className="px-4 pt-4 space-y-4">
+    <div className="desk:max-w-3xl desk:mx-auto px-4 pt-4 space-y-4">
       <select value={fLote} onChange={(e) => setFLote(e.target.value)} className={inputCls}>
         <option value="">Escolha um lote para conferir…</option>
         <option value={LOTE_SEM}>Sem lote</option>
@@ -1234,7 +1234,7 @@ function Pendencias({ lotes, onOpen, refreshKey }) {
       ) : (
         <>
           <p className="text-sm text-gray-500">{incompletos.length} de {itens.length} itens com campos faltando para anunciar.</p>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 desk:space-y-0 desk:grid desk:grid-cols-2 desk:gap-1.5">
             {incompletos.map(({ it, faltando }) => (
               <button key={it.sku} onClick={() => onOpen(it)}
                 className="w-full text-left bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
