@@ -12,8 +12,8 @@ const ABAS = [["lote", "Lote"], ["produtos", "Produtos"], ["resumo", "Resumo"]];
 const VENDIDO = (s) => s === "VENDIDO" || s === "ENTREGUE";
 const LIMITE_LINHAS = 200;
 
-export default function CustoLoteModal({ lote, onClose, onSaved }) {
-  const [aba, setAba] = useState("lote");
+export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "lote" }) {
+  const [aba, setAba] = useState(abaInicial);
   const [form, setForm] = useState(null);
   const [itens, setItens] = useState(null);
   const [diretos, setDiretos] = useState({}); // sku -> texto (valor atual na tela)
