@@ -3,7 +3,22 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; }
-body { margin: 0; background: #f9fafb; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; background: #F3F6FA; color: #0F1B2D; font-family: "Plus Jakarta Sans Variable", system-ui, sans-serif; -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; }
+
+/* ---- Identidade Nogária Outlet ---- */
+/* Botão laranja de ação: texto azul profundo (contraste 5,4:1; branco sobre laranja dava 2,8:1). */
+.bg-orange-500.text-white, .bg-orange-600.text-white { color: #04284A; }
+.bg-orange-500.text-white svg, .bg-orange-600.text-white svg { color: inherit; }
+/* Anel de foco laranja consistente nos campos. */
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid #F97316; outline-offset: 2px;
+}
+/* Transições suaves em botões e cartões tocáveis. */
+button, a { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease, opacity .15s ease; }
+@media (hover: hover) {
+  article.card-hover:hover, .card-hover:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(4,40,74,.06), 0 16px 32px -12px rgba(4,40,74,.26); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 * { -webkit-user-select: none; user-select: none; }
 input, textarea { -webkit-user-select: text; user-select: text; }
 

@@ -217,7 +217,8 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
   return (
     <div className="px-4 pt-4 pb-24 space-y-4 desk:px-0 desk:pb-8 desk:space-y-0 desk:columns-2 desk-xl:columns-3 desk:gap-4 desk:[&>*]:break-inside-avoid desk:[&>*]:mb-4">
       {/* Progresso geral da catalogação */}
-      <div className="bg-gray-900 rounded-2xl p-5 text-white desk:[column-span:all]">
+      <div className="relative overflow-hidden bg-gradient-to-br from-brand to-brand-deep rounded-2xl p-5 text-white shadow-lg desk:[column-span:all]">
+        <div className="pointer-events-none absolute -right-16 -top-20 w-52 h-52 rounded-full bg-[radial-gradient(circle,rgba(249,115,22,.4),rgba(249,115,22,0)_70%)]" />
         <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Progresso da catalogação</p>
         <div className="flex items-end gap-3 mt-1">
           <span className="text-4xl font-bold">{pct}%</span>
@@ -227,8 +228,8 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
           <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
         </div>
         <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
-          <div className="bg-gray-800 rounded-xl p-3"><p className="text-gray-400 text-xs">Venda sugerida (catálogo)</p><p className="font-bold text-orange-400">{fmtBRL(stats.valSug)}</p></div>
-          <div className="bg-gray-800 rounded-xl p-3"><p className="text-gray-400 text-xs">Já vendido</p><p className="font-bold text-emerald-400">{fmtBRL(stats.valVendido)}</p></div>
+          <div className="bg-white/10 ring-1 ring-white/10 rounded-xl p-3"><p className="text-blue-100/70 text-xs">Venda sugerida (catálogo)</p><p className="font-bold text-orange-400">{fmtBRL(stats.valSug)}</p></div>
+          <div className="bg-white/10 ring-1 ring-white/10 rounded-xl p-3"><p className="text-blue-100/70 text-xs">Já vendido</p><p className="font-bold text-emerald-400">{fmtBRL(stats.valVendido)}</p></div>
         </div>
       </div>
 
