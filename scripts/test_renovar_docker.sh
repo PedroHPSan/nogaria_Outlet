@@ -14,7 +14,7 @@ for M in 20260801130000_orcamentos 20261028120000_sacolas_whatsapp 2026062514334
   $PSQL < supabase/migrations/$M.sql || { echo "FALHA: pré-requisito $M"; exit 1; }
 done
 $PSQL -c "create table if not exists public.interesses (id uuid primary key default gen_random_uuid(), codigo text not null unique, status text not null default 'ABERTO', sku text, valido_ate timestamptz not null default now() + interval '1 day', eur numeric(12,2) not null default 0, criado_em timestamptz not null default now()); alter table itens add column if not exists taxa_venda numeric, add column if not exists frete_pago numeric;" || exit 1
-for M in 20261102120000_omnichannel_base 20261102130000_omnichannel_rpcs STUB 20261103110000_renovar_sacola; do
+for M in 20261102120000_omnichannel_base 20261102130000_omnichannel_rpcs STUB 20261103110000_renovar_sacola 20261103120000_renovar_sacola_lock; do
   [ "$M" = STUB ] && { $PSQL -c "create or replace function public.canal_ativo(c text) returns boolean language sql as 'select true'" || exit 1; sed -n 16,51p supabase/migrations/20261102320000_n8_referral_hold_bot.sql | $PSQL || exit 1; continue; }
   $PSQL < supabase/migrations/$M.sql || { echo "FALHA: $M"; exit 1; }
 done
