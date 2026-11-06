@@ -1,14 +1,14 @@
-// Preço misto R$ + € (PURO): para clientes do exterior, o valor em reais ganha +20% e é
+// Preço misto R$ + € (PURO): para clientes do exterior, o valor em reais ganha +25% e é
 // convertido em euros pela cotação do momento. Sem rede; testável em Node.
 
-export const ACRESCIMO_EURO = 0.2;
+export const ACRESCIMO_EURO = 0.25;
 
 const r2 = (v) => Math.round(v * 100) / 100;
 
-// Valor em reais já com o acréscimo de 20%.
+// Valor em reais já com o acréscimo de 25%.
 export const brlComAcrescimo = (brl) => (brl > 0 ? r2(brl * (1 + ACRESCIMO_EURO)) : null);
 
-// { brl, eur }: brl = reais +20%; eur = brl ÷ cotação (R$ por 1 €). Sem preço/cotação → null.
+// { brl, eur }: brl = reais +25%; eur = brl ÷ cotação (R$ por 1 €). Sem preço/cotação → null.
 export function precoMisto(brlBase, taxa) {
   const brl = brlComAcrescimo(Number(brlBase));
   if (!brl) return null;

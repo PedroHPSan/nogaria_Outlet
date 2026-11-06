@@ -118,7 +118,7 @@ export function montarCarrossel(itens, titulo, formato, ctxPorSku = {}, ctx = {}
 // selo de preço fica DENTRO da imagem (nada é cortado). Foto em data URI (sem taint).
 export const OG_LADO = 800;
 
-// Modo euro (ctx.euro = { taxa, em }): o preço vira o € do momento da publicação (R$ +20% ÷ cotação).
+// Modo euro (ctx.euro = { taxa, em }): o preço vira o € do momento da publicação (R$ +25% ÷ cotação).
 // fmtPreco → texto de uma linha (R$ primeiro); fmtDupla → { brl, eur }: o R$ é o valor em destaque.
 const fmtDupla = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? { eur: fmtEUR(m.eur), brl: brl(p) } : null; };
 const fmtPreco = (p, euro) => { const d = fmtDupla(p, euro); return d ? `${d.brl} · ${d.eur}` : brl(p); };
