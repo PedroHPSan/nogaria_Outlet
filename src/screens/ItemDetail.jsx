@@ -613,6 +613,16 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
     } finally { setDivBusy(false); }
   };
   const sm = statusMetaItem(it);
+  // Abas da ficha: uma seção por vez, coluna única (sem rolagem lateral).
+  const [tab, setTab] = useState("item");
+  const GATE_ABA = { TRIADO: "condicao", TESTADO: "condicao", FOTOGRAFADO: "item", PRECIFICADO: "preco", ANUNCIADO: "anuncio", VENDIDO: "anuncio" };
+  const ABAS = [
+    { id: "item", label: "Item", badge: fotos.length ? `${fotos.length} foto${fotos.length > 1 ? "s" : ""}` : null },
+    { id: "condicao", label: "Condição", badge: it.classe || null },
+    { id: "medidas", label: "Medidas", badge: fonteLabel(it).texto },
+    { id: "preco", label: "Preço", badge: it.preco_min && it.preco_ideal ? "✓" : "⚠", alerta: !(it.preco_min && it.preco_ideal) },
+    { id: "anuncio", label: "Anúncio", badge: null },
+  ];
   // Vendido/entregue/descarte ou separado em sacola: não gera link nem separa de novo.
   const bloqueadoVenda = indisponivelParaVenda(it);
 
@@ -678,7 +688,18 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-32 desk:px-6 desk:columns-2 desk:gap-5 desk:[&>*]:break-inside-avoid">
+      <div role="tablist" aria-label="Seções da ficha" className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-white border-b border-gray-200 px-3 desk:px-6">
+        {ABAS.map((a) => (
+          <button key={a.id} role="tab" aria-selected={tab === a.id} onClick={() => setTab(a.id)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-sm font-semibold border-b-2 -mb-px ${tab === a.id ? "border-orange-500 text-gray-900" : "border-transparent text-gray-500"}`}>
+            {a.label}
+            {a.badge && <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 ${a.alerta ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"}`}>{a.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 pb-32 desk:px-6">
+        <div hidden={tab !== "item"} className="max-w-3xl mx-auto break-words">
         <CustoItemCard item={it} params={params} />
         {it.caixa_id && (
           <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 mb-4 shadow-sm">
@@ -955,6 +976,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           </div>
         )}
 
+        </div>
+
+        <div hidden={tab !== "condicao"} className="max-w-3xl mx-auto break-words">
         {/* Checklist de condição */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1">Checklist de condição</h3>
@@ -1026,6 +1050,9 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           </div>
         </div>
 
+        </div>
+
+        <div hidden={tab !== "medidas"} className="max-w-3xl mx-auto break-words">
         {/* Dados para venda (integrações) — Tier 1 */}
         <div className="bg-white rounded-2xl border border-gray-200 px-4 py-2 mb-4 shadow-sm">
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 pb-1 flex items-center gap-1.5">
@@ -1103,10 +1130,16 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
           </div>
         </div>
 
+        </div>
+
+        <div hidden={tab !== "preco"} className="max-w-3xl mx-auto break-words">
         {/* Precificação & venda — card único (motor + preço final + anúncio + destino + venda) */}
         <div className="mb-4">
           <PricingCard item={it} params={params} user={user} onChange={(patch) => set(patch)} />
         </div>
+        </div>
+
+        <div hidden={tab !== "anuncio"} className="max-w-3xl mx-auto break-words">
 
         {/* Publicar em marketplace (Amazon) — após revisão; gate de preço/GTIN no PublishPanel */}
         <PublishPanel item={it} params={params} />
@@ -1115,6 +1148,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <OndeEstaPeca item={it} user={user} onVendiAqui={(canal) => {
           const nome = { amazon: "Amazon", mercadolivre: "Mercado Livre", whatsapp: "Grupo WhatsApp", instagram: "B2C / Venda direta" }[canal];
           if (nome) set({ canal_venda: nome });
+          setTab("preco");
           setTimeout(() => document.getElementById("canal-venda")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
         }} />
 
@@ -1252,10 +1286,17 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <button onClick={() => salvar("DESCARTE")} className="w-full flex items-center justify-center gap-2 text-red-600 border border-red-200 bg-red-50 rounded-xl py-3 text-sm font-semibold">
           <Trash2 className="w-4 h-4" /> Marcar como descarte / sucata
         </button>
+        </div>
       </div>
 
       <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 shadow-lg">
-        {gate && <p className="text-xs text-amber-700 flex items-center gap-1.5 mb-2"><AlertTriangle className="w-3.5 h-3.5" /> {gate}</p>}
+        {gate && (
+          <button type="button" onClick={() => GATE_ABA[next?.id] && setTab(GATE_ABA[next.id])}
+            className="text-xs text-amber-700 flex items-center gap-1.5 mb-2 text-left">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> {gate}
+            {GATE_ABA[next?.id] && <span className="underline font-semibold">Ir para {ABAS.find((a) => a.id === GATE_ABA[next.id])?.label}</span>}
+          </button>
+        )}
         <div className="flex gap-2">
           {prev && (
             <button onClick={voltarEtapa} title={`Voltar para ${prev.label}`} aria-label={`Voltar para ${prev.label}`}

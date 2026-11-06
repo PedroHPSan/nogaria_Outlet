@@ -23,10 +23,10 @@ export function Bloco({ resumo, resumoValor, fmtBRL, children, aberto, onToggle 
   return (
     <details className="rounded-xl border border-gray-100" open={aberto} onToggle={onToggle}>
       <summary className="flex items-center justify-between cursor-pointer list-none px-2.5 py-2">
-        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase text-gray-500">
+        <span className="flex items-center flex-wrap gap-1 min-w-0 text-[11px] font-semibold uppercase text-gray-500 break-words">
           {resumo}
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           <span className="text-sm font-bold text-gray-800 tabular-nums">{fmtBRL(resumoValor)}</span>
           <ChevronDown className="w-4 h-4 text-gray-400" />
         </span>
