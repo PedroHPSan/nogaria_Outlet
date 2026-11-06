@@ -35,6 +35,10 @@ const DESLOC_EU = { br: BR_PARA_EU, eu: 0, uk: 34, us_m: 33, us_f: 31 };
 
 export const ehCalcado = (it) => /cal[çc]ado/i.test(it?.grupo || "");
 
+// Grupos que carregam tamanho (calçado = numeração; vestuário = P/M/G, 38, 42…).
+export const ehVestuario = (it) => /vestu[aá]rio/i.test(it?.grupo || "");
+export const temTamanho = (it) => ehCalcado(it) || ehVestuario(it);
+
 // "38 BR" → "EU 38"; "36/37" → "EU 36/37"; "US 9" → "EU 42"; "UK 8" → "EU 42"; "US 8 W" → "EU 39".
 // Retorna null quando não dá para converter com segurança (texto, vazio, fora de 15–50).
 export function tamanhoEU(t) {

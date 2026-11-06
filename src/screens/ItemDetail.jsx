@@ -18,7 +18,7 @@ import { buscarCaixa, CAIXA_STATUS } from "../lib/caixas";
 import { listarSalas, alocarItemNaSala } from "../lib/salas";
 import { salaLabelTexto } from "../lib/salasFormat";
 import { gerarLinkGrupo } from "../lib/ofertaPublica";
-import { tamanhoEU } from "../lib/tamanhos";
+import { tamanhoEU, temTamanho } from "../lib/tamanhos";
 import { cotacaoEuro } from "../lib/cotacao";
 import SepararModal from "../components/SepararModal";
 import CatalogoMetaButton from "../components/CatalogoMetaButton";
@@ -1096,7 +1096,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
             </div>
           </Field>
           <Field label={<>Cor<IaTag on={iaFez("cor")} /></>}><input className={inputCls} value={it.cor ?? ""} onChange={(e) => set({ cor: e.target.value })} placeholder="ex.: Preto" /></Field>
-          {/cal[çc]ado/i.test(it.grupo || "") && (
+          {temTamanho(it) && (
             <Field label="Tamanho / numeração (opcional)">
               <input className={inputCls} value={it.tamanho ?? ""} onChange={(e) => set({ tamanho: e.target.value })} placeholder="ex.: 42, 38 BR, M" />
               {tamanhoEU(it.tamanho) && /cal[çc]ado/i.test(it.grupo || "") && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoEU(it.tamanho)}</b> nas telas, etiquetas e imagens.</p>}

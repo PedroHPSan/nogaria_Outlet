@@ -1,7 +1,7 @@
 // Oferta pública para o grupo de WhatsApp (PURO): payload do link /p/<slug>, metadados
 // do preview (og:*) e mensagem de interesse. Sem rede; testável em Node.
 import { precoVenda } from "./export.js";
-import { ehCalcado } from "./tamanhos.js";
+import { ehCalcado, ehVestuario } from "./tamanhos.js";
 import { precoMisto, fmtEUR, descricaoPreviewEuro } from "./precoEuro.js";
 import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogoCore.js";
 
@@ -50,6 +50,7 @@ export function itemOferta(it, foto = null, { mostrarPreco = true } = {}) {
     // numeração crua + flag: a página converte (mudar a tabela corrige links ainda válidos)
     tamanho: String(it.tamanho ?? "").trim(),
     calcado: ehCalcado(it),
+    vestuario: ehVestuario(it),
     medidas: medidasTexto(it),
     condicao: fraseCondicao(it),
     badge: badge ? { txt: badge.txt, cls: badge.cls } : null,

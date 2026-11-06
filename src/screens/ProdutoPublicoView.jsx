@@ -140,7 +140,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
                   </div>
                 )}
                 {condicao && <p className="text-sm text-gray-600">{condicao}</p>}
-                <p className="text-xs text-gray-500">{[tam && `Nº ${tam}`, it.marca, it.medidas, it.cor].filter(Boolean).join(" · ")}</p>
+                <p className="text-xs text-gray-500">{[tam && `${it.vestuario ? "Tam." : "Nº"} ${tam}`, it.marca, it.medidas, it.cor].filter(Boolean).join(" · ")}</p>
                 {vendido ? (
                   <p className="rounded-xl bg-gray-100 text-gray-500 text-center py-3 font-bold">{euro ? t.vendido : "Vendido"}</p>
                 ) : (
