@@ -36,7 +36,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   const [titulo, setTitulo] = useState(tituloInicial);
   const [comFoto, setComFoto] = useState(true);
   const [mostrarPreco, setMostrarPreco] = useState(true);
-  const [precoEuro, setPrecoEuro] = useState(true); // links de oferta com R$ +20% e € ao vivo
+  const [precoEuro, setPrecoEuro] = useState(true); // links de oferta com R$ +25% e € ao vivo
   const [comQr, setComQr] = useState(true);
   const [modelo, setModelo] = useState("catalogo");
   const [tema, setTema] = useState("noite");
