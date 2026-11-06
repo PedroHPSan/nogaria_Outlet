@@ -127,8 +127,8 @@ function CompactProduct({ label }) {
         </div>
       )}
       <div style={{ fontSize: "7.5pt", marginTop: mm(1.4), lineHeight: 1.45 }}>
-        <div style={nowrap}>Caixa <b>{label.caixa_num}</b> · Sala <b>{label.sala}</b></div>
-        <div style={nowrap}>Local <b>{label.local}</b></div>
+        <div style={nowrap}>Caixa <b>{label.caixa_num}</b></div>
+        <div style={{ overflowWrap: "anywhere", lineHeight: 1.2 }}>Sala <b>{label.sala}</b></div>
       </div>
       {label.aviso && (
         <div
@@ -175,8 +175,7 @@ function CompactBox({ label }) {
         {label.tipo === "MALA" ? "MALA" : "CAIXA"} · {label.qtd} itens{label.pesoTxt ? ` · ${label.pesoTxt}` : ""}
       </div>
       <div style={{ fontSize: "6.5pt" }}>
-        <div>Sala: <b>{label.sala}</b></div>
-        <div>Local: <b>{label.local}</b></div>
+        <div style={{ overflowWrap: "anywhere" }}>Sala: <b>{label.sala}</b></div>
         {label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
       <div style={{ fontSize: "6pt", marginTop: mm(1.2), textAlign: "center", fontWeight: 700 }}>
@@ -216,9 +215,6 @@ function FullProduct({ label, tall = false }) {
           Medidas: <b>{label.medidas}</b>
         </div>
       )}
-      <div style={{ fontSize: tall ? "9pt" : "8pt", marginTop: mm(1) }}>
-        Local: <b>{label.local}</b>
-      </div>
       {label.aviso && (
         <div
           style={{
@@ -260,7 +256,7 @@ function FullBox({ label, tall = false }) {
         <Qr data={label.qrData} size={tall ? 28 : 20} />
       </div>
       <div style={{ fontSize: tall ? "9pt" : "8pt", marginTop: mm(1) }}>
-        <div>Sala: <b>{label.sala}</b> · Local: <b>{label.local}</b></div>
+        <div style={{ overflowWrap: "anywhere" }}>Sala: <b>{label.sala}</b></div>
         {!tall && label.lotes?.length > 0 && <div>Lotes: {label.lotes.join(", ")}</div>}
       </div>
       {tall && (label.classeResumo || label.loteResumo) && (

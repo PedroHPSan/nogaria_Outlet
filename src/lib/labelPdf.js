@@ -110,11 +110,11 @@ function drawLabel(doc, label, preset) {
 
     line(label.produto, { size: compact ? 7.5 : (tall ? 11 : 9), bold: true });
     if (tall && label.medidas) line(`Medidas: ${label.medidas}`, { bold: true });
-    line(`Caixa/Mala: ${label.caixa_num}  ·  Sala: ${label.sala}`);
-    line(`Local: ${label.local}`, { bold: true });
+    line(`Caixa/Mala: ${label.caixa_num}`);
+    line(`Sala: ${label.sala}`, { bold: true });
     if (label.aviso) line(label.aviso, { bold: true });
   } else {
-    line(`Sala: ${label.sala}  ·  Local: ${label.local}`);
+    line(`Sala: ${label.sala}`);
     if (!tall && label.lotes?.length) line(`Lotes: ${label.lotes.join(", ")}`);
     if (tall && label.classeResumo) line(`Classes: ${label.classeResumo}`, { bold: true });
     if (tall && label.loteResumo) line(`Por lote: ${label.loteResumo}`, { bold: true });
