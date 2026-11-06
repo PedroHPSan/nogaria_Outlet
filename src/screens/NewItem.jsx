@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { tamanhoEU } from "../lib/tamanhos";
+import { tamanhoEU, temTamanho } from "../lib/tamanhos";
 import { supabase } from "../lib/supabase";
 import { CLASSE_STYLE, DESTINOS, buildSku } from "../lib/model";
 import { DEFAULT_PARAMS } from "../lib/pricing";
@@ -52,6 +52,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
   const sugCat = useMemo(() => sugerirCategoria(produto, catList), [produto, catList]);
   // Calçado → habilita o campo de numeração/tamanho (opcional).
   const ehCalcado = /cal[çc]ado/i.test(grupo);
+  const comTamanho = temTamanho({ grupo });
   // Ao escolher/sugerir categoria, preenche a classe da categoria se ainda vazia.
   const aplicarCategoria = (g) => {
     setGrupo(g);
@@ -119,7 +120,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
         preco_novo_est: precoNovo || null,
         preco_sugerido: precoSug || null,
         ...(destino ? { destino } : {}),
-        ...(ehCalcado && tamanho.trim() ? { tamanho: tamanho.trim() } : {}),
+        ...(comTamanho && tamanho.trim() ? { tamanho: tamanho.trim() } : {}),
         quantidade: 1,
         upd_by: user.email,
       };
@@ -246,11 +247,11 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
               ))}
             </div>
           </Field>
-          {ehCalcado && (
+          {comTamanho && (
             <Field label="Tamanho / numeração (opcional)">
               <input className={inputCls} value={tamanho} onChange={(e) => setTamanho(e.target.value)}
                 placeholder="ex.: 42, 38 BR, M" />
-              {tamanhoEU(tamanho) && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoEU(tamanho)}</b> nas telas, etiquetas e imagens.</p>}
+              {ehCalcado && tamanhoEU(tamanho) && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoEU(tamanho)}</b> nas telas, etiquetas e imagens.</p>}
             </Field>
           )}
           <Field label="Quantidade de unidades">
