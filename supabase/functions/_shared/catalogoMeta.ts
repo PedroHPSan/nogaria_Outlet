@@ -4,12 +4,16 @@
 type ItemPayload = {
   sku: string; produto?: string; marca?: string; cor?: string; medidas?: string; condicao?: string;
   badge?: { cls?: string } | null; preco?: number | null; foto?: string | null;
-  rotulos?: { grupo?: string | null; lote?: string | number | null; tamanho?: string | null; estado?: string | null } | null;
+  rotulos?: { grupo?: string | null; lote?: string | number | null; tamanho?: string | null; estado?: string | null; macro?: string | null; grupo_norm?: string | null } | null;
 };
 export type LinhaFeed = { sku: string; payload: { itens?: ItemPayload[] } | null; disponivel: boolean };
 
 export const COLUNAS = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "color",
-  "product_type", "custom_label_0", "custom_label_1", "custom_label_2", "size"] as const;
+  "product_type", "custom_label_0", "custom_label_1", "custom_label_2", "size", "custom_label_3", "custom_label_4"] as const;
+
+// Slug estável da macro-categoria (filtro dos Product Sets): sem acento, minúsculo, hífen. Ex.: "Casa e Decoração" → "casa-e-decoracao".
+export const slugMacro = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 // Proteção contra injeção de fórmula em planilhas (=, +, -, @) e normalização de quebras.
 const limpa = (s: unknown) => {
@@ -37,6 +41,7 @@ export function linhaCsv(l: LinhaFeed, site: string): string[] | null {
     it.foto, limpa(it.marca || "Nogária Outlet"), limpa(it.cor || ""),
     limpa(it.rotulos?.grupo || ""), it.rotulos?.lote != null && it.rotulos.lote !== "" ? limpa(`lote-${it.rotulos.lote}`) : "",
     faixaPreco(Number(it.preco)), limpa(it.rotulos?.estado || ""), limpa(it.rotulos?.tamanho || ""),
+    it.rotulos?.macro ? slugMacro(it.rotulos.macro) : "", limpa(it.rotulos?.grupo_norm || ""),
   ];
 }
 

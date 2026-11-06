@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { X, Loader2, LayoutDashboard } from "lucide-react";
 import { lazySeguro } from "../lib/lazySeguro";
 const ConectarWhatsAppScreen = lazySeguro(() => import("./ConectarWhatsAppScreen"));
-import { painelCatalogo, jobsComProblema, reenfileirarJob, listarCanais, definirCanalAtivo, alertasAbertos, CANAL_ROTULO } from "../lib/canais";
+import { painelCatalogo, catalogoDiversos, jobsComProblema, reenfileirarJob, listarCanais, definirCanalAtivo, alertasAbertos, CANAL_ROTULO } from "../lib/canais";
 import { fmtBrasilia } from "../lib/filaPublicacao";
 
 const BLOQUEIOS = [["sem_preco", "Sem preço"], ["sem_categoria", "Sem categoria"], ["sem_estado", "Sem estado"], ["sem_foto", "Sem foto"], ["reservado", "Reservadas"]];
@@ -14,10 +14,11 @@ export default function PainelCanaisScreen({ onClose, user }) {
   const [jobs, setJobs] = useState([]);
   const [canais, setCanais] = useState([]);
   const [alertas, setAlertas] = useState([]);
+  const [diversos, setDiversos] = useState([]);
   const [conectarWa, setConectarWa] = useState(false);
   const [erro, setErro] = useState(null);
   const carregar = useCallback(async () => {
-    try { setErro(null); const [a, b, c, d] = await Promise.all([painelCatalogo(), jobsComProblema(), listarCanais(), alertasAbertos()]); setP(a); setJobs(b); setCanais(c); setAlertas(d); } catch (e) { setErro(e.message || String(e)); }
+    try { setErro(null); const [a, b, c, d, e] = await Promise.all([painelCatalogo(), jobsComProblema(), listarCanais(), alertasAbertos(), catalogoDiversos()]); setP(a); setJobs(b); setCanais(c); setAlertas(d); setDiversos(e || []); } catch (e) { setErro(e.message || String(e)); }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
   const alternarCanal = async (c) => {
@@ -66,6 +67,16 @@ export default function PainelCanaisScreen({ onClose, user }) {
             <p className={p.divergentes ? "text-red-600" : "text-gray-600"}><b>{N(p.divergentes)}</b> no catálogo mas não elegível(is) (saem como "out of stock" no feed).</p>
             <p className="text-gray-400">Atualizado {fmtBrasilia(p.atualizado_em)}</p>
           </div>
+          {diversos.length > 0 && (
+            <div className="bg-white rounded-xl border border-amber-300 p-3 space-y-1">
+              <p className="text-xs font-bold text-amber-800">{N(diversos.length)} peça(s) no catálogo em "Diversos"</p>
+              <p className="text-[11px] text-gray-500">Sem categoria reconhecida: corrija o grupo na ficha para entrarem na lista certa.</p>
+              {diversos.slice(0, 30).map((d) => (
+                <p key={d.sku} className="text-xs text-gray-700 truncate"><span className="font-mono">{d.sku}</span> · {d.produto || "—"} <span className="text-gray-400">({d.grupo || "sem grupo"})</span></p>
+              ))}
+              {diversos.length > 30 && <p className="text-[11px] text-gray-400">e mais {N(diversos.length - 30)}…</p>}
+            </div>
+          )}
         </>)}
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
           <p className="text-xs font-bold text-gray-700">Canais</p>

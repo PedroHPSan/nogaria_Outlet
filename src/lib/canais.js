@@ -17,6 +17,8 @@ export async function situacaoDaPeca(sku) {
 
 export const retirarDeTodos = (sku, user) => rpc("retirar_de_todos", { p_sku: sku, p_user: user?.email ?? null });
 export const painelCatalogo = () => rpc("catalogo_painel");
+// Peças publicadas cuja categoria ainda resolve para "Diversos" (precisam de grupo correto para cair no conjunto certo).
+export const catalogoDiversos = () => rpc("catalogo_diversos");
 export const jobsComProblema = async () => [...(await rpc("jobs_listar", { p_status: "morto", p_limite: 50 })), ...(await rpc("jobs_listar", { p_status: "erro", p_limite: 50 }))];
 export const reenfileirarJob = (id) => rpc("job_reenfileirar", { p_id: id });
 
