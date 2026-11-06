@@ -688,7 +688,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         </div>
       )}
 
-      <div role="tablist" aria-label="Seções da ficha" className="flex gap-1 overflow-x-auto bg-white border-b border-gray-200 px-3 desk:px-6">
+      <div role="tablist" aria-label="Seções da ficha" className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-white border-b border-gray-200 px-3 desk:px-6">
         {ABAS.map((a) => (
           <button key={a.id} role="tab" aria-selected={tab === a.id} onClick={() => setTab(a.id)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-sm font-semibold border-b-2 -mb-px ${tab === a.id ? "border-orange-500 text-gray-900" : "border-transparent text-gray-500"}`}>
@@ -1251,7 +1251,6 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <button onClick={() => setDivOpen(true)} className="w-full flex items-center justify-center gap-2 text-gray-700 border border-gray-300 bg-white rounded-xl py-3 text-sm font-semibold mb-2">
           <Layers className="w-4 h-4" /> Dividir em vários itens
         </button>
-        </div>
         {divOpen && (
           <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => !divBusy && setDivOpen(false)}>
             <div className="bg-white rounded-2xl w-full max-w-sm p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
@@ -1287,6 +1286,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <button onClick={() => salvar("DESCARTE")} className="w-full flex items-center justify-center gap-2 text-red-600 border border-red-200 bg-red-50 rounded-xl py-3 text-sm font-semibold">
           <Trash2 className="w-4 h-4" /> Marcar como descarte / sucata
         </button>
+        </div>
       </div>
 
       <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 shadow-lg">
