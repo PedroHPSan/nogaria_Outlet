@@ -29,7 +29,7 @@ export default function MemoriaCalculoV2({ r, preco, fmtBRL }) {
   return (
     <div className="space-y-2">
       {/* 1) Mercado */}
-      <Bloco resumo={<>Mercado — quanto vale <Ajuda termo="recomendado" /></>} resumoValor={r.alvo} fmtBRL={fmtBRL}>
+      <Bloco resumo={<>Mercado <Ajuda termo="recomendado" /></>} resumoValor={r.alvo} fmtBRL={fmtBRL}>
         {m.mercado.map((passo, i) => (
           <Linha key={passo.passo} op={i === 0 ? "" : "×"}
             label={passo.fator != null ? `${passo.passo} (×${String(passo.fator).replace(".", ",")})` : passo.passo}
@@ -40,7 +40,7 @@ export default function MemoriaCalculoV2({ r, preco, fmtBRL }) {
       </Bloco>
 
       {/* 2) Custo do lote */}
-      <Bloco resumo={<>Custo do lote — quanto custou este item <Ajuda termo="rateio" /></>} resumoValor={r.custoAloc} fmtBRL={fmtBRL}>
+      <Bloco resumo={<>Custo do lote <Ajuda termo="rateio" /></>} resumoValor={r.custoAloc} fmtBRL={fmtBRL}>
         {lote ? (
           <>
             {lote.lance != null ? (
@@ -75,7 +75,7 @@ export default function MemoriaCalculoV2({ r, preco, fmtBRL }) {
       </Bloco>
 
       {/* 3) Custos e piso */}
-      <Bloco resumo={<>Custos e piso — preço mínimo <Ajuda termo="piso" /></>} resumoValor={r.piso} fmtBRL={fmtBRL}>
+      <Bloco resumo={<>Piso e preço mínimo <Ajuda termo="piso" /></>} resumoValor={r.piso} fmtBRL={fmtBRL}>
         <p className="text-[11px] text-gray-500">Calculado em {fmtBRL(p)} no canal {r.canal}. Cada custo é um percentual do preço de venda:</p>
         {custos.linhas.map((l) => (
           <div key={l.id} className="flex items-center justify-between gap-2 text-xs text-gray-600">
@@ -110,7 +110,7 @@ export default function MemoriaCalculoV2({ r, preco, fmtBRL }) {
 
       {/* Resumo em texto */}
       <details className="rounded-xl border border-gray-100">
-        <summary className="cursor-pointer list-none px-2.5 py-2 text-[11px] font-semibold uppercase text-gray-500">Resumo em texto — de onde chegamos a este preço</summary>
+        <summary className="cursor-pointer list-none px-2.5 py-2 text-[11px] font-semibold uppercase text-gray-500">Resumo em texto</summary>
         <ul className="px-2.5 pb-2.5 space-y-1 text-xs text-gray-700 list-disc pl-6">{r.explicacao.map((l, i) => <li key={i}>{l}</li>)}</ul>
       </details>
     </div>
