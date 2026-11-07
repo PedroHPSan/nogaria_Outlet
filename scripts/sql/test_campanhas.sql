@@ -50,6 +50,17 @@ do $$ declare c1 uuid; c2 uuid; c3 uuid; r jsonb; m text; d text; n int; begin
   insert into res values ('não nasce publicada por INSERT', m is not null, m);
   m := null; begin delete from campanha_regras where campanha_id = c1; exception when others then m := sqlerrm; end;
   insert into res values ('regra de publicada imutável', m is not null, m);
+  m := null; begin delete from campanhas where id = c1; exception when others then m := sqlerrm; end;
+  insert into res values ('publicada não apaga por DELETE', m is not null and exists (select 1 from campanha_itens where campanha_id = c1), m);
+  insert into campanhas (nome, inicio_em, fim_em) values ('Rasc', now(), now()+interval '1 day') returning id into c3;
+  m := null; begin update campanha_regras set campanha_id = c3 where campanha_id = c1; exception when others then m := sqlerrm; end;
+  insert into res values ('regra não sai de campanha publicada (UPDATE campanha_id)', m is not null and m like 'Regras só%', m);
+  m := null; begin update campanha_regras set campanha_id = (select id from campanhas where status='RASCUNHO' limit 1) where campanha_id = c1; exception when others then m := sqlerrm; end;
+  insert into res values ('regra não sai de campanha publicada (UPDATE campanha_id)', m is not null, m);
+  m := null; begin update campanha_regras set campanha_id = c1 where false; insert into campanha_regras (campanha_id,tipo,alvo,desconto_pct) values (c1,'item','A3',5); exception when others then m := sqlerrm; end;
+  insert into res values ('regra não entra em campanha publicada (INSERT)', m is not null, m);
+  delete from campanhas where id = c3;
+  insert into res values ('rascunho pode ser apagado', not exists (select 1 from campanhas where id = c3), null);
   m := null; begin perform campanha_publicar(c1); exception when others then m := sqlerrm; end;
   insert into res values ('não republica', m like 'Só rascunho%', m);
 

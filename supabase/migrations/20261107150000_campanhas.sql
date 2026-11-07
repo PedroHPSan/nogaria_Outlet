@@ -68,6 +68,12 @@ begin
     new.atualizado_em := now();
     return new;
   end if;
+  if tg_op = 'DELETE' then
+    if old.status <> 'RASCUNHO' then
+      raise exception 'Campanha % já foi publicada/cancelada; não pode ser apagada (use encerrar).', old.nome;
+    end if;
+    return old;
+  end if;
   if tg_op = 'INSERT' then
     if new.status <> 'RASCUNHO' or new.fim_previsto is not null then
       raise exception 'Campanha nasce como rascunho; publique pela ação de publicar.';
@@ -84,15 +90,17 @@ begin
   return new;
 end $$;
 drop trigger if exists trg_campanhas_guarda on public.campanhas;
-create trigger trg_campanhas_guarda before insert or update on public.campanhas
+create trigger trg_campanhas_guarda before insert or update or delete on public.campanhas
   for each row execute function public.campanhas_guarda();
 
 create or replace function public.campanha_regras_guarda() returns trigger
 language plpgsql set search_path = public as $$
-declare v_status text;
 begin
-  select status into v_status from campanhas where id = coalesce(new.campanha_id, old.campanha_id);
-  if v_status is not null and v_status <> 'RASCUNHO' then
+  -- confere a campanha de origem (old) e a de destino (new): não dá para mover regra de/para campanha publicada
+  if exists (select 1 from campanhas c
+              where c.status <> 'RASCUNHO'
+                and c.id in (case when tg_op <> 'INSERT' then old.campanha_id end,
+                             case when tg_op <> 'DELETE' then new.campanha_id end)) then
     raise exception 'Regras só podem ser alteradas em campanha rascunho.';
   end if;
   return coalesce(new, old);
