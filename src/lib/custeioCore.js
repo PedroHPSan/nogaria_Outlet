@@ -24,7 +24,7 @@ export function formInicial(lote, extras) {
   const legado = lote.custo_origem !== "composto";
   const valor = lote.lance_final ?? (legado ? lote.custo_total : null);
   const comissao = lote.comissao_leiloeiro ?? (lote.lance_final != null ? Math.round(Number(lote.lance_final) * 5) / 100 : 0);
-  const lista = extras.map((e) => ({ sku: e.sku || "", tipo: e.tipo, descricao: e.descricao || "", valor: emTexto(e.valor) }));
+  const lista = extras.map((e) => ({ id: e.id ?? null, sku: e.sku || "", tipo: e.tipo, descricao: e.descricao || "", valor: emTexto(e.valor), regra_rateio: e.regra_rateio || "motor" }));
   if (legado) {
     for (const [col, tipo] of [["frete_retirada", "frete_retirada"], ["frete_transferencia", "frete_transferencia"], ["outros_custos", "outros"]]) {
       if (Number(lote[col]) > 0) lista.push({ sku: "", tipo, descricao: "", valor: emTexto(lote[col]) });
@@ -46,6 +46,24 @@ export function totalPrevisto(form, diretos) {
   return { base, extras, total: base + extras };
 }
 
+
+export const REGRAS_RATEIO = [["motor", "Padrão (pelo valor)"], ["igual", "Igual por peça"], ["valor", "Pelo valor da peça"], ["peso", "Pelo peso"]];
+
+// Argumentos da RPC salvar_custeio_lote a partir do formulário (puro; testável).
+export function payloadCusteio(lote, form, diretosAlterados) {
+  const lance = toNum(form.valor);
+  return {
+    p_lote: lote.lote, p_modo: form.modo,
+    p_lance: form.modo === "rateio" ? lance : null,
+    p_comissao: form.modo === "rateio" ? (toNum(form.comissao) ?? 0) : null,
+    p_taxa: form.modo === "rateio" ? (toNum(form.taxa) ?? 0) : null,
+    p_extras: form.extras.filter((e) => toNum(e.valor) > 0).map((e) => ({
+      id: e.id ?? null, sku: (e.sku || "").trim() || null, tipo: e.tipo, descricao: (e.descricao || "").trim() || null,
+      valor: toNum(e.valor), regra_rateio: e.regra_rateio || "motor",
+    })),
+    p_diretos: Object.fromEntries(Object.entries(diretosAlterados || {}).map(([sku, v]) => [sku, toNum(v)])),
+  };
+}
 
 const SKU_RE = /\b[A-Z]{2,5}-\d+(?:-\d+)*\b/i;
 
@@ -78,3 +96,36 @@ export function lerColado(texto, skus) {
   });
   return { valores, ignorados, modo: "ordem" };
 }
+
+// ---- Custos globais ----
+export const BASES_GLOBAL = [["por_item", "Valor por peça"], ["por_lote", "Valor por lote (dividido entre as peças)"], ["pct_custo_lote", "% sobre o custo da peça"]];
+export const globalVazio = () => ({ id: null, nome: "", tipo: "outros", valor: "", base: "por_item", regra_rateio: "valor", grupos: "", lotes: "", vigencia_inicio: "", vigencia_fim: "", ativo: true });
+
+export const lerListaTexto = (t) => String(t || "").split(/[;,\n]+/).map((x) => x.trim()).filter(Boolean);
+export const lerListaLotes = (t) => [...new Set(lerListaTexto(t).map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0))];
+
+// Valida o formulário do custo global; devolve a lista de problemas (vazia = ok).
+export function validarGlobal(f) {
+  const e = [];
+  if (String(f?.nome || "").trim().length < 2) e.push("Dê um nome ao custo.");
+  const v = toNum(f?.valor);
+  if (v == null || v < 0) e.push("Informe o valor.");
+  if (f?.base === "pct_custo_lote" && v != null && v > 100) e.push("Percentual de 0 a 100.");
+  if (!f?.vigencia_inicio) e.push("Informe o início da vigência.");
+  if (f?.vigencia_inicio && f?.vigencia_fim && f.vigencia_fim < f.vigencia_inicio) e.push("O fim da vigência é antes do início.");
+  if (String(f?.lotes || "").trim() && !lerListaLotes(f.lotes).length) e.push("Lotes: use números separados por vírgula.");
+  if (f?.tipo === "embalagem") e.push("Atenção: o motor de preço já desconta embalagem (R$ 25 + por peso). Um global de embalagem soma ao custo da peça e conta em dobro, a menos que você ajuste a embalagem do motor.");
+  return e;
+}
+// Avisos (não impedem salvar) × erros: o aviso da embalagem começa com "Atenção".
+export const soErros = (lista) => lista.filter((m) => !m.startsWith("Atenção"));
+
+export const BASE_ROTULO = Object.fromEntries(BASES_GLOBAL.map(([k, r]) => [k, r]));
+export function descreverGlobal(g) {
+  const v = Number(g.valor);
+  const valor = g.base === "pct_custo_lote" ? `${String(v).replace(".", ",")}%` : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const escopo = [g.grupos?.length ? `grupos: ${g.grupos.join(", ")}` : "todos os grupos", g.lotes?.length ? `lotes: ${g.lotes.join(", ")}` : "todos os lotes"].join(" · ");
+  return `${valor} · ${BASE_ROTULO[g.base] || g.base} · ${escopo}`;
+}
+// Vigente numa data (YYYY-MM-DD)?
+export const globalVigente = (g, dia) => !!g.ativo && dia >= g.vigencia_inicio && (!g.vigencia_fim || dia <= g.vigencia_fim);

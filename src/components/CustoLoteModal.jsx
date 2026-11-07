@@ -5,11 +5,11 @@ import { X, Loader2, Plus, Trash2 } from "lucide-react";
 import { loteSemCusto } from "../lib/custoLote";
 import { fmtBRL } from "../lib/model";
 import {
-  TIPOS_EXTRA, carregarItensCusto, carregarExtras, formInicial, totalPrevisto, salvarCusteio, toNum, emTexto, lerColado,
+  TIPOS_EXTRA, REGRAS_RATEIO, carregarItensCusto, carregarExtras, carregarHistoricoCusto, formInicial, totalPrevisto, salvarCusteio, toNum, emTexto, lerColado,
 } from "../lib/custeio";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-orange-500";
-const ABAS = [["lote", "Lote"], ["produtos", "Produtos"], ["resumo", "Resumo"]];
+const ABAS = [["lote", "Lote"], ["produtos", "Produtos"], ["resumo", "Resumo"], ["historico", "Histórico"]];
 const VENDIDO = (s) => s === "VENDIDO" || s === "ENTREGUE";
 const LIMITE_LINHAS = 200;
 
@@ -25,6 +25,7 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
   const [escolheu, setEscolheu] = useState(() => !loteSemCusto(lote)); // lote sem custo: primeiro pergunta como o custo será lançado
   const [colado, setColado] = useState("");
   const [resColado, setResColado] = useState(null);
+  const [historico, setHistorico] = useState(null); // null = não carregado · [] = vazio
   const [inicial, setInicial] = useState(null); // JSON do formulário como veio do banco (detecta alterações)
   const [erro, setErro] = useState(null);
 
@@ -40,6 +41,8 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
       .catch((e) => !cancel && setErro(e.message));
     return () => { cancel = true; };
   }, [lote]);
+
+  useEffect(() => { if (aba === "historico" && historico === null) carregarHistoricoCusto(lote.lote).then(setHistorico).catch(() => setHistorico([])); }, [aba, historico, lote.lote]);
 
   const alterados = useMemo(
     () => Object.fromEntries(Object.entries(diretos).filter(([sku, v]) => (toNum(v) ?? null) !== (toNum(original[sku]) ?? null))),
@@ -110,7 +113,7 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
             </button>
           </div>
         ) : (<>
-        <div className="grid grid-cols-3 gap-1 px-4 mt-3">
+        <div className="grid grid-cols-4 gap-1 px-4 mt-3">
           {ABAS.map(([k, r]) => (
             <button key={k} onClick={() => setAba(k)}
               className={`py-2 rounded-lg text-sm font-bold ${aba === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
@@ -143,7 +146,7 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
             <div>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-gray-700">Custos adicionais <span className="font-normal text-gray-400">· {fmtBRL(extras)}</span></p>
-                <button onClick={() => set({ extras: [...form.extras, { sku: "", tipo: "frete_retirada", descricao: "", valor: "" }] })}
+                <button onClick={() => set({ extras: [...form.extras, { id: null, sku: "", tipo: "frete_retirada", descricao: "", valor: "", regra_rateio: "motor" }] })}
                   className="text-xs font-bold text-orange-600 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> adicionar</button>
               </div>
               <p className="text-[11px] text-gray-400">Sem SKU = rateado entre todos os itens do lote. Com SKU = só daquele item.</p>
@@ -157,6 +160,11 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
                     <button onClick={() => set({ extras: form.extras.filter((_, j) => j !== i) })} aria-label="Remover"><Trash2 className="w-4 h-4 text-gray-400" /></button>
                     <input value={e.descricao} onChange={(ev) => setExtra(i, { descricao: ev.target.value })} placeholder="Descrição (opcional)" className={`${inputCls} col-span-2 text-sm`} />
                     <input value={e.sku} onChange={(ev) => setExtra(i, { sku: ev.target.value })} placeholder="SKU (opcional)" className={`${inputCls} text-sm`} />
+                    {!e.sku.trim() && (
+                      <select value={e.regra_rateio || "motor"} onChange={(ev) => setExtra(i, { regra_rateio: ev.target.value })} aria-label="Dividir por" className={`${inputCls} text-sm col-span-3`}>
+                        {REGRAS_RATEIO.map(([k, r]) => <option key={k} value={k}>Dividir: {r}</option>)}
+                      </select>
+                    )}
                   </div>
                 ))}
                 {form.extras.length === 0 && <p className="text-xs text-gray-400">Nenhum custo adicional.</p>}
@@ -197,6 +205,20 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
               {linhas.length === 0 && <p className="text-xs text-gray-400 py-2">Nenhum item.</p>}
             </div>
           </>)}
+
+          {aba === "historico" && (
+            <div className="space-y-1.5">
+              {historico === null && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+              {historico && historico.length === 0 && <p className="text-xs text-gray-400">Nenhuma alteração de custo registrada ainda.</p>}
+              {(historico || []).map((h) => (
+                <div key={h.id} className="rounded-lg border border-gray-100 p-2 text-xs">
+                  <p className="text-gray-500">{new Date(h.ts).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {h.usuario || "—"}</p>
+                  <p className="text-gray-800 font-semibold">{h.tabela === "itens" ? `Custo da peça ${h.sku}` : h.tabela === "lote_custos_extra" ? `Custo adicional (${h.acao})${h.sku ? ` · ${h.sku}` : ""}` : "Custo do lote"}</p>
+                  <p className="text-gray-500 break-words">{h.antes ? JSON.stringify(h.antes) : "—"} → {h.depois ? JSON.stringify(h.depois) : "removido"}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
           {aba === "resumo" && (
             <div className="space-y-2 text-sm">

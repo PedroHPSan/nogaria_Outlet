@@ -48,8 +48,10 @@ export default function CustoItemCard({ item, params }) {
   const preco = Number(item.preco_ideal) > 0 ? Number(item.preco_ideal) : Number(item.preco_sugerido) > 0 ? Number(item.preco_sugerido) : null;
   const est = preco && !semCusto ? lucroEm(preco, r.base, r.canal) : null;
   const vendido = item.status === "VENDIDO" || item.status === "ENTREGUE";
+  // custo congelado no momento da venda (itens.custo_na_venda): o lucro realizado não muda quando o lote é editado depois
+  const baseVenda = Number(item.custo_na_venda) > 0 ? Number(item.custo_na_venda) + (Number(r.embalagem) || 0) : r.base;
   const realizado = vendido && Number(item.valor_vendido) > 0 && !semCusto
-    ? Number(item.valor_vendido) - (Number(item.taxa_venda) || 0) - (Number(item.frete_pago) || 0) - r.base : null;
+    ? Number(item.valor_vendido) - (Number(item.taxa_venda) || 0) - (Number(item.frete_pago) || 0) - baseVenda : null;
 
   const linha = (rot, val, forte) => (
     <div className="flex justify-between text-sm py-0.5"><span className="text-gray-500">{rot}</span><b className={forte ? "text-gray-900" : "text-gray-700"}>{val}</b></div>

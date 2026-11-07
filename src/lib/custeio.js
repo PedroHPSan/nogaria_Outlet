@@ -5,8 +5,8 @@ import { supabase } from "./supabase";
 import { limparCache } from "./motorPrecoDb";
 import { loteSemCusto } from "./custoLote.js";
 
-export { TIPOS_EXTRA, rotuloTipo, toNum, emTexto, formInicial, totalPrevisto, lerColado } from "./custeioCore.js";
-import { toNum, formInicial } from "./custeioCore.js";
+export { TIPOS_EXTRA, REGRAS_RATEIO, rotuloTipo, toNum, emTexto, formInicial, totalPrevisto, lerColado, payloadCusteio, BASES_GLOBAL, globalVazio, lerListaTexto, lerListaLotes, validarGlobal, soErros, descreverGlobal, globalVigente } from "./custeioCore.js";
+import { toNum, formInicial, payloadCusteio, lerListaTexto, lerListaLotes } from "./custeioCore.js";
 
 // Todas as páginas (PostgREST corta em 1.000).
 async function paginado(montar) {
@@ -30,7 +30,24 @@ export async function carregarExtras(lote) {
   return data || [];
 }
 
+// Grava TUDO numa transação (RPC salvar_custeio_lote): custo direto das peças, extras (editados por id) e o lote.
+// Se a migration custos_lote_v2 ainda não está no banco, cai no caminho antigo (várias chamadas) para não travar o uso.
 export async function salvarCusteio({ lote, form, diretosAlterados }) {
+  if (form.modo === "rateio" && !(toNum(form.valor) > 0)) throw new Error("Informe o valor pago pelo lote.");
+  const { error } = await supabase.rpc("salvar_custeio_lote", payloadCusteio(lote, form, diretosAlterados));
+  if (!error) { limparCache(); return; }
+  if (error.code === "PGRST202" || /could not find the function/i.test(error.message || "")) return salvarCusteioLegado({ lote, form, diretosAlterados });
+  throw error;
+}
+
+// Histórico de alterações de custo do lote (custo_auditoria).
+export async function carregarHistoricoCusto(lote, limite = 100) {
+  const { data, error } = await supabase.from("custo_auditoria").select("id,tabela,sku,acao,antes,depois,usuario,ts").eq("lote", lote).order("ts", { ascending: false }).limit(limite);
+  if (error) throw error;
+  return data || [];
+}
+
+async function salvarCusteioLegado({ lote, form, diretosAlterados }) {
   const valor = toNum(form.valor);
   if (form.modo === "rateio" && !(valor > 0)) throw new Error("Informe o valor pago pelo lote.");
   const { data: u } = await supabase.auth.getUser();
@@ -89,4 +106,42 @@ export async function salvarCustoItem({ lote, item, valor }) {
   const form = { ...formInicial(lote, await carregarExtras(lote.lote)), modo: "soma" };
   await salvarCusteio({ lote, form, diretosAlterados: { [item.sku]: String(v).replace(".", ",") } });
   return { convertido: true };
+}
+
+
+// ---- Custos globais (tabelas custos_globais / custos_globais_excecao) ----
+export async function listarGlobais() {
+  const { data, error } = await supabase.from("custos_globais").select("*").order("id");
+  if (error) throw error;
+  return data || [];
+}
+export async function listarExcecoes(globalId) {
+  const { data, error } = await supabase.from("custos_globais_excecao").select("lote").eq("global_id", globalId);
+  if (error) throw error;
+  return (data || []).map((r) => r.lote);
+}
+export async function salvarGlobal(f) {
+  const { data: u } = await supabase.auth.getUser();
+  const linha = {
+    nome: f.nome.trim(), tipo: f.tipo, valor: toNum(f.valor), base: f.base, regra_rateio: f.regra_rateio,
+    grupos: lerListaTexto(f.grupos).length ? lerListaTexto(f.grupos) : null,
+    lotes: lerListaLotes(f.lotes).length ? lerListaLotes(f.lotes) : null,
+    vigencia_inicio: f.vigencia_inicio, vigencia_fim: f.vigencia_fim || null, ativo: !!f.ativo, atualizado_em: new Date().toISOString(),
+  };
+  const r = f.id ? await supabase.from("custos_globais").update(linha).eq("id", f.id)
+                 : await supabase.from("custos_globais").insert({ ...linha, criado_por: u?.user?.email || null });
+  if (r.error) throw r.error;
+  limparCache();
+}
+export async function removerGlobal(id) {
+  const { error } = await supabase.from("custos_globais").delete().eq("id", id);
+  if (error) throw error;
+  limparCache();
+}
+export async function definirExcecao(globalId, lote, excecao) {
+  const r = excecao
+    ? await supabase.from("custos_globais_excecao").upsert({ global_id: globalId, lote })
+    : await supabase.from("custos_globais_excecao").delete().eq("global_id", globalId).eq("lote", lote);
+  if (r.error) throw r.error;
+  limparCache();
 }
