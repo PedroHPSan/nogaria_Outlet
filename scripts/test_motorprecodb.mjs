@@ -106,4 +106,15 @@ db = novoDb(); db.lotes = []; usarCliente(fake(db)); limparCache();
 const sem = await analisarItens(db.itens, DEFAULT_PARAMS, { force: true });
 eq(sem.get("A").semCusto, true, "sem custo cadastrado: sinaliza semCusto (a UI avisa)");
 
+console.log("lote composto lê a fonte única (custo_itens_lote)");
+db = novoDb(); db.lotes[0].custo_origem = "composto"; db.lotes[0].modo_custeio = "rateio"; db.lotes[0].custo_total = 1500; db.lote_custos_extra = [];
+const comRpc = { ...fake(db), rpc: async (nome, args) => (nome === "custo_itens_lote" && args.p_lote === 7
+  ? { data: [{ sku: "A", total: 100.5 }, { sku: "B", total: 400 }, { sku: "C", total: 999.5 }], error: null } : { data: null, error: { message: "x" } }) };
+usarCliente(comRpc); limparCache();
+const viaSql = await calcularLote(7, DEFAULT_PARAMS, { force: true });
+eq(viaSql.linhas.map((l) => l.custo).join("|"), "100.5|400|999.5", "custo por item vem do SQL (soma em centavos, com extras e globais)");
+usarCliente({ ...fake(db), rpc: async () => ({ data: null, error: { message: "function does not exist" } }) }); limparCache();
+const semFn = await calcularLote(7, DEFAULT_PARAMS, { force: true });
+perto(semFn.linhas.reduce((s, l) => s + l.custo, 0), 1500, 0.01, "sem a função no banco: cai no cálculo local e fecha no custo do lote");
+
 console.log(`\n${n} asserções OK`);

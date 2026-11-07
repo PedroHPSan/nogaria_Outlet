@@ -41,6 +41,7 @@ export function custoRealLote(lote, todosLotes = [], opts = {}) {
   // Custo cadastrado na tela de custeio (lotes.custo_origem='composto'): custo_total é mantido por trigger
   // (valor do lote ou soma dos itens + custos adicionais) e é a fonte única.
   if (lote.custo_origem === "composto") {
+    if (!(num(lote.custo_total) > 0)) return null; // composto sem nenhum valor lançado = SEM custo (não custo zero)
     return {
       lote: lote.lote, lance: num(lote.lance_final), comissao: num(lote.comissao_leiloeiro), taxaHisa: num(lote.taxa_hisa),
       taxaOrigem: "real", frete: 0, freteOrigem: "real", total: r2(num(lote.custo_total)),
@@ -66,6 +67,7 @@ export function custoRealLote(lote, todosLotes = [], opts = {}) {
   // Custo fixo: já é o valor pago. Só soma o frete estimado.
   if (LOTES_CUSTO_FIXO.has(lote.lote) || !(num(lote.lance_final) > 0)) {
     const base = num(lote.custo_total);
+    if (!(base > 0)) return null; // sem lance e sem custo_total: lote SEM custo; antes virava total 0 e escondia o aviso
     return {
       lote: lote.lote, lance: null, comissao: null, taxaHisa: null, taxaOrigem: "incluida",
       frete, freteOrigem: "estimado", total: r2(base + frete), origem: "custo_total + frete estimado",
@@ -81,3 +83,6 @@ export function custoRealLote(lote, todosLotes = [], opts = {}) {
     origem: real != null ? "real (HISA) + frete estimado" : "estimado (taxa 2,5% + frete)",
   };
 }
+
+// true quando o lote não tem custo real cadastrado (aviso "sem custo" na ficha, no rateio e no Painel).
+export const loteSemCusto = (lote, todos = [lote]) => !custoRealLote(lote, todos);

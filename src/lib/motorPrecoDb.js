@@ -126,11 +126,21 @@ export async function calcularLote(lote, params, { force = false, pesos = null }
   } else {
     rateio = custo ? ratearLote(base, custo.total) : new Map();
   }
+  // Fonte única (custos_lote_v2): o banco divide base + extras + globais em centavos. Sem a migration (ou sem rpc) segue o cálculo acima.
+  let custoSql = null;
+  if (composto && typeof sb.rpc === "function") {
+    try {
+      const { data, error } = await sb.rpc("custo_itens_lote", { p_lote: lote });
+      if (!error && Array.isArray(data) && data.length) custoSql = new Map(data.map((r) => [r.sku, Number(r.total)]));
+    } catch { /* sem a função: cálculo local */ }
+  }
   const fechado = !!cadastro?.fechado_em && !pesos; // pré-visualização ignora o snapshot
   const snap = fechado ? await snapshotDoLote(lote) : null;
   const linhas = todos.map((it, i) => {
     const rt = rateio.get(it.sku);
-    const calculado = composto
+    const calculado = custoSql
+      ? (custoSql.get(it.sku) ?? 0)
+      : composto
       ? (direto.has(it.sku) ? direto.get(it.sku) : (rt?.custo ?? 0)) + (rateioAdic.get(it.sku)?.custo ?? 0) + (adicItem.get(it.sku) ?? 0)
       : (rt?.custo ?? 0);
     const custoItem = snap?.has(it.sku) ? snap.get(it.sku) : Math.round(calculado * 100) / 100;
