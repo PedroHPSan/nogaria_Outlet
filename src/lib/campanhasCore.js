@@ -145,3 +145,23 @@ export function promoQueTerminaPrimeiro(promos) {
   const v = Object.values(promos || {}).filter((p) => p?.fim_em);
   return v.length ? v.reduce((a, b) => (Date.parse(b.fim_em) < Date.parse(a.fim_em) ? b : a)) : null;
 }
+
+// ---- Sacola (equipe): item que entra durante a campanha leva o preço promocional no snapshot ----
+// `pe` = linha de precos_efetivos (preco, preco_cheio, campanha_id, campanha_nome, campanha_fim). Sem campanha → item intacto.
+export function aplicarPromoSacola(snap, pe, entrouEm = new Date().toISOString()) {
+  if (!pe?.campanha_id || !(Number(pe.preco) > 0) || !(Number(pe.preco_cheio) > Number(pe.preco))) return snap;
+  return {
+    ...snap, preco: Number(pe.preco), preco_cheio: Number(pe.preco_cheio), preco_promo: Number(pe.preco),
+    campanha_id: pe.campanha_id, campanha_nome: pe.campanha_nome || "", campanha_fim: pe.campanha_fim, entrou_em: entrouEm,
+  };
+}
+
+// Promo do snapshot que já passou do fim e ainda não teve decisão (o banco é quem confirma, no pagamento).
+export const promoVencida = (item, agora = new Date()) =>
+  !!item?.campanha_id && !item.campanha_decisao && !!item.campanha_fim && new Date(item.campanha_fim) <= new Date(agora);
+
+// DECISAO_CAMPANHA: o `details` do erro traz [{sku, produto, preco_promo, preco_cheio_atual, campanha, campanha_fim}].
+export function pendentesDoErro(err) {
+  if (!err || !/DECISAO_CAMPANHA/.test(String(err.message || ""))) return null;
+  try { const a = JSON.parse(err.details || err.detail || "[]"); return Array.isArray(a) ? a : []; } catch { return []; }
+}

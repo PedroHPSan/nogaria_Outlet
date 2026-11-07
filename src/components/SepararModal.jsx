@@ -1,7 +1,7 @@
 // "Separar para…": 1 item na sacola de um cliente (cria a sacola ou soma na aberta) e reserva.
 import React, { useEffect, useState } from "react";
 import { X, Loader2, AlertTriangle, ShoppingBag } from "lucide-react";
-import { separar, listarSacolas } from "../lib/sacolas";
+import { separar, listarSacolas, promoParaSacola } from "../lib/sacolas";
 import { statusEfetivo } from "../lib/orcamentosCore";
 import { fmtBRL } from "../lib/model";
 
@@ -12,12 +12,15 @@ export default function SepararModal({ item, user, onClose, onFeito }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
   const [feito, setFeito] = useState(null);
+  const [promo, setPromo] = useState(null); // campanha vigente (preço vem do servidor)
 
   useEffect(() => {
     listarSacolas({ status: "ABERTA" })
       .then((l) => setAbertas(l.filter((s) => statusEfetivo(s) === "ABERTA")))
       .catch(() => {});
   }, []);
+
+  useEffect(() => { promoParaSacola(item).then(setPromo).catch(() => {}); }, [item]);
 
   const escolher = (s) => { setNome(s.cliente_nome || ""); setWhatsapp(s.cliente_whatsapp || ""); };
 
@@ -38,7 +41,8 @@ export default function SepararModal({ item, user, onClose, onFeito }) {
           <h3 className="font-bold text-gray-900 flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-orange-500" /> Separar para o cliente</h3>
           <button onClick={onClose} aria-label="Fechar"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
-        <p className="text-sm text-gray-600"><span className="font-mono font-bold">{item.sku}</span> · {item.produto} · {fmtBRL(item.preco_ideal || 0)}</p>
+        <p className="text-sm text-gray-600"><span className="font-mono font-bold">{item.sku}</span> · {item.produto} · {promo ? <><span className="line-through text-gray-400">{fmtBRL(promo.preco_cheio)}</span> <b className="text-red-600">{fmtBRL(promo.preco)}</b></> : fmtBRL(item.preco_ideal || 0)}</p>
+        {promo && <p className="text-xs rounded-lg bg-red-50 text-red-700 p-2">Campanha <b>{promo.campanha_nome}</b> até {new Date(promo.campanha_fim).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}. O item entra na sacola com o preço promocional; se o pagamento sair depois do fim, a equipe decide manter ou cobrar o preço cheio.</p>}
 
         {feito ? (
           <div className="space-y-3">

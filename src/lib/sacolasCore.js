@@ -1,6 +1,7 @@
 // Sacola do cliente no WhatsApp (PURO): casar cliente, somar item, resumo de cobrança.
 // Sem rede — importável em testes Node.
 import { snapshotItens, totais, statusEfetivo } from "./orcamentosCore.js";
+import { aplicarPromoSacola } from "./campanhasCore.js";
 
 export const FORMAS_PAGAMENTO = ["Pix", "Dinheiro", "Cartão", "Transferência", "Outro"];
 
@@ -18,8 +19,10 @@ export const sacolaAbertaDe = (sacolas, cliente, agora = new Date()) =>
   (sacolas || []).find((s) => s.origem === "whatsapp" && statusEfetivo(s, agora) === "ABERTA" && mesmoCliente(s, cliente)) || null;
 
 // Acrescenta o item ao snapshot da sacola (idempotente por SKU). Recusa item sem preço de venda.
-export function adicionarItem(itensSacola, item) {
-  const [snap] = snapshotItens([item]);
+// `promo` (linha de precos_efetivos) leva o preço da campanha vigente para o snapshot, com o "de" congelado.
+export function adicionarItem(itensSacola, item, promo = null, entrouEm) {
+  const [base] = snapshotItens([item]);
+  const snap = aplicarPromoSacola(base, promo, entrouEm);
   if (!(Number(snap.preco) > 0)) throw new Error(`${item.sku}: sem preço de venda — defina o preço antes de separar.`);
   if ((itensSacola || []).some((i) => i.sku === snap.sku)) return itensSacola;
   return [...(itensSacola || []), snap];
@@ -48,7 +51,7 @@ const brl = (v) => `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigi
 // Lembrete de pagamento que o vendedor manda ao cliente.
 export function mensagemCobranca(sacola) {
   const t = totais(sacola.itens, sacola.desconto_pct);
-  const linhas = (sacola.itens || []).map((i) => `• ${i.produto} (${i.sku}) — ${brl(i.preco)}`);
+  const linhas = (sacola.itens || []).map((i) => `• ${i.produto} (${i.sku}) — ${Number(i.preco_cheio) > Number(i.preco) ? `de ${brl(i.preco_cheio)} por ${brl(i.preco)}` : brl(i.preco)}`);
   const ate = sacola.validade ? new Date(sacola.validade).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null;
   return [
     `Olá${sacola.cliente_nome ? `, ${sacola.cliente_nome}` : ""}! Separei para você:`,
@@ -56,6 +59,14 @@ export function mensagemCobranca(sacola) {
     `*Total: ${brl(t.total)}*`,
     ate ? `Seguro até ${ate}. Me avisa quando fizer o pagamento!` : "Me avisa quando fizer o pagamento!",
   ].join("\n");
+}
+
+// Totais da sacola com a decisão pós-campanha: `promo` mantém os preços; `cheio` troca os itens pendentes pelo preço cheio ATUAL.
+export function totaisComDecisao(itens, descontoPct, pendentes) {
+  const atual = new Map((pendentes || []).map((p) => [p.sku, Number(p.preco_cheio_atual)]));
+  const promo = totais(itens, descontoPct).total;
+  const cheio = totais((itens || []).map((i) => (atual.has(i.sku) ? { ...i, preco: atual.get(i.sku) } : i)), descontoPct).total;
+  return { promo, cheio, diferenca: Math.round((cheio - promo) * 100) / 100 };
 }
 
 export const linkCobranca = (sacola) => {
