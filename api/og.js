@@ -6,15 +6,16 @@ import { injetarOg, montarHtmlOg } from "../src/lib/ofertaCore.js";
 
 export default async function handler(req, res) {
   const item = req.query.t === "i"; // /i/<sku>: SKU tem hífens (NOG-103-001)
+  const promo = req.query.t === "promo"; // /promo/<slug>: campanha de promoção
   const slug = String(req.query.slug || "").replace(item ? /[^a-z0-9-]/gi : /[^a-z0-9]/gi, "").slice(0, 40);
   const base = process.env.VITE_SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY;
   const origem = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
-  const prefixo = item ? "i" : req.query.t === "c" ? "c" : "p";
+  const prefixo = item ? "i" : promo ? "promo" : req.query.t === "c" ? "c" : "p";
   let meta = { titulo: "Nogária Outlet", descricao: "Ofertas da Nogária Outlet." };
   try {
     if (slug && base && key) {
-      const r = await fetch(`${base}/rest/v1/rpc/${item ? "item_publico" : "og_publico"}`, {
+      const r = await fetch(`${base}/rest/v1/rpc/${item ? "item_publico" : promo ? "campanha_og" : "og_publico"}`, {
         method: "POST",
         headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify(item ? { p_sku: slug.toUpperCase() } : { p_slug: slug }),

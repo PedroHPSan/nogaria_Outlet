@@ -88,3 +88,12 @@ export async function margensDaSimulacao(linhas, params) {
   } catch { /* margem é informativa */ }
   return out;
 }
+
+export const resultadoCampanha = async (id) => ok(await supabase.rpc("campanha_resultado", { p_id: id }));
+
+// Campanhas que cobrem o SKU (para o aviso na ficha do item).
+export async function campanhasDoItem(sku) {
+  const { data } = await supabase.from("campanha_itens")
+    .select("preco_cheio,desconto_pct,canal,campanhas(nome,inicio_em,fim_em,status)").eq("sku", sku);
+  return data || [];
+}

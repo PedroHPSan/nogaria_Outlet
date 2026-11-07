@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Loader2, Search, AlertTriangle, MessageCircle } from "lucide-react";
 import { listarSacolas, tirarDaSacola, registrarPagamento, registrarEntrega, cancelarSacola, renovarSacola } from "../lib/sacolas";
 import { statusEfetivo, totais } from "../lib/orcamentosCore";
-import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO, PRAZOS_RENOVACAO, rotuloPrazo } from "../lib/sacolasCore";
+import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO, PRAZOS_RENOVACAO, rotuloPrazo, totaisComDecisao } from "../lib/sacolasCore";
+import { promoVencida, pendentesDoErro } from "../lib/campanhasCore";
 import { fmtBRL } from "../lib/model";
 import { reservasDoBot } from "../lib/canais";
 import { WA_API_ATIVA, eventoDaSacola, ROTULO_EVENTO, previaEnvio, enviarPelaApi, situacaoEnvios, rotuloEnvio } from "../lib/waEnvio";
@@ -24,6 +25,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   const [erro, setErro] = useState(null);
   const [ocupado, setOcupado] = useState(null);
   const [pagando, setPagando] = useState(null); // { id, forma, valor }
+  const [decisao, setDecisao] = useState(null); // { sacola, pend, forma } — campanha terminou antes do pagamento: manter promo ou cobrar cheio
   const [dias, setDias] = useState({}); // id da sacola -> dias para reabrir/estender (padrão 3)
   const [previa, setPrevia] = useState(null); // { sacola, evento } — confirmação do envio pela API
   const [doBot, setDoBot] = useState(null); // reservas ativas do bot do WhatsApp
@@ -58,6 +60,24 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
     try { await fn(); setPagando(null); await carregar(); onMudou?.(); }
     catch (e) { setErro(e.message || String(e)); }
     finally { setOcupado(null); }
+  };
+
+  // Pagamento: se a campanha de algum item já terminou o servidor recusa (DECISAO_CAMPANHA) e abrimos o diálogo.
+  const pagar = async (s) => {
+    try { await registrarPagamento(s, { forma: pagando.forma, valor: String(pagando.valor).replace(",", ".") }, user); }
+    catch (e) {
+      const pend = pendentesDoErro(e);
+      if (!pend) throw e;
+      setDecisao({ sacola: s, pend, forma: pagando.forma });
+    }
+  };
+  const decidir = (manter) => {
+    const { sacola, pend, forma } = decisao;
+    const t = totaisComDecisao(sacola.itens, sacola.desconto_pct, pend);
+    return agir(sacola, async () => {
+      await registrarPagamento(sacola, { forma, valor: String(manter ? t.promo : t.cheio) }, user, { manterPromo: manter });
+      setDecisao(null);
+    });
   };
 
   return (
@@ -140,8 +160,11 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
               <ul className="text-xs text-gray-700 space-y-0.5">
                 {s.itens.map((i) => (
                   <li key={i.sku} className="flex items-center gap-2">
-                    <span className="truncate">{i.produto} <span className="font-mono text-gray-400">({i.sku})</span></span>
-                    <span className="ml-auto">{fmtBRL(i.preco)}</span>
+                    <span className="truncate">{i.produto} <span className="font-mono text-gray-400">({i.sku})</span>
+                      {Number(i.preco_cheio) > Number(i.preco) && <span className="ml-1 text-[10px] font-bold text-red-600">PROMO{i.campanha_nome ? ` · ${i.campanha_nome}` : ""}</span>}
+                      {promoVencida(i) && ef === "ABERTA" && <span className="ml-1 text-[10px] font-bold text-amber-700">promo encerrada: decidir no pagamento</span>}
+                    </span>
+                    <span className="ml-auto whitespace-nowrap">{Number(i.preco_cheio) > Number(i.preco) && <span className="line-through text-gray-400 mr-1">{fmtBRL(i.preco_cheio)}</span>}{fmtBRL(i.preco)}</span>
                     {(ef === "ABERTA" || ef === "EXPIRADO") && (
                       <button disabled={ocup} aria-label={`Tirar ${i.sku}`} onClick={() => window.confirm(`Tirar ${i.sku} da sacola e liberar o item?`) && agir(s, () => tirarDaSacola(s, i.sku))}>
                         <X className="w-3.5 h-3.5 text-gray-400" />
@@ -158,7 +181,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                   </select>
                   <input value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} inputMode="decimal"
                     className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-xs" aria-label="Valor recebido" />
-                  <button disabled={ocup} onClick={() => agir(s, () => registrarPagamento(s, { forma: pagando.forma, valor: String(pagando.valor).replace(",", ".") }, user))}
+                  <button disabled={ocup} onClick={() => agir(s, () => pagar(s))}
                     className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Confirmar pagamento</button>
                   <button onClick={() => setPagando(null)} className="text-xs text-gray-500">Cancelar</button>
                 </div>
@@ -191,6 +214,36 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
           );
         })}
       </div>
+      {decisao && (() => {
+        const t = totaisComDecisao(decisao.sacola.itens, decisao.sacola.desconto_pct, decisao.pend);
+        const c = decisao.pend[0];
+        const ocup = ocupado === decisao.sacola.id;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-label="Campanha encerrada">
+            <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <p className="font-bold text-gray-900 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-600" /> A campanha terminou antes do pagamento</p>
+              <p className="text-sm text-gray-700">
+                {c.campanha ? <b>{c.campanha}</b> : "A campanha"}{c.campanha_fim ? ` terminou em ${fmtData(c.campanha_fim)}` : " terminou"}.{" "}
+                {decisao.pend.length} item(ns) desta sacola entraram com preço promocional. O que cobrar?
+              </p>
+              <table className="w-full text-xs">
+                <thead><tr className="text-left text-gray-500"><th className="py-1">Item</th><th>Promoção</th><th>Preço cheio</th></tr></thead>
+                <tbody>{decisao.pend.map((p) => (
+                  <tr key={p.sku} className="border-t border-gray-100"><td className="py-1 pr-2 truncate max-w-[9rem]">{p.produto || p.sku}</td><td>{fmtBRL(p.preco_promo)}</td><td>{fmtBRL(p.preco_cheio_atual)}</td></tr>
+                ))}</tbody>
+              </table>
+              <p className="text-xs text-gray-600">Total mantendo a promoção: <b>{fmtBRL(t.promo)}</b> · cobrando o preço cheio: <b>{fmtBRL(t.cheio)}</b> (diferença de {fmtBRL(t.diferenca)}).</p>
+              {decisao.sacola.validade && <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2">A cobrança enviada ao cliente prometia o valor da promoção até {fmtData(decisao.sacola.validade)}.</p>}
+              <div className="flex flex-col gap-2">
+                <button disabled={ocup} onClick={() => decidir(true)} className="w-full rounded-xl py-2.5 font-bold bg-emerald-600 text-white">Manter preço promocional ({fmtBRL(t.promo)})</button>
+                <button disabled={ocup} onClick={() => decidir(false)} className="w-full rounded-xl py-2.5 font-bold bg-gray-900 text-white">Cobrar preço cheio ({fmtBRL(t.cheio)})</button>
+                <button disabled={ocup} onClick={() => setDecisao(null)} className="text-xs text-gray-500 py-1">Cancelar (não registrar o pagamento)</button>
+              </div>
+              {ocup && <Loader2 className="w-4 h-4 animate-spin text-orange-500 mx-auto" />}
+            </div>
+          </div>
+        );
+      })()}
       {previa && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-label="Prévia do envio">
           <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3">

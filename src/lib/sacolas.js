@@ -19,11 +19,23 @@ async function codigoNovo() {
 // Separa 1 item para o cliente: cria a sacola (se não houver aberta) ou soma nela, e reserva
 // todos os itens dela até o prazo (RPC `reservar_itens`, atômica). Se a reserva falhar (item
 // separado por outra origem ou fora de estoque), desfaz a alteração na sacola.
+// Promoção vigente do item para a sacola (linha de precos_efetivos) ou null. O preço vem SEMPRE do servidor.
+// Item que o bot do WhatsApp já tinha reservado vale pelo momento do pedido (reservas.criado_em), não pelo de agora.
+export async function promoParaSacola(item) {
+  try {
+    const { data: r } = await supabase.from("reservas").select("criado_em")
+      .eq("sku", item.sku).eq("status", "ATIVA").eq("origem_tipo", "carrinho_wa").maybeSingle();
+    const { data, error } = await supabase.rpc("precos_efetivos", { p_skus: [item.sku], p_canal: "whatsapp", p_em: r?.criado_em || new Date().toISOString() });
+    if (error) return null;
+    return (data || []).find((x) => x.campanha_id) || null;
+  } catch { return null; }
+}
+
 export async function separar(item, cliente, user) {
   const sacolas = await listarSacolas({ status: "ABERTA" });
   const existente = sacolaAbertaDe(sacolas, cliente);
 
-  const itens = adicionarItem(existente?.itens, item);
+  const itens = adicionarItem(existente?.itens, item, await promoParaSacola(item));
   const t = totais(itens, existente?.desconto_pct || 0);
   const validade = prazoSacola();
   let sacola = existente;
@@ -87,10 +99,16 @@ export async function tirarDaSacola(sacola, sku) {
 }
 
 // Pagamento confirmado: os itens viram VENDIDO (canal WhatsApp) e a sacola guarda forma/valor.
-export async function registrarPagamento(sacola, { forma, valor }, user) {
+// Antes de baixar, a RPC sacola_preparar_pagamento resolve itens cuja campanha já terminou: sem `manterPromo` ela recusa
+// com DECISAO_CAMPANHA (a tela pergunta); true mantém o preço promocional, false cobra o preço cheio atual.
+export async function registrarPagamento(sacola, { forma, valor }, user, { manterPromo = null } = {}) {
   const pago = Number(valor);
   if (!(pago > 0)) throw new Error("Informe o valor recebido.");
-  const vendida = await confirmarVenda(sacola, user, { canal: "WhatsApp" });
+  const { data: pronta, error: eP } = await supabase.rpc("sacola_preparar_pagamento", {
+    p_id: sacola.id, p_manter_promo: manterPromo, p_user: user?.email ?? null,
+  });
+  if (eP) throw eP;
+  const vendida = await confirmarVenda(pronta, user, { canal: "WhatsApp" });
   const { data, error } = await supabase.from("orcamentos")
     .update({ pago_em: new Date().toISOString(), forma_pagamento: forma || null, valor_pago: pago })
     .eq("id", vendida.id).select("*").single();
