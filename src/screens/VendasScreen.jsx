@@ -3,7 +3,7 @@ import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
 import { fmtBRL, statusMetaItem, CLASSE_STYLE, LOTE_SEM } from "../lib/model";
 import { carregarResultadoLotes, carregarVendasPorCanal, marcarEntregue } from "../lib/vendas";
-import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag, Instagram, Tag, LayoutDashboard } from "lucide-react";
+import { Loader2, ChevronRight, Receipt, Truck, Check, TrendingUp, Package, Store, FileText, ShoppingBag, Instagram, Tag, LayoutDashboard, Megaphone } from "lucide-react";
 
 const OrcamentosScreen = lazySeguro(() => import("./OrcamentosScreen"));
 const SacolasScreen = lazySeguro(() => import("./SacolasScreen"));
@@ -11,6 +11,7 @@ const PedidosEuroScreen = lazySeguro(() => import("./PedidosEuroScreen"));
 const FilaPublicacaoScreen = lazySeguro(() => import("./FilaPublicacaoScreen"));
 const FilaPrecoScreen = lazySeguro(() => import("./FilaPrecoScreen"));
 const PainelCanaisScreen = lazySeguro(() => import("./PainelCanaisScreen"));
+const CampanhasScreen = lazySeguro(() => import("./CampanhasScreen"));
 
 const PAGE = 50;
 
@@ -32,6 +33,7 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
   const [filaOpen, setFilaOpen] = useState(false);
   const [filaPrecoOpen, setFilaPrecoOpen] = useState(false);
   const [painelOpen, setPainelOpen] = useState(false);
+  const [campanhasOpen, setCampanhasOpen] = useState(false);
 
   const refLote = useCallback((lote) => {
     const l = lotes.find((x) => String(x.lote) === String(lote));
@@ -125,6 +127,15 @@ export default function VendasScreen({ lotes = [], onOpen, user, refreshKey, onG
         className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
         <LayoutDashboard className="w-4 h-4 text-sky-600" /> Painel do catálogo
       </button>
+      <button onClick={() => setCampanhasOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-white border border-gray-200 text-gray-800 shadow-sm">
+        <Megaphone className="w-4 h-4 text-orange-500" /> Campanhas de promoção
+      </button>
+      {campanhasOpen && (
+        <Suspense fallback={null}>
+          <CampanhasScreen user={user} params={params} lotes={lotes} onClose={() => setCampanhasOpen(false)} />
+        </Suspense>
+      )}
       {painelOpen && (
         <Suspense fallback={null}>
           <PainelCanaisScreen user={user} onClose={() => setPainelOpen(false)} />
