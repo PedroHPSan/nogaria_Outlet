@@ -3,24 +3,10 @@
 // O banco mantém lotes.custo_total e pricing_lote_custo por trigger (migration custeio_lote_produto).
 import { supabase } from "./supabase";
 import { limparCache } from "./motorPrecoDb";
+import { loteSemCusto } from "./custoLote.js";
 
-export const TIPOS_EXTRA = [
-  ["frete_retirada", "Frete de retirada"],
-  ["frete_transferencia", "Frete de transferência"],
-  ["separador", "Separador / mão de obra"],
-  ["embalagem", "Embalagem"],
-  ["impostos", "Impostos"],
-  ["outros", "Outros"],
-];
-export const rotuloTipo = (t) => (TIPOS_EXTRA.find(([k]) => k === t) || [t, t])[1];
-
-export const toNum = (v) => {
-  if (v == null || v === "") return null;
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const n = parseFloat(String(v).replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-};
-export const emTexto = (v) => (v == null ? "" : String(v).replace(".", ","));
+export { TIPOS_EXTRA, rotuloTipo, toNum, emTexto, formInicial, totalPrevisto, lerColado } from "./custeioCore.js";
+import { toNum, formInicial } from "./custeioCore.js";
 
 // Todas as páginas (PostgREST corta em 1.000).
 async function paginado(montar) {
@@ -42,34 +28,6 @@ export async function carregarExtras(lote) {
   const { data, error } = await supabase.from("lote_custos_extra").select("id,sku,tipo,descricao,valor").eq("lote", lote).order("id");
   if (error) throw error;
   return data || [];
-}
-
-// Estado inicial do formulário. Lote legado: o "valor do lote" parte de lance_final ou custo_total, e os
-// fretes/outros que existiam em colunas viram lançamentos adicionais (a tela os grava como tal ao salvar).
-export function formInicial(lote, extras) {
-  const legado = lote.custo_origem !== "composto";
-  const valor = lote.lance_final ?? (legado ? lote.custo_total : null);
-  const comissao = lote.comissao_leiloeiro ?? (lote.lance_final != null ? Math.round(Number(lote.lance_final) * 5) / 100 : 0);
-  const lista = extras.map((e) => ({ sku: e.sku || "", tipo: e.tipo, descricao: e.descricao || "", valor: emTexto(e.valor) }));
-  if (legado) {
-    for (const [col, tipo] of [["frete_retirada", "frete_retirada"], ["frete_transferencia", "frete_transferencia"], ["outros_custos", "outros"]]) {
-      if (Number(lote[col]) > 0) lista.push({ sku: "", tipo, descricao: "", valor: emTexto(lote[col]) });
-    }
-  }
-  return {
-    modo: lote.modo_custeio || "rateio",
-    valor: emTexto(valor), comissao: emTexto(comissao), taxa: emTexto(lote.taxa_hisa ?? 0),
-    extras: lista,
-  };
-}
-
-// Total calculado na tela (espelha custo_total_composto no banco).
-export function totalPrevisto(form, diretos) {
-  const extras = form.extras.reduce((s, e) => s + (toNum(e.valor) || 0), 0);
-  const base = form.modo === "soma"
-    ? Object.values(diretos).reduce((s, v) => s + (toNum(v) || 0), 0)
-    : (toNum(form.valor) || 0) + (toNum(form.comissao) || 0) + (toNum(form.taxa) || 0);
-  return { base, extras, total: base + extras };
 }
 
 export async function salvarCusteio({ lote, form, diretosAlterados }) {
@@ -109,4 +67,26 @@ export async function salvarCusteio({ lote, form, diretosAlterados }) {
   }).eq("lote", lote.lote);
   if (up.error) throw up.error;
   limparCache();
+}
+
+
+// Custo de UMA peça (ficha do item). Lote sem custo → vira "por peça" (soma dos itens); lote composto → só o custo direto;
+// lote legado com custo geral → recusa com a explicação (não descarta o custo que já existe).
+export async function salvarCustoItem({ lote, item, valor }) {
+  const v = toNum(valor);
+  if (v == null || v < 0) throw new Error("Informe um valor válido.");
+  if (!lote) throw new Error("Esta peça não tem lote.");
+  if (lote.custo_origem === "composto") {
+    const { data: u } = await supabase.auth.getUser();
+    const r = await supabase.from("itens").update({ custo_direto: v, upd_by: u?.user?.email || null }).eq("sku", item.sku);
+    if (r.error) throw r.error;
+    limparCache();
+    return { convertido: false };
+  }
+  if (!loteSemCusto(lote)) {
+    throw new Error(`O lote ${lote.lote} já tem um custo geral cadastrado. Para dar custo por peça, abra "Custo do lote" e escolha "Soma dos itens".`);
+  }
+  const form = { ...formInicial(lote, await carregarExtras(lote.lote)), modo: "soma" };
+  await salvarCusteio({ lote, form, diretosAlterados: { [item.sku]: String(v).replace(".", ",") } });
+  return { convertido: true };
 }

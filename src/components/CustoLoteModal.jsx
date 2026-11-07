@@ -2,9 +2,10 @@
 // Resumo (totais e retorno). Grava pela camada src/lib/custeio.js; o banco mantém custo_total em sincronia.
 import React, { useEffect, useMemo, useState } from "react";
 import { X, Loader2, Plus, Trash2 } from "lucide-react";
+import { loteSemCusto } from "../lib/custoLote";
 import { fmtBRL } from "../lib/model";
 import {
-  TIPOS_EXTRA, carregarItensCusto, carregarExtras, formInicial, totalPrevisto, salvarCusteio, toNum, emTexto,
+  TIPOS_EXTRA, carregarItensCusto, carregarExtras, formInicial, totalPrevisto, salvarCusteio, toNum, emTexto, lerColado,
 } from "../lib/custeio";
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-orange-500";
@@ -21,6 +22,10 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
   const [busca, setBusca] = useState("");
   const [valorMassa, setValorMassa] = useState("");
   const [saving, setSaving] = useState(false);
+  const [escolheu, setEscolheu] = useState(() => !loteSemCusto(lote)); // lote sem custo: primeiro pergunta como o custo será lançado
+  const [colado, setColado] = useState("");
+  const [resColado, setResColado] = useState(null);
+  const [inicial, setInicial] = useState(null); // JSON do formulário como veio do banco (detecta alterações)
   const [erro, setErro] = useState(null);
 
   useEffect(() => {
@@ -29,7 +34,8 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
       .then(([extras, its]) => {
         if (cancel) return;
         const d = Object.fromEntries(its.map((i) => [i.sku, emTexto(i.custo_direto)]));
-        setForm(formInicial(lote, extras)); setItens(its); setDiretos(d); setOriginal(d);
+        const f0 = formInicial(lote, extras);
+        setForm(f0); setInicial(JSON.stringify(f0)); setItens(its); setDiretos(d); setOriginal(d);
       })
       .catch((e) => !cancel && setErro(e.message));
     return () => { cancel = true; };
@@ -47,6 +53,14 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
     );
   }
 
+  const sujo = (inicial != null && JSON.stringify(form) !== inicial) || Object.keys(alterados).length > 0;
+  const fechar = () => { if (!sujo || window.confirm("Descartar as alterações de custo que ainda não foram salvas?")) onClose(); };
+
+  const aplicarColado = () => {
+    const r = lerColado(colado, itens.map((i) => i.sku));
+    setResColado(r);
+    if (Object.keys(r.valores).length) setDiretos((d) => ({ ...d, ...r.valores }));
+  };
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const { base, extras, total } = totalPrevisto(form, diretos);
   const nItens = itens.length;
@@ -79,12 +93,23 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
   const linhas = itens.filter((i) => !busca || `${i.sku} ${i.produto || ""}`.toLowerCase().includes(busca.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => !sujo && onClose()}>
       <div className="bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl flex flex-col max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 px-4 pt-4">
           <h2 className="font-bold text-gray-900 flex-1 truncate">Custo do lote {lote.lote}{lote.referencia ? ` · ${lote.referencia}` : ""}</h2>
-          <button onClick={onClose} aria-label="Fechar"><X className="w-6 h-6 text-gray-400" /></button>
+          <button onClick={fechar} aria-label="Fechar"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
+        {!escolheu ? (
+          <div className="px-4 py-4 space-y-3">
+            <p className="text-sm text-gray-700">Este lote ainda <b>não tem custo</b>. Como você quer lançar?</p>
+            <button onClick={() => { set({ modo: "rateio" }); setAba("lote"); setEscolheu(true); }} className="w-full text-left rounded-xl border border-gray-200 p-4 hover:border-orange-400">
+              <p className="font-bold text-gray-900">Paguei um valor pelo lote todo</p><p className="text-xs text-gray-500">Leilão ou compra fechada: informe o total e o sistema divide entre as peças.</p>
+            </button>
+            <button onClick={() => { set({ modo: "soma" }); setAba("produtos"); setEscolheu(true); }} className="w-full text-left rounded-xl border border-gray-200 p-4 hover:border-orange-400">
+              <p className="font-bold text-gray-900">Tenho o custo de cada peça</p><p className="text-xs text-gray-500">Digite ou cole da planilha. Frete e impostos entram como custos adicionais.</p>
+            </button>
+          </div>
+        ) : (<>
         <div className="grid grid-cols-3 gap-1 px-4 mt-3">
           {ABAS.map(([k, r]) => (
             <button key={k} onClick={() => setAba(k)}
@@ -151,6 +176,14 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
               </div>
               <p className="text-[11px] text-gray-400">Item sem custo direto entra no rateio do valor do lote (modo "Valor do lote").</p>
             </div>
+            <details className="rounded-xl bg-gray-50 p-2.5">
+              <summary className="text-xs font-bold text-gray-700 cursor-pointer">Colar da planilha</summary>
+              <p className="text-[11px] text-gray-500 mt-1.5">Uma peça por linha: <b>SKU;valor</b> (ou SKU e valor separados por tab/espaço). Ou só uma coluna de valores, na ordem dos SKUs.</p>
+              <textarea value={colado} onChange={(e) => { setColado(e.target.value); setResColado(null); }} rows={4} placeholder={"NOG-1001-001;35,90\nNOG-1001-002;42"} className={`mt-1.5 ${inputCls} text-sm font-mono`} />
+              <button onClick={aplicarColado} disabled={!colado.trim()} className="mt-1.5 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold disabled:opacity-40">Aplicar</button>
+              {resColado && <p className="text-[11px] mt-1.5 text-gray-600">{Object.keys(resColado.valores).length} peça(s) preenchida(s){resColado.ignorados.length ? ` · ${resColado.ignorados.length} linha(s) ignorada(s) (SKU de outro lote ou valor inválido)` : ""}. Revise e toque em Salvar custo.</p>}
+            </details>
+            <p className="text-xs font-semibold text-gray-700">{comDireto} de {nItens} peças com custo</p>
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar SKU ou produto" className={inputCls} />
             <div className="divide-y divide-gray-100">
               {linhas.slice(0, LIMITE_LINHAS).map((i) => (
@@ -192,6 +225,7 @@ export default function CustoLoteModal({ lote, onClose, onSaved, abaInicial = "l
             {saving && <Loader2 className="w-4 h-4 animate-spin" />} Salvar custo
           </button>
         </div>
+        </>)}
       </div>
     </div>
   );

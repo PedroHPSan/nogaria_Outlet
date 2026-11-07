@@ -172,7 +172,8 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
     ...Object.keys(stats.byLote).filter((k) => k !== "null" && !cadastrados.has(k)).map((k) => ({ lote: Number(k), referencia: null })),
   ]
     .map((l) => ({ ...l, ...vazio, ...(stats.byLote[l.lote] || {}), custo: custoDoLote(l) }))
-    .sort((a, b) => b.val - a.val);
+    // lotes com peças e SEM custo vêm primeiro (é o que precisa de ação), depois por valor
+    .sort((a, b) => (Number(b.n > 0 && !(b.custo > 0)) - Number(a.n > 0 && !(a.custo > 0))) || b.val - a.val);
   const investido = loteList.reduce((s, l) => s + l.custo, 0);
   const receitaLotesComCusto = loteList.filter((l) => l.custo > 0).reduce((s, l) => s + l.receita, 0);
   const sellThrough = pctDe(stats.nVendidos, stats.nVendidos + stats.nEstoque);

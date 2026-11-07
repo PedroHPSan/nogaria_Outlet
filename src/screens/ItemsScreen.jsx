@@ -20,6 +20,7 @@ const CatalogoRapidoModal = lazySeguro(() => import("../components/CatalogoRapid
 const PrecoRapidoModal = lazySeguro(() => import("../components/PrecoRapidoModal"));
 const RevisaoPrecosModal = lazySeguro(() => import("../components/RevisaoPrecosModal"));
 const RateioLoteModal = lazySeguro(() => import("../components/RateioLoteModal"));
+const CustoLoteModal = lazySeguro(() => import("../components/CustoLoteModal"));
 
 const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-orange-500";
 const PAGE = 50;
@@ -71,6 +72,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [precoRapido, setPrecoRapido] = useState(null); // itens do preço rápido em massa
   const [revisaoPrecos, setRevisaoPrecos] = useState(null); // itens da revisão de preços (motor v2)
   const [rateioLote, setRateioLote] = useState(null); // lote aberto no rateio (pesos)
+  const [custoLote, setCustoLote] = useState(null); // linha do lote aberta no custeio (valor do lote / custo por peça / extras)
   const [boxPicker, setBoxPicker] = useState(false);
   const [catalogarPicker, setCatalogarPicker] = useState(false);
   const [fCaixa, setFCaixa] = useState(initialFilter?.caixa || "");
@@ -288,9 +290,14 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
               {lotes.map((l) => <option key={l.lote} value={String(l.lote)}>Lote {l.lote} — {l.referencia || ""}</option>)}
             </select>
             {fLote && fLote !== LOTE_SEM && (
-              <button onClick={() => setRateioLote(Number(fLote))} className="w-full desk:col-span-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-sm font-semibold py-2">
-                Rateio e custo do lote {fLote} (pesos)
-              </button>
+              <div className="desk:col-span-3 grid grid-cols-2 gap-2">
+                <button onClick={() => { const l = lotes.find((x) => String(x.lote) === fLote); if (l) setCustoLote(l); }} className="rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-sm font-bold py-2">
+                  Custo do lote {fLote}
+                </button>
+                <button onClick={() => setRateioLote(Number(fLote))} className="rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-sm font-semibold py-2">
+                  Rateio (pesos)
+                </button>
+              </div>
             )}
             <div className="flex gap-2">
               <select value={fClasse} onChange={(e) => setFClasse(e.target.value)} className={inputCls}>
@@ -585,9 +592,15 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
         </Suspense>
       )}
 
+      {custoLote && (
+        <Suspense fallback={null}>
+          <CustoLoteModal lote={custoLote} onClose={() => setCustoLote(null)} onSaved={() => buscar(true)} />
+        </Suspense>
+      )}
       {rateioLote != null && (
         <Suspense fallback={<div className="fixed inset-0 z-[75] bg-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
-          <RateioLoteModal lote={rateioLote} params={params} user={user} onClose={() => setRateioLote(null)} onAlterado={() => buscar(true)} />
+          <RateioLoteModal lote={rateioLote} params={params} user={user} onClose={() => setRateioLote(null)} onAlterado={() => buscar(true)}
+            onLancarCusto={() => { const l = lotes.find((x) => x.lote === rateioLote); setRateioLote(null); if (l) setCustoLote(l); }} />
         </Suspense>
       )}
 

@@ -11,7 +11,7 @@ import { fmtBRL } from "../lib/model";
 const PESOS = [0.25, 0.5, 1, 2, 4];
 const pct = (v) => `${(v * 100).toFixed(1).replace(".", ",")}%`;
 
-export default function RateioLoteModal({ lote, params, user, onClose, onAlterado }) {
+export default function RateioLoteModal({ lote, params, user, onClose, onAlterado, onLancarCusto }) {
   const [calc, setCalc] = useState(null);       // rateio atual (salvo)
   const [prev, setPrev] = useState(null);       // prévia com os pesos pendentes
   const [pend, setPend] = useState({});         // sku → k pendente
@@ -113,7 +113,12 @@ export default function RateioLoteModal({ lote, params, user, onClose, onAlterad
                 <p>Anúncio potencial (com referência) {fmtBRL(resumo.anuncio)} · custo = {resumo.anuncio ? pct(resumo.custoTotal / resumo.anuncio) : "—"} do anúncio · <b>custo máximo p/ 25% de margem: {fmtBRL(resumo.maxLance)}</b></p>
                 {resumo.custoTotal > resumo.maxLance && <p className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Custo do lote acima do máximo que fecha 25% no canal escolhido: os pesos só redistribuem, não criam margem.</p>}
               </div>
-            ) : <p className="text-sm text-amber-700">Lote sem custo cadastrado.</p>}
+            ) : (
+              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1.5">
+                <p>Lote sem custo cadastrado — o preço e o lucro das peças estão sem custo de aquisição.</p>
+                {onLancarCusto && <button onClick={onLancarCusto} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Lançar custo do lote</button>}
+              </div>
+            )}
             <p className="text-xs text-gray-600">
               Lucro esperado dos itens anunciáveis {fmtBRL(resumo.lucro)} · {Object.entries(resumo.cont).map(([k, v]) => `${STATUS_V2[k]?.txt || k}: ${v}`).join(" · ")}
               {resumo.semRef ? ` · ${resumo.semRef} com custo estimado (sem referência)` : ""}
