@@ -55,17 +55,37 @@ export function tamanhoEU(t) {
   return `EU ${conv.map((v) => String(v).replace(".", ",")).join(sep)}`;
 }
 
+// --- Vestuário → padrão europeu (EU) ----------------------------------------------
+// Número (36, 38, 40…) é manequim brasileiro: EU = BR − 4 (BR 40 = EU 36). Letras seguem a
+// grade internacional (P=S, M=M, G=L, GG=XL…). Ajuste só estas constantes se a regra mudar.
+export const BR_PARA_EU_VEST = -4;
+const LETRAS_EU = { pp: "XS", p: "S", m: "M", g: "L", gg: "XL", xg: "XL", xgg: "XXL", exg: "XXL" };
+
+// "40" → "EU 36"; "38/40" → "EU 34/36"; "M" → "EU M"; "G" → "EU L". Null se não der (texto livre,
+// já marcado EU/US/UK, ou fora de BR 34–60 — ex.: tamanhos infantis).
+export function tamanhoEUVestuario(t) {
+  const s = String(t ?? "").trim().toLowerCase().replace(/\s*br$/, "");
+  if (!s || /(^|[^a-z])(eu|us|usa|eua|uk)([^a-z]|$)/.test(s)) return null;
+  if (LETRAS_EU[s]) return `EU ${LETRAS_EU[s]}`;
+  if (!/^\d+(?:[.,]\d+)?(?:\s*[/-]\s*\d+(?:[.,]\d+)?)*$/.test(s)) return null;
+  const nums = s.match(/\d+(?:[.,]\d+)?/g).map((n) => parseFloat(n.replace(",", ".")));
+  if (nums.some((v) => v < 34 || v > 60)) return null;
+  const sep = s.includes("-") ? "-" : "/";
+  return `EU ${nums.map((v) => String(v + BR_PARA_EU_VEST).replace(".", ",")).join(sep)}`;
+}
+
 // Etiqueta interna: "EU 40 · BR 38" (confere o par com a numeração original). Só quando a origem é BR.
 export function tamanhoEtiqueta(it) {
   const eu = tamanhoExibicao(it);
   const bruto = String(it?.tamanho ?? "").trim();
-  if (!eu || eu === bruto || !/^[\d\s.,/-]+(br)?$/i.test(bruto)) return eu;
+  const origemBR = ehVestuario(it) ? /^([\d\s.,/-]+|[a-z]{1,3})(\s*br)?$/i : /^[\d\s.,/-]+(br)?$/i;
+  if (!eu || eu === bruto || eu === `EU ${bruto.toUpperCase()}` || !origemBR.test(bruto)) return eu;
   return `${eu} · BR ${bruto.replace(/\s*br$/i, "")}`;
 }
 
-// Numeração para exibir: calçado → EU (quando convertível); demais → texto original.
+// Tamanho para exibir: calçado e vestuário → EU (quando convertível); demais → texto original.
 export function tamanhoExibicao(it) {
   const bruto = String(it?.tamanho ?? "").trim();
   if (!bruto) return "";
-  return (ehCalcado(it) && tamanhoEU(bruto)) || bruto;
+  return (ehCalcado(it) && tamanhoEU(bruto)) || (ehVestuario(it) && tamanhoEUVestuario(bruto)) || bruto;
 }

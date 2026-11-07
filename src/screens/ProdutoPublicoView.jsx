@@ -123,7 +123,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
         {p.itens.map((it) => {
           const vendido = vendidos.includes(it.sku);
           const misto = euro && it.preco > 0 ? precoMisto(it.preco, cotacao?.taxa) : null;
-          const tam = tamanhoExibicao({ grupo: it.calcado ? "Calçados" : "", tamanho: it.tamanho });
+          const tam = tamanhoExibicao({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho });
           const condicao = euro ? traduzirCondicao(it.condicao, lang) : it.condicao;
           return (
             <article key={it.sku} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
