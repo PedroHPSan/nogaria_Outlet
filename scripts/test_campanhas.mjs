@@ -1,7 +1,7 @@
 // Teste das regras puras das campanhas (campanhasCore). Rode: npm run test:campanhas
 import assert from "node:assert/strict";
 import { adicionarItem, mensagemCobranca, totaisComDecisao } from "../src/lib/sacolasCore.js";
-import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem } from "../src/lib/campanhasCore.js";
+import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem, linkCampanha, textoGrupoCampanha } from "../src/lib/campanhasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -135,3 +135,8 @@ eq(avisoCampanhaItem([linha({ fim_em: "2026-11-10T00:00:00Z" })], ag), null, "en
 eq(avisoCampanhaItem([linha({ status: "CANCELADA" })], ag), null, "cancelada não avisa");
 eq(avisoCampanhaItem([{ ...linha({}), desconto_pct: 0 }], ag), null, "0% (excluído) não avisa");
 eq(avisoCampanhaItem([], ag), null, "sem campanha");
+
+console.log("divulgação no grupo");
+eq(linkCampanha("abc123", "https://outlet.exemplo/"), "https://outlet.exemplo/promo/abc123", "link da campanha");
+eq(textoGrupoCampanha({ nome: "Semana do Cliente", fim_em: "2026-11-16T02:59:00Z" }, "https://x/promo/abc", 30), "🔥 *Semana do Cliente*\nAté 30% OFF · válido até 15/11 às 23:59\nToque para ver as peças:\nhttps://x/promo/abc", "texto para o grupo com % e prazo");
+ok(!textoGrupoCampanha({ nome: "X", fim_em: "2026-11-16T02:59:00Z" }, "https://x", 0).includes("OFF"), "sem % não inventa 'OFF'");

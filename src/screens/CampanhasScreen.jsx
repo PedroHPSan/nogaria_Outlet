@@ -8,7 +8,7 @@ import {
 } from "../lib/campanhas";
 import {
   TIPOS_REGRA, ARREDONDAMENTOS, ROTULO_STATUS, regraVazia, validarCampanha, statusCampanha, rotuloRegra,
-  isoParaBrasilia, conflitosDoErro, resumoSimulacao, contagem, resumoResultado, ROTULO_DECISAO,
+  isoParaBrasilia, conflitosDoErro, resumoSimulacao, contagem, resumoResultado, ROTULO_DECISAO, linkCampanha, textoGrupoCampanha,
 } from "../lib/campanhasCore";
 
 const money = (v) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -215,6 +215,7 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
         </div>
       )}
 
+      {campanha && !rascunho && campanha.status === "PUBLICADA" && <Divulgar c={campanha} regras={regras} />}
       {campanha && !rascunho && <Resultado id={campanha.id} />}
 
       {(sim || simBusy) && (
@@ -329,6 +330,30 @@ function Resultado({ id }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Link público da campanha + texto pronto para o grupo do WhatsApp (copiar com um toque).
+function Divulgar({ c, regras }) {
+  const [msg, setMsg] = useState(null);
+  const url = linkCampanha(c.slug, window.location.origin);
+  const max = Math.max(0, ...(regras || []).map((r) => Number(r.desconto_pct) || 0));
+  const copiar = async (txt, ok) => {
+    try { await navigator.clipboard.writeText(txt); setMsg(ok); } catch { setMsg("Não deu para copiar automaticamente — selecione e copie manualmente."); }
+    setTimeout(() => setMsg(null), 3000);
+  };
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
+      <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Divulgar no grupo</h3>
+      <input readOnly value={url} onFocus={(e) => e.target.select()} className={`${inp} font-mono text-xs`} aria-label="Link da campanha" />
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => copiar(textoGrupoCampanha(c, url, max), "Texto copiado — cole no grupo.")} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold flex items-center gap-1"><Copy className="w-4 h-4" /> Copiar texto para o grupo</button>
+        <button onClick={() => copiar(url, "Link copiado.")} className="px-3 py-2 rounded-lg border border-gray-300 text-sm font-bold">Copiar só o link</button>
+        <a href={url} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border border-gray-300 text-sm font-bold">Abrir</a>
+      </div>
+      {msg && <p className="text-xs text-emerald-700" role="status">{msg}</p>}
+      <p className="text-[11px] text-gray-500">A página mostra só as peças já publicadas no catálogo (com foto). Antes do início aparece "começa em"; depois do fim, "encerrada".</p>
     </div>
   );
 }

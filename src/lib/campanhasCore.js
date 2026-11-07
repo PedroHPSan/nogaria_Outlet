@@ -198,3 +198,10 @@ export function avisoCampanhaItem(linhas, agora = new Date()) {
   const l = vig[0];
   return { campanha: l.campanhas.nome, ativa: new Date(l.campanhas.inicio_em) <= agora, inicio_em: l.campanhas.inicio_em, fim_em: l.campanhas.fim_em, preco_cheio: Number(l.preco_cheio), desconto_pct: Number(l.desconto_pct) };
 }
+
+// ---- Divulgação no grupo do WhatsApp ----
+export const linkCampanha = (slug, origem) => `${String(origem || "").replace(/\/+$/, "")}/promo/${slug}`;
+export function textoGrupoCampanha(c, url, maxPct) {
+  const pct = Number(maxPct) > 0 ? `Até ${String(Number(maxPct)).replace(".", ",")}% OFF · ` : "";
+  return `🔥 *${c.nome}*\n${pct}válido até ${fmtPrazo(c.fim_em)}\nToque para ver as peças:\n${url}`;
+}
