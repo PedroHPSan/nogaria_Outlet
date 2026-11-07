@@ -14,6 +14,8 @@ import { textoGrupoEuro } from "../lib/precoEuro";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, legendaProduto, csvCatalogo } from "../lib/divulgacao";
 import { enviarParaFilaInstagram } from "../lib/filaPublicacao";
+import { promosDosItens } from "../lib/ofertaPublica";
+import { comPromo } from "../lib/campanhasCore";
 import { FORMATOS } from "../lib/cardCore";
 import { normalizarSpec } from "../lib/catalogoSpec";
 import { carregarContato } from "../lib/empresaConfig";
@@ -31,6 +33,10 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     () => (todos && soIntl ? todos.filter((i) => destinosInternacionais().includes(i.destino)) : todos),
     [todos, soIntl],
   );
+  const [promos, setPromos] = useState(new Map()); // campanha vigente por SKU (preço vem do servidor)
+  // Itens COMO O CLIENTE VÊ AGORA (preço da campanha + "de" riscado) — para cards, legendas, texto do WhatsApp, fila do Instagram e CSV.
+  // Os links /p usam `itens` originais (o snapshot guarda o preço cheio e a página aplica a promoção ao vivo).
+  const itensP = useMemo(() => (itens ? itens.map((i) => comPromo(i, promos.get(i.sku))) : itens), [itens, promos]);
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState(null);
   const [titulo, setTitulo] = useState(tituloInicial);
@@ -93,6 +99,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
         const lista = itensProntos || await listarItensCatalogo(salaId ? { salaId } : { skus });
         if (cancel) return;
         setItens(lista);
+        promosDosItens(lista).then((m) => !cancel && setPromos(m)).catch(() => {});
         if (skus) setResumo(resumoSelecao(skus, lista));
       } catch (e) {
         if (!cancel) setErro(e.message || "Falha ao carregar os itens.");
@@ -176,16 +183,16 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   });
 
   const textoWpp = () => executar(async () => {
-    const msg = textoWhatsApp(itens, { titulo, link, validade, contato: rotuloContato(), mostrarPreco });
+    const msg = textoWhatsApp(itensP, { titulo, link, validade, contato: rotuloContato(), mostrarPreco });
     const r = await compartilharTexto(msg, titulo); registrar("texto");
     setAviso(r === "copiado" ? "Texto copiado — cole no WhatsApp." : r === "compartilhado" ? "Compartilhado." : null);
   });
 
   const legendaIg = () => executar(async () => {
     // 1 item → legenda de produto (condição, tamanho, preço, código); vários → legenda de destaques
-    const legenda = itens.length === 1
-      ? legendaProduto(itens[0], { contato: rotuloContato(), mostrarPreco })
-      : textoInstagram(itens, { titulo, validade, contato: rotuloContato(), mostrarPreco });
+    const legenda = itensP.length === 1
+      ? legendaProduto(itensP[0], { contato: rotuloContato(), mostrarPreco })
+      : textoInstagram(itensP, { titulo, validade, contato: rotuloContato(), mostrarPreco });
     await navigator.clipboard.writeText(legenda);
     registrar("instagram");
     setAviso("Legenda copiada (até 5 hashtags, limite do Instagram). Cole no post e use \"link na bio\" para o catálogo.");
@@ -193,7 +200,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   const cardsPng = () => executar(async (signal) => {
     const c = contato();
-    const arqs = await gerarCardsDivulgacao(itens, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco }, { signal, onProgress: setProgresso });
+    const arqs = await gerarCardsDivulgacao(itensP, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco }, { signal, onProgress: setProgresso });
     const r = await compartilharArquivos(arqs, { titulo });
     registrar(formatoCard === "status" ? "cards" : "instagram");
     if (r !== "cancelado") setAviso(`${arqs.length} imagens (JPEG) ${r === "baixado" ? "baixadas" : "compartilhadas"}.`);
@@ -201,16 +208,16 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   const paraFilaIg = () => executar(async (signal) => {
     const c = contato();
-    const legenda = itens.length === 1
-      ? legendaProduto(itens[0], { contato: rotuloContato(), mostrarPreco })
-      : textoInstagram(itens, { titulo, validade, contato: rotuloContato(), mostrarPreco });
-    await enviarParaFilaInstagram(itens, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco, legenda }, { signal, onProgress: setProgresso });
+    const legenda = itensP.length === 1
+      ? legendaProduto(itensP[0], { contato: rotuloContato(), mostrarPreco })
+      : textoInstagram(itensP, { titulo, validade, contato: rotuloContato(), mostrarPreco });
+    await enviarParaFilaInstagram(itensP, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco, legenda }, { signal, onProgress: setProgresso });
     registrar("instagram");
     setAviso("Rascunho criado na fila do Instagram (Vendas → Fila do Instagram). Revise e aprove lá.");
   });
 
   const baixarCsv = () => executar(async () => {
-    const blob = new Blob([csvCatalogo(itens, { linkDe: (it) => linkInteresseItem(it, contato().whatsapp) })], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([csvCatalogo(itensP, { linkDe: (it) => linkInteresseItem(it, contato().whatsapp) })], { type: "text/csv;charset=utf-8" });
     baixarArquivo(blob, "catalogo-nogaria.csv"); registrar("csv");
     setAviso("CSV baixado (nome, preço, descrição, código, link).");
   });

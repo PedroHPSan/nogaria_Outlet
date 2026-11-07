@@ -3,6 +3,7 @@
 import { precoVenda } from "./export.js";
 import { fraseCondicao } from "./catalogoCore.js";
 import { tamanhoEtiqueta } from "./tamanhos.js";
+import { emPromo, pctPromo, prazoPromo, fmtPrazo } from "./campanhasCore.js";
 
 export const LIMITE_LEGENDA_IG = 2200;
 export const LIMITE_HASHTAGS_IG = 5; // o Instagram limita a 5 hashtags por post/reel desde dez/2025
@@ -27,10 +28,16 @@ export function hashtagsPara(grupos = [], { max = LIMITE_HASHTAGS_IG } = {}) {
   return [...new Set([MARCA, ...dinamicas, ...ALCANCE])].slice(0, Math.min(max, LIMITE_HASHTAGS_IG));
 }
 
-const linhaItem = (it, { comPreco = true } = {}) => {
-  const p = preco(it);
-  return `• ${it.produto || it.sku}${comPreco ? ` — ${p != null && p > 0 ? `*${brl(p)}*` : "sob consulta"}` : ""}`;
+// Item em campanha: WhatsApp "~R$ 100~ *R$ 70* (-30%)" (~ risca); Instagram (sem formatação) "de R$ 100 por R$ 70 (-30%)".
+const precoLinha = (it, p, { ig = false } = {}) => {
+  if (!emPromo(it)) return `*${brl(p)}*`;
+  return ig ? `de ${brl(it.preco_cheio)} por *${brl(p)}* (-${pctPromo(it)}%)` : `~${brl(it.preco_cheio)}~ *${brl(p)}* (-${pctPromo(it)}%)`;
 };
+const linhaItem = (it, { comPreco = true, ig = false } = {}) => {
+  const p = preco(it);
+  return `• ${it.produto || it.sku}${comPreco ? ` — ${p != null && p > 0 ? precoLinha(it, p, { ig }) : "sob consulta"}` : ""}`;
+};
+const linhaPrazo = (itens, mostrarPreco) => { const a = mostrarPreco ? prazoPromo(itens) : null; return a ? `🔥 Promoção até ${a}` : null; };
 
 // Mensagem de WhatsApp com os destaques (até `max`), link e contato.
 export function textoWhatsApp(itens, { titulo = "Catálogo Nogária Outlet", link, validade, contato, max = MAX_ITENS_WHATSAPP, mostrarPreco = true, mensagem } = {}) {
@@ -43,6 +50,7 @@ export function textoWhatsApp(itens, { titulo = "Catálogo Nogária Outlet", lin
     ...lista.map((it) => linhaItem(it, { comPreco: mostrarPreco })),
     resto > 0 ? `+ ${resto} item(ns) no catálogo` : null,
     "",
+    linhaPrazo(lista, mostrarPreco),
     validade ? `Preços válidos até ${validade}` : null,
     link ? `Veja tudo: ${link}` : null,
     contato ? `Atendimento: ${contato}` : null,
@@ -56,9 +64,10 @@ export function textoInstagram(itens, { titulo = "Novidades no outlet", validade
   const corpo = [
     `${titulo} 🛋️`,
     "",
-    ...lista.map((it) => linhaItem(it, { comPreco: mostrarPreco }).replace(/\*/g, "")),
+    ...lista.map((it) => linhaItem(it, { comPreco: mostrarPreco, ig: true }).replace(/\*/g, "")),
     (itens || []).length > lista.length ? `…e mais ${(itens || []).length - lista.length} peças!` : null,
     "",
+    linhaPrazo(lista, mostrarPreco),
     "Produtos com condição descrita e preço de outlet.",
     validade ? `Preços válidos até ${validade}.` : null,
     contato ? `Chame no WhatsApp: ${contato}` : "Chame no WhatsApp (link na bio).",
@@ -79,7 +88,8 @@ export function legendaProduto(it, { contato, mostrarPreco = true } = {}) {
   return [
     `${it.produto || it.sku} ✨`,
     detalhes || null,
-    mostrarPreco && p > 0 ? `Por ${brl(p)}` : null,
+    mostrarPreco && p > 0 ? (emPromo(it) ? `De ${brl(it.preco_cheio)} por ${brl(p)} (-${pctPromo(it)}%)` : `Por ${brl(p)}`) : null,
+    mostrarPreco && emPromo(it) && it.campanha_fim ? `🔥 Promoção até ${fmtPrazo(it.campanha_fim)}` : null,
     `Código ${it.sku}`,
     "",
     contato ? `Quer? Chame no WhatsApp: ${contato}` : "Quer? Chame no WhatsApp (link na bio).",
@@ -88,7 +98,7 @@ export function legendaProduto(it, { contato, mostrarPreco = true } = {}) {
   ].filter((l) => l !== null).join("\n");
 }
 
-export const legendaCard = (it) => `${it.produto || it.sku}${preco(it) > 0 ? ` por ${brl(preco(it))}` : ""} · ${fraseCondicao(it) || "consulte a condição"} · ${it.sku}`;
+export const legendaCard = (it) => `${it.produto || it.sku}${preco(it) > 0 ? (emPromo(it) ? ` de ${brl(it.preco_cheio)} por ${brl(preco(it))}` : ` por ${brl(preco(it))}`) : ""} · ${fraseCondicao(it) || "consulte a condição"} · ${it.sku}`;
 
 // Células de TEXTO que começam com = + - @ (ou tab/CR) viram fórmula no Excel/Sheets
 // (injeção de fórmula via nome de produto): prefixa apóstrofo para tratá-las como texto.
