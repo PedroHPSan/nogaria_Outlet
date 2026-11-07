@@ -2,12 +2,12 @@
 \set QUIET on
 create temp table res (teste text, ok boolean, detalhe text);
 insert into itens (sku, produto, status, preco_ideal, grupo, lote, estado) values
- ('A1','Camisa','PRONTO',100,'Vestuário','L1','NOVO'),
- ('A2','Tênis','PRONTO',200,'Calçados','L1','NOVO'),
- ('A3','Furadeira','ANUNCIADO',300,'Ferramentas','L2','USADO'),
- ('A4','Sem preço','PRONTO',null,'Vestuário','L1','NOVO'),
- ('A5','Vendido','VENDIDO',100,'Vestuário','L1','NOVO'),
- ('A6','Camisa 2','PRONTO',99.99,'Vestuário','L3','NOVO');
+ ('A1','Camisa','PRONTO',100,'Vestuário',1,'NOVO'),
+ ('A2','Tênis','PRONTO',200,'Calçados',1,'NOVO'),
+ ('A3','Furadeira','ANUNCIADO',300,'Ferramentas',2,'USADO'),
+ ('A4','Sem preço','PRONTO',null,'Vestuário',1,'NOVO'),
+ ('A5','Vendido','VENDIDO',100,'Vestuário',1,'NOVO'),
+ ('A6','Camisa 2','PRONTO',99.99,'Vestuário',3,'NOVO');
 create function pe(p_sku text, p_canal text default 'whatsapp', p_em timestamptz default now()) returns record language sql as
  $$ select (precos_efetivos(array[p_sku], p_canal, p_em)) $$;
 create function preco(p_sku text, p_canal text default 'whatsapp', p_em timestamptz default now()) returns numeric language sql as
@@ -90,6 +90,12 @@ do $$ declare c1 uuid; c2 uuid; c3 uuid; r jsonb; m text; d text; n int; begin
   insert into res values ('encerrar guarda fim_previsto', (select fim_previsto is not null and fim_em <= now() from campanhas where id=c1), null);
   perform campanha_encerrar(c3);
   insert into res values ('encerrar agendada cancela', (select status from campanhas where id=c3) = 'CANCELADA' and preco('A1','whatsapp', now()+interval '11 days') = 100, null);
+
+  -- regra por lote (itens.lote é integer em produção) e por estado
+  insert into campanhas (nome, inicio_em, fim_em) values ('Lote', now()+interval '30 days', now()+interval '31 days') returning id into c3;
+  insert into campanha_regras (campanha_id, tipo, alvo, desconto_pct) values (c3,'lote','3',20),(c3,'estado','USADO',5);
+  insert into res values ('regra por lote (integer)', (select desconto_pct from campanha_simular(c3,'*') where sku='A6') = 20, null);
+  insert into res values ('regra por estado', (select desconto_pct from campanha_simular(c3,'*') where sku='A3') = 5, null);
 
   -- arredondamento
   insert into res values ('arredondar centavos', campanha_arredondar(89.994,'centavos') = 89.99, null);

@@ -129,7 +129,7 @@ language sql stable security definer set search_path = public as $$
     select '*'::text as canal
     union select r.canal from campanha_regras r where r.campanha_id = p_campanha and r.canal is not null
   ), it as (
-    select i.sku, i.preco_ideal, i.lote, i.estado::text as estado, c.grupo as grupo_norm, c.macro
+    select i.sku, i.preco_ideal, i.lote::text as lote, i.estado::text as estado, c.grupo as grupo_norm, c.macro
       from itens i
       cross join lateral catalogo_categoria(i.grupo) c
      where coalesce(i.preco_ideal, 0) > 0

@@ -1,5 +1,5 @@
 -- Stubs do que as migrations de campanhas esperam de migrations anteriores (que não reaplicam do zero).
-alter table itens add column if not exists grupo text, add column if not exists lote text;
+alter table itens add column if not exists grupo text, add column if not exists lote integer;
 create table canais (codigo text primary key, nome text not null);
 insert into canais values ('whatsapp','Grupo WhatsApp'),('instagram','Instagram'),('direto','Venda direta');
 create table pricing_grupo (grupo text primary key, macro text not null default 'Diversos');
