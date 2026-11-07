@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { buscarCatalogoPublico, registrarVisualizacao } from "../lib/catalogoPublico";
-import { skusIndisponiveis } from "../lib/ofertaPublica";
+import { skusIndisponiveis, buscarPrecosOferta } from "../lib/ofertaPublica";
 import { buscarItemPublico } from "../lib/catalogoMeta";
 import { linkInteresseOferta, linkWa } from "../lib/ofertaCore";
+import { aplicarPromo, promoQueTerminaPrimeiro, mensagemQuero } from "../lib/campanhasCore";
+import PrecoDePor from "../components/PrecoDePor";
+import ContagemPromo from "../components/ContagemPromo";
 import { registrarInteresse } from "../lib/interesses";
 import { EMPRESA } from "../lib/empresa";
-import { fmtBRL } from "../lib/model";
 import { cotacaoEuro } from "../lib/cotacao";
 import { tamanhoExibicao } from "../lib/tamanhos";
 import {
@@ -31,6 +33,8 @@ export default function ProdutoPublicoView({ slug, sku }) {
   const [lang, setLang] = useState(idiomaDoNavegador);
   const [confirmar, setConfirmar] = useState(null); // { item, cotacao } — pedido em confirmação (cotação recalculada)
   const [cotacao, setCotacao] = useState(null); // modo euro: cotação buscada a cada abertura do link
+  const [promos, setPromos] = useState({}); // campanhas vigentes: { [sku]: { preco, preco_cheio, desconto_pct, fim_em, campanha } }
+  const [agoraSrv, setAgoraSrv] = useState(null); // relógio do servidor (ancora a contagem)
 
   useEffect(() => {
     let vivo = true;
@@ -39,6 +43,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
         if (!vivo) return;
         if (!r || !Array.isArray(r.payload?.itens)) { setEstado("indisponivel"); return; }
         setDados({ payload: r.payload }); setVendidos(r.disponivel ? [] : [sku]); setEstado("ok");
+        setPromos(r.promo ? { [sku]: r.promo } : {}); setAgoraSrv(r.agora || null);
         // modo euro também no /i: a cotação vem ao vivo a cada visita, como nos links /p
         if (r.payload.euro) cotacaoEuro({ forcar: true, soProprio: true }).then((c) => vivo && setCotacao(c)).catch(() => vivo && setCotacao(false));
       });
@@ -50,12 +55,17 @@ export default function ProdutoPublicoView({ slug, sku }) {
       setDados(d); setEstado("ok");
       registrarVisualizacao(slug);
       if (d.payload.euro) cotacaoEuro({ forcar: true, soProprio: true }).then((c) => vivo && setCotacao(c)).catch(() => vivo && setCotacao(false));
-      const v = await skusIndisponiveis(slug);
-      if (vivo) setVendidos(v);
+      const [v, pr] = await Promise.all([skusIndisponiveis(slug), buscarPrecosOferta(slug)]);
+      if (vivo) { setVendidos(v); setPromos(pr.itens || {}); setAgoraSrv(pr.agora || null); }
     });
     return () => { vivo = false; };
   }, [slug, sku]);
 
+  // Promoção encerrou (ou mudou): confirma com o servidor e atualiza os preços na hora.
+  const recarregarPromos = useCallback(async () => {
+    if (sku) { const r = await buscarItemPublico(sku); if (r) { setPromos(r.promo ? { [sku]: r.promo } : {}); setAgoraSrv(r.agora || null); setVendidos(r.disponivel ? [] : [sku]); } }
+    else if (slug) { const pr = await buscarPrecosOferta(slug); setPromos(pr.itens || {}); setAgoraSrv(pr.agora || null); }
+  }, [sku, slug]);
   const euro = !!dados?.payload?.euro && pub === "eu";
   useEffect(() => { document.documentElement.lang = euro ? lang : "pt-BR"; }, [euro, lang]);
   const t = T[euro ? lang : "pt"];
@@ -118,11 +128,15 @@ export default function ProdutoPublicoView({ slug, sku }) {
             {pub === "eu" ? `🇧🇷 ${T[lang].verReais}` : `🇪🇺 ${T[publicoPadrao() === "br" ? "pt" : lang].verEuros}`}
           </button>
         )}
+        {(() => { const pr = promoQueTerminaPrimeiro(promos); return pr && <ContagemPromo fimIso={pr.fim_em} agoraIso={agoraSrv} nome={pr.campanha} onFim={recarregarPromos} />; })()}
         {p.itens.length > 1 && <h1 className="text-lg font-extrabold text-gray-900">{p.titulo}</h1>}
         {!euro && <p className="rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold px-3 py-2">🚚 {EMPRESA.entrega}</p>}
-        {p.itens.map((it) => {
+        {p.itens.map((item0) => {
+          const promo = promos[item0.sku];
+          const it = aplicarPromo(item0, promo); // preço promocional + "de" riscado quando há campanha vigente
           const vendido = vendidos.includes(it.sku);
           const misto = euro && it.preco > 0 ? precoMisto(it.preco, cotacao?.taxa) : null;
+          const mistoDe = euro && it.preco_cheio > 0 ? precoMisto(it.preco_cheio, cotacao?.taxa) : null;
           const tam = tamanhoExibicao({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho });
           const condicao = euro ? traduzirCondicao(it.condicao, lang) : it.condicao;
           return (
@@ -131,11 +145,12 @@ export default function ProdutoPublicoView({ slug, sku }) {
               <div className="p-4 space-y-2">
                 {it.badge && <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${BADGE_CLS[it.badge.cls] || BADGE_CLS.asis}`}>{euro ? traduzirBadge(it.badge, lang) : it.badge.txt}</span>}
                 <h2 className="font-bold text-gray-900">{it.produto}</h2>
-                {it.preco > 0 && !euro && <p className="text-3xl font-extrabold text-[#02477e]">{fmtBRL(it.preco)}</p>}
+                {it.preco > 0 && !euro && <PrecoDePor preco={it.preco} precoCheio={it.preco_cheio} pct={it.desconto_pct} />}
                 {misto && (
                   <div>
+                    {mistoDe?.eur && misto.eur && <p className="text-sm text-gray-400 line-through">{fmtEUR(mistoDe.eur, lang)}</p>}
                     {misto.eur
-                      ? <p className="text-3xl font-extrabold text-[#02477e]">{fmtEUR(misto.eur, lang)}</p>
+                      ? <p className="text-3xl font-extrabold text-[#02477e]">{fmtEUR(misto.eur, lang)}{it.desconto_pct > 0 && <span className="ml-2 align-middle rounded-full bg-red-600 text-white text-xs font-extrabold px-2 py-0.5">-{String(it.desconto_pct).replace(".", ",")}%</span>}</p>
                       : cotacao === false ? <p className="text-sm text-red-600">{t.falhou}</p> : <Loader2 className="w-6 h-6 animate-spin text-gray-400" />}
                   </div>
                 )}
@@ -150,7 +165,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
                       <MessageCircle className="w-5 h-5" /> {t.quero}
                     </button>
                   ) : (
-                    <a href={linkInteresseOferta(it, numero, url)} target="_blank" rel="noopener noreferrer"
+                    <a href={promo ? linkWa(numero, mensagemQuero(it, { nome: promo.campanha, fim_em: promo.fim_em }, url)) : linkInteresseOferta(it, numero, url)} target="_blank" rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-3 font-bold">
                       <MessageCircle className="w-5 h-5" /> Quero este
                     </a>

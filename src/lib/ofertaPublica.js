@@ -103,3 +103,11 @@ export async function gerarLinkGrupo(item, { euro = true } = {}) {
   try { await navigator.clipboard.writeText(texto); } catch { copiado = false; }
   return { texto, url: r.url, semImagem: r.semImagem, semCotacao: r.semCotacao, copiado };
 }
+
+// Preços promocionais ao vivo de um link /p (campanhas). Falha de rede = sem promo (a página segue com o preço do snapshot).
+export async function buscarPrecosOferta(slug) {
+  try {
+    const { data, error } = await supabase.rpc("oferta_precos", { p_slug: slug });
+    return error || !data ? { agora: null, itens: {} } : data;
+  } catch { return { agora: null, itens: {} }; }
+}

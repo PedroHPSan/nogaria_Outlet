@@ -13,3 +13,6 @@ create table listing_state (sku text, canal text, estado text, payload jsonb, pr
 create function item_disponivel(p_sku text) returns boolean language sql stable as
   $$ select coalesce((select status::text not in ('VENDIDO','ENTREGUE','DESCARTE') from itens where sku = p_sku), false) $$;
 create function canal_ativo(p_canal text) returns boolean language sql stable as $$ select true $$;
+-- F4: colunas/funções que o feed e a /i usam
+alter table itens add column if not exists titulo_anuncio text, add column if not exists tamanho text;
+create function catalogo_elegibilidade(p_sku text) returns table (motivos text[]) language sql stable as $$ select array[]::text[] $$;

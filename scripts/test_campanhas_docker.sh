@@ -19,12 +19,19 @@ $PSQL < scripts/sql/campanhas_stubs.sql || { echo "FALHA: stubs"; exit 1; }
 MIG=supabase/migrations/20261107150000_campanhas.sql
 $PSQL < $MIG || { echo "FALHA ao aplicar a migration"; exit 1; }
 $PSQL < $MIG || { echo "FALHA: migration não é idempotente (2ª aplicação)"; exit 1; }
+# F4 precisa do que existia antes: pedidos em € (tabelas + RPC com 25%), feed e /i (recriados pela migration)
+$PSQL < supabase/migrations/20261031130000_interesses_oferta.sql || { echo "FALHA: interesses"; exit 1; }
+$PSQL < supabase/migrations/20261104100000_acrescimo_euro_25.sql || { echo "FALHA: acréscimo €"; exit 1; }
+MIG4=supabase/migrations/20261107170000_campanha_superficies.sql
 MIG3=supabase/migrations/20261107160000_campanha_publica.sql
 $PSQL < $MIG3 || { echo "FALHA ao aplicar a migration da página pública"; exit 1; }
 $PSQL < $MIG3 || { echo "FALHA: migration da página pública não é idempotente"; exit 1; }
+$PSQL < $MIG4 || { echo "FALHA ao aplicar a migration das superfícies"; exit 1; }
+$PSQL < $MIG4 || { echo "FALHA: migration das superfícies não é idempotente"; exit 1; }
 OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_campanhas.sql 2>&1) || { echo "$OUT"; echo "FALHA: test_campanhas.sql abortou"; exit 1; }
 OUT2=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_publica.sql 2>&1) || { echo "$OUT2"; echo "FALHA: test_campanha_publica.sql abortou"; exit 1; }
-OUT="$OUT"$'\n'"$OUT2"
+OUT3=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_superficies.sql 2>&1) || { echo "$OUT3"; echo "FALHA: test_campanha_superficies.sql abortou"; exit 1; }
+OUT="$OUT"$'\n'"$OUT2"$'\n'"$OUT3"
 echo "$OUT"
 echo "$OUT" | grep -q "^FAIL" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }

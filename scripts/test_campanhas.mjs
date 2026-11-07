@@ -1,6 +1,6 @@
 // Teste das regras puras das campanhas (campanhasCore). Rode: npm run test:campanhas
 import assert from "node:assert/strict";
-import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero } from "../src/lib/campanhasCore.js";
+import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro } from "../src/lib/campanhasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -81,3 +81,12 @@ eq(fmtPrazo("2026-11-16T02:59:00Z"), "15/11 às 23:59", "prazo no horário de Br
 const msg = mensagemQuero({ sku: "A1", produto: "Camisa", preco: 70, preco_cheio: 100 }, camp, "https://x/promo/abc");
 ok(/Camisa \(A1\) por R\$\s70,00 \(de R\$\s100,00\)/.test(msg) && /Semana/.test(msg) && /até 10\/11 às 09:30/.test(msg), "mensagem leva o preço promocional e o prazo");
 ok(!/\(de /.test(mensagemQuero({ sku: "A1", produto: "Camisa", preco: 70 }, camp)), "sem preço cheio não inventa 'de'");
+
+console.log("promo nas páginas existentes");
+const base = { sku: "A1", produto: "Camisa", preco: 100 };
+eq(aplicarPromo(base, { preco: 80, preco_cheio: 100, desconto_pct: 20 }), { ...base, preco: 80, preco_cheio: 100, desconto_pct: 20 }, "aplica preço, 'de' e %");
+eq(aplicarPromo(base, null), base, "sem promo não mexe");
+eq(aplicarPromo(base, { preco: 100, preco_cheio: 100, desconto_pct: 0 }), base, "promo que não baixa o preço é ignorada");
+eq(aplicarPromo(base, { preco: 0, preco_cheio: 100 }), base, "preço promocional inválido é ignorado");
+eq(promoQueTerminaPrimeiro({ a: { fim_em: "2026-11-20T00:00:00Z" }, b: { fim_em: "2026-11-15T00:00:00Z" } }).fim_em, "2026-11-15T00:00:00Z", "a que termina primeiro");
+eq(promoQueTerminaPrimeiro({}), null, "sem promoções");

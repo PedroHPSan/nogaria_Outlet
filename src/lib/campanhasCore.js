@@ -132,3 +132,16 @@ export function mensagemQuero(item, camp, url) {
   const promo = Number(item.preco_cheio) > Number(item.preco) ? ` por ${fmtBrl(item.preco)} (de ${fmtBrl(item.preco_cheio)})` : item.preco > 0 ? ` — ${fmtBrl(item.preco)}` : "";
   return `Olá! Quero ${item.produto} (${item.sku})${promo} da campanha "${camp.nome}", oferta até ${fmtPrazo(camp.fim_em)}.${url ? ` ${url}` : ""}`;
 }
+
+// Sobrepõe a promoção vigente (vinda do servidor) ao item de uma página já existente (/i, /p).
+// Só aplica se a promo realmente baixa o preço; o resto do item fica como está.
+export function aplicarPromo(item, promo) {
+  if (!promo || !(Number(promo.preco) > 0) || !(Number(promo.preco_cheio) > Number(promo.preco))) return item;
+  return { ...item, preco: Number(promo.preco), preco_cheio: Number(promo.preco_cheio), desconto_pct: Number(promo.desconto_pct) };
+}
+
+// Entre várias promoções vigentes (itens de campanhas diferentes), a que termina primeiro manda na contagem.
+export function promoQueTerminaPrimeiro(promos) {
+  const v = Object.values(promos || {}).filter((p) => p?.fim_em);
+  return v.length ? v.reduce((a, b) => (Date.parse(b.fim_em) < Date.parse(a.fim_em) ? b : a)) : null;
+}
