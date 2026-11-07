@@ -108,3 +108,27 @@ export function resumoSimulacao(linhas, margens = new Map()) {
     cenarios: CENARIOS_VENDA.map((p) => ({ pct: p, receita: r2((promo * p) / 100), descontoDado: r2((desconto * p) / 100) })),
   };
 }
+
+// ---- Página pública (/promo/<slug>): o servidor manda `agora`; o relógio do cliente só interpola. ----
+export const offsetServidor = (agoraIso, clienteMs = Date.now()) => Date.parse(agoraIso) - clienteMs;
+export const msAte = (alvoIso, offset = 0, clienteMs = Date.now()) => Date.parse(alvoIso) - (clienteMs + offset);
+
+// Fase exibida com o relógio ajustado ao do servidor. Vira "encerrada" no zero; a página confirma com nova consulta.
+export function faseCampanha(d, offset = 0, clienteMs = Date.now()) {
+  if (msAte(d.inicio_em, offset, clienteMs) > 0) return "agendada";
+  if (msAte(d.fim_em, offset, clienteMs) > 0) return "ativa";
+  return "encerrada";
+}
+
+const fmtBrl = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+export const fmtPrazo = (iso) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return `${p.day}/${p.month} às ${p.hour}:${p.minute}`;
+};
+
+// Mensagem do "Quero este": leva o preço promocional e até quando vale.
+export function mensagemQuero(item, camp, url) {
+  const promo = Number(item.preco_cheio) > Number(item.preco) ? ` por ${fmtBrl(item.preco)} (de ${fmtBrl(item.preco_cheio)})` : item.preco > 0 ? ` — ${fmtBrl(item.preco)}` : "";
+  return `Olá! Quero ${item.produto} (${item.sku})${promo} da campanha "${camp.nome}", oferta até ${fmtPrazo(camp.fim_em)}.${url ? ` ${url}` : ""}`;
+}

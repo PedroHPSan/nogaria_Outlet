@@ -4,6 +4,7 @@ import App from "./App.jsx";
 import CatalogoPublicoView from "./screens/CatalogoPublicoView.jsx";
 import ProdutoPublicoView from "./screens/ProdutoPublicoView.jsx";
 import OrcamentoPublicoView from "./screens/OrcamentoPublicoView.jsx";
+import CampanhaPublicaView from "./screens/CampanhaPublicaView.jsx";
 import "@fontsource-variable/plus-jakarta-sans";
 import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
@@ -16,12 +17,15 @@ const mo = window.location.pathname.match(/^\/o\/([^/]+)/);
 const mp = window.location.pathname.match(/^\/p\/([^/]+)/);
 // Rota pública permanente de um item publicado no catálogo: /i/<sku>.
 const mi = window.location.pathname.match(/^\/i\/([^/]+)/);
+// Rota pública de uma campanha de promoção: /promo/<slug>.
+const mc = window.location.pathname.match(/^\/promo\/([^/]+)/);
 const raiz = ReactDOM.createRoot(document.getElementById("root"));
 
 raiz.render(
   <React.StrictMode>
     {m ? <CatalogoPublicoView slug={decodeURIComponent(m[1])} />
       : mi ? <ProdutoPublicoView sku={decodeURIComponent(mi[1]).toUpperCase()} />
+      : mc ? <CampanhaPublicaView slug={decodeURIComponent(mc[1])} />
       : mp ? <ProdutoPublicoView slug={decodeURIComponent(mp[1])} />
       : mo ? <OrcamentoPublicoView slug={decodeURIComponent(mo[1])} />
       : <App />}

@@ -1,6 +1,6 @@
 // Teste das regras puras das campanhas (campanhasCore). Rode: npm run test:campanhas
 import assert from "node:assert/strict";
-import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao } from "../src/lib/campanhasCore.js";
+import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero } from "../src/lib/campanhasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -65,3 +65,19 @@ eq(s.abaixoPiso, ["B"], "item com lucro negativo vai para abaixo do piso");
 eq(s.conflitos, 1, "conta itens em conflito");
 eq(s.cenarios.map((x) => x.receita), [77.5, 155, 310], "cenários 25/50/100%");
 eq(resumoSimulacao([]).itens, 0, "lista vazia");
+
+console.log("página pública: relógio do servidor");
+const srv = "2026-11-10T12:00:00Z";
+const cli = Date.parse("2026-11-10T11:50:00Z"); // relógio do cliente atrasado 10 min
+const off = offsetServidor(srv, cli);
+eq(off, 600000, "offset = servidor − cliente");
+const camp = { nome: "Semana", inicio_em: "2026-11-10T10:00:00Z", fim_em: "2026-11-10T12:30:00Z" };
+eq(msAte(camp.fim_em, off, cli), 30 * 60000, "restam 30 min no relógio do servidor (não 40)");
+eq(faseCampanha(camp, off, cli), "ativa", "ativa");
+eq(faseCampanha(camp, off, cli + 31 * 60000), "encerrada", "encerra no zero do servidor");
+eq(faseCampanha({ ...camp, inicio_em: "2026-11-10T12:10:00Z" }, off, cli), "agendada", "agendada antes do início");
+eq(faseCampanha(camp, 0, cli), "ativa", "sem offset também funciona");
+eq(fmtPrazo("2026-11-16T02:59:00Z"), "15/11 às 23:59", "prazo no horário de Brasília");
+const msg = mensagemQuero({ sku: "A1", produto: "Camisa", preco: 70, preco_cheio: 100 }, camp, "https://x/promo/abc");
+ok(/Camisa \(A1\) por R\$\s70,00 \(de R\$\s100,00\)/.test(msg) && /Semana/.test(msg) && /até 10\/11 às 09:30/.test(msg), "mensagem leva o preço promocional e o prazo");
+ok(!/\(de /.test(mensagemQuero({ sku: "A1", produto: "Camisa", preco: 70 }, camp)), "sem preço cheio não inventa 'de'");

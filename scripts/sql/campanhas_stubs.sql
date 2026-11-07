@@ -8,3 +8,8 @@ create or replace function public.catalogo_categoria(p_grupo text)
 returns table (grupo text, macro text) language sql stable security definer set search_path = public as $$
   select coalesce(g.grupo, 'Diversos (não classificado)'), coalesce(g.macro, 'Diversos')
     from (select 1) _ left join pricing_grupo g on lower(g.grupo) = lower(trim(coalesce(p_grupo, ''))) $$;
+-- F3: catálogo publicado e disponibilidade (stubs de 20261102170000 / 20261102310000)
+create table listing_state (sku text, canal text, estado text, payload jsonb, primary key (sku, canal));
+create function item_disponivel(p_sku text) returns boolean language sql stable as
+  $$ select coalesce((select status::text not in ('VENDIDO','ENTREGUE','DESCARTE') from itens where sku = p_sku), false) $$;
+create function canal_ativo(p_canal text) returns boolean language sql stable as $$ select true $$;

@@ -16,6 +16,10 @@
       "destination": "/api/og?slug=:slug&t=i"
     },
     {
+      "source": "/promo/:slug",
+      "destination": "/api/og?slug=:slug&t=promo"
+    },
+    {
       "source": "/c/:slug",
       "destination": "/api/og?slug=:slug&t=c"
     },
