@@ -123,7 +123,18 @@ export const OG_LADO = 800;
 const fmtDupla = (p, euro) => { const m = euro ? precoMisto(p, euro.taxa) : null; return m?.eur ? { eur: fmtEUR(m.eur), brl: brl(p) } : null; };
 const fmtPreco = (p, euro) => { const d = fmtDupla(p, euro); return d ? `${d.brl} · ${d.eur}` : brl(p); };
 
-function faixaPreco(ops, preco, rotulo, euro) {
+// Campanha: selo "-30%" e o preço antigo riscado, à direita da faixa de preço.
+function promoNaFaixa(ops, y, preco, cheio) {
+  if (!(Number(cheio) > preco) || !(preco > 0)) return;
+  const pct = Math.round((1 - preco / Number(cheio)) * 100);
+  ops.push({ k: "rect", x: OG_LADO - 40 - 170, y: y + 28, w: 170, h: 60, fill: "#e11d48", r: 30 });
+  ops.push({ k: "text", x: OG_LADO - 40 - 170 + 30, y: y + 71, s: `-${pct}%`, size: 40, bold: true, color: "#ffffff" });
+  const de = `DE ${brl(cheio)}`, w = de.length * 17;
+  ops.push({ k: "text", x: OG_LADO - 40 - w, y: y + 128, s: de, size: 30, bold: true, color: "#9fb3c8" });
+  ops.push({ k: "rect", x: OG_LADO - 40 - w, y: y + 117, w, h: 4, fill: "#9fb3c8" });
+}
+
+function faixaPreco(ops, preco, rotulo, euro, cheio = null) {
   const y = OG_LADO - 170;
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 170, fill: "#0b162d" });
   ops.push({ k: "rect", x: 0, y, w: OG_LADO, h: 8, fill: "#52ff7f" });
@@ -133,6 +144,7 @@ function faixaPreco(ops, preco, rotulo, euro) {
     ops.push({ k: "text", x: 40, y: y + 130, s: dupla.eur, size: 40, bold: true, color: "#52ff7f", maxW: OG_LADO - 80 });
   } else if (preco > 0) ops.push({ k: "text", x: 40, y: y + 112, s: brl(preco), size: 92, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
   if (preco <= 0) ops.push({ k: "text", x: 40, y: y + 104, s: rotulo || "Consulte", size: 64, bold: true, color: "#ffffff", maxW: OG_LADO - 80 });
+  promoNaFaixa(ops, y, preco, cheio);
   ops.push({ k: "text", x: 40, y: y + 158, s: euro && preco > 0 ? `NOGÁRIA OUTLET · cotação ${fmtDataCotacao(euro.em)}` : "NOGÁRIA OUTLET", size: 22, bold: true, color: "#52ff7f" });
 }
 
@@ -157,7 +169,7 @@ export function cardOgProduto(it, ctx = {}) {
     ops.push({ k: "rect", x: OG_LADO - 30 - w, y: 86, w, h: 60, fill: "#52ff7f", r: 30 });
     ops.push({ k: "text", x: OG_LADO - 30 - w + 22, y: 130, s, size: 36, bold: true, color: "#0b162d" });
   }
-  faixaPreco(ops, ctx.mostrarPreco === false ? 0 : precoVenda(it), null, ctx.euro);
+  faixaPreco(ops, ctx.mostrarPreco === false ? 0 : precoVenda(it), null, ctx.euro, it.preco_cheio);
   return { formato: "og", w: OG_LADO, h: OG_LADO, ops };
 }
 

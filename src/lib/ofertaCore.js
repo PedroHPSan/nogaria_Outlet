@@ -4,6 +4,7 @@ import { precoVenda } from "./export.js";
 import { ehCalcado, ehVestuario } from "./tamanhos.js";
 import { precoMisto, fmtEUR, descricaoPreviewEuro } from "./precoEuro.js";
 import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogoCore.js";
+import { fmtPrazo } from "./campanhasCore.js";
 
 export const MAX_ITENS_OFERTA = 12;
 export const LIMITE_TITULO_OG = 70;
@@ -27,7 +28,9 @@ export function tituloOg(it, { mostrarPreco = true, euro = null } = {}) {
   const p = precoVenda(it);
   const nome = it?.produto || it?.sku || "Produto";
   if (!mostrarPreco || !p) return cortar(nome, LIMITE_TITULO_OG);
-  const sufixo = ` — ${precoOgTxt(p, euro)}`;
+  // item em campanha (preco_cheio > preço): "Produto — R$ 70 (de R$ 100)"
+  const de = Number(it?.preco_cheio) > p ? ` (de ${brl(it.preco_cheio)})` : "";
+  const sufixo = ` — ${precoOgTxt(p, euro)}${de}`;
   return `${cortar(nome, LIMITE_TITULO_OG - sufixo.length)}${sufixo}`;
 }
 
@@ -99,9 +102,15 @@ export function linkInteresseOferta(item, numero, url) {
   return linkWa(numero, `Olá! Tenho interesse em ${item.produto} (${item.sku})${p}.${url ? ` ${url}` : ""}`);
 }
 
-// Mensagem curta para colar no grupo junto do link (um produto por mensagem).
-export function textoGrupo(payload, url) {
+// Mensagem curta para colar no grupo (um produto por mensagem).
+// `promo` (linha de precos_efetivos) troca o preço por "de ~R$ 100~ por *R$ 70*" e mostra até quando vale.
+export function textoGrupo(payload, url, promo = null) {
   const it = payload.itens[0];
+  if (promo && payload.itens.length === 1 && Number(promo.preco) > 0) {
+    const pct = Number(promo.desconto_pct) > 0 ? ` (-${String(Number(promo.desconto_pct)).replace(".", ",")}%)` : "";
+    const ate = promo.campanha_fim ? `\n🔥 Promoção até ${fmtPrazo(promo.campanha_fim)}` : "";
+    return `*${payload.titulo}*\n~${brl(promo.preco_cheio)}~ por *${brl(promo.preco)}*${pct}${ate}\n${url}`;
+  }
   const p = payload.itens.length === 1 && it.preco > 0 ? ` — *${brl(it.preco)}*` : "";
   return `*${payload.titulo}*${payload.itens.length === 1 ? p : ""}\n${url}`;
 }
