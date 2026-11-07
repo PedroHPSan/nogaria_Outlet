@@ -5,6 +5,7 @@ import { ALL_STATUS, CLASSE_STYLE, fmtBRL, statusIdx, LOTE_SEM, foraDoEstoque } 
 import { pendenteMedida } from "../lib/medidas";
 import { carregarResultadoLotes } from "../lib/vendas";
 import CustoLoteModal from "../components/CustoLoteModal";
+import CustosGlobaisModal from "../components/CustosGlobaisModal";
 import {
   Loader2, Ruler, ChevronRight, Package, TrendingUp, Gauge, ListChecks,
   Users, MapPin, Boxes, Coins, Tag, Camera, Sparkles, DoorOpen, Wallet, ShoppingBag, Layers, Store,
@@ -44,6 +45,7 @@ const custoDoLote = (l) => Number(l.custo_origem === "composto" ? l.custo_total 
 export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBruto, onOpenSalas, onOpenDestinos, onLotesChanged }) {
   const refreshKey = useDebounced(refreshBruto, 700);
   const [verTodosLotes, setVerTodosLotes] = useState(false);
+  const [globaisAberto, setGlobaisAberto] = useState(false); // custos globais (valem para todos os lotes ou um subconjunto)
   const [editandoCusto, setEditandoCusto] = useState(null); // lote (linha de `lotes`) em edição
   const [abaCusto, setAbaCusto] = useState("lote");
   const [stats, setStats] = useState(null);
@@ -172,7 +174,8 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
     ...Object.keys(stats.byLote).filter((k) => k !== "null" && !cadastrados.has(k)).map((k) => ({ lote: Number(k), referencia: null })),
   ]
     .map((l) => ({ ...l, ...vazio, ...(stats.byLote[l.lote] || {}), custo: custoDoLote(l) }))
-    .sort((a, b) => b.val - a.val);
+    // lotes com peças e SEM custo vêm primeiro (é o que precisa de ação), depois por valor
+    .sort((a, b) => (Number(b.n > 0 && !(b.custo > 0)) - Number(a.n > 0 && !(a.custo > 0))) || b.val - a.val);
   const investido = loteList.reduce((s, l) => s + l.custo, 0);
   const receitaLotesComCusto = loteList.filter((l) => l.custo > 0).reduce((s, l) => s + l.receita, 0);
   const sellThrough = pctDe(stats.nVendidos, stats.nVendidos + stats.nEstoque);
@@ -614,12 +617,16 @@ export default function Dashboard({ lotes, onGoFiltered, refreshKey: refreshBrut
             );
           })}
         </div>
+        <button onClick={() => setGlobaisAberto(true)} className="w-full mt-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-sm font-bold py-2">
+          Custos globais (valem para vários lotes)
+        </button>
         {loteList.length > 8 && (
           <button onClick={() => setVerTodosLotes((v) => !v)} className="w-full mt-3 text-xs font-bold text-orange-600 py-1.5">
             {verTodosLotes ? "Mostrar menos" : `Ver todos os ${loteList.length} lotes`}
           </button>
         )}
       </div>
+      {globaisAberto && <CustosGlobaisModal lotes={lotes} onClose={() => setGlobaisAberto(false)} onSaved={() => onLotesChanged?.()} />}
       {editandoCusto && (
         <CustoLoteModal lote={editandoCusto} abaInicial={abaCusto} onClose={() => { setEditandoCusto(null); setAbaCusto("lote"); }}
           onSaved={() => { onLotesChanged?.(); }} />
