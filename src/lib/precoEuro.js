@@ -122,11 +122,13 @@ export function duplaPreco(brlBase, taxa, opts) {
 }
 
 // Mensagem do grupo (compacta): título, preço (1 produto), link, uma linha curta por idioma e a cotação uma vez.
-export function textoGrupoEuro(payload, url, cotacao) {
+export function textoGrupoEuro(payload, url, cotacao, promo = null) {
   const linhas = [`*${payload.titulo}*`];
   if (payload.itens.length === 1) {
-    const l = duplaPreco(payload.itens[0].preco, cotacao?.taxa, { negrito: false });
+    // campanha vigente: o € parte do preço promocional (o servidor faz o mesmo no pedido)
+    const l = duplaPreco(promo && Number(promo.preco) > 0 ? promo.preco : payload.itens[0].preco, cotacao?.taxa, { negrito: false });
     if (l) linhas.push(l);
+    if (promo && Number(promo.preco_cheio) > Number(promo.preco)) linhas.push(`🔥 de ~${fmtBRL2(promo.preco_cheio)}~ (-${String(Number(promo.desconto_pct)).replace(".", ",")}%)`);
   }
   linhas.push(url, "");
   for (const l of IDIOMAS) linhas.push(`${BANDEIRA[l]} ${T[l].curto}`);

@@ -205,3 +205,7 @@ export function textoGrupoCampanha(c, url, maxPct) {
   const pct = Number(maxPct) > 0 ? `Até ${String(Number(maxPct)).replace(".", ",")}% OFF · ` : "";
   return `🔥 *${c.nome}*\n${pct}válido até ${fmtPrazo(c.fim_em)}\nToque para ver as peças:\n${url}`;
 }
+
+// Item como o cliente deve ver AGORA (card, título e texto do grupo): preço da campanha + "de" congelado.
+// `p` = linha de precos_efetivos com campanha; sem campanha o item volta intacto.
+export const comPromo = (it, p) => (p ? { ...it, preco_ideal: p.preco, preco_cheio: p.preco_cheio, desconto_pct: p.desconto_pct } : it);

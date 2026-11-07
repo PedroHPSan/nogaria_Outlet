@@ -150,7 +150,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   // Links com preview no WhatsApp (/p/<slug>): lote em 1 link ou 1 link por produto.
   const dadosOferta = () => { const c = contato(); return { contato: { nome: c.nome, whatsapp: c.whatsapp, label: c.whatsappLabel }, mostrarPreco, euro: precoEuro }; };
-  const textoOferta = (r) => (r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao) : textoGrupo(r.payload, r.url));
+  const textoOferta = (r) => (r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao, r.promo) : textoGrupo(r.payload, r.url, r.promo));
   const copiar = async (t) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
 
   const ofertaLote = () => executar(async () => {
