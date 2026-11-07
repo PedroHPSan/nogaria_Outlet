@@ -1,7 +1,10 @@
 // Teste das regras puras das campanhas (campanhasCore). Rode: npm run test:campanhas
 import assert from "node:assert/strict";
+import { textoGrupo, tituloOg, montarPayloadOferta } from "../src/lib/ofertaCore.js";
+import { textoGrupoEuro } from "../src/lib/precoEuro.js";
+import { cardOgProduto } from "../src/lib/cardCore.js";
 import { adicionarItem, mensagemCobranca, totaisComDecisao } from "../src/lib/sacolasCore.js";
-import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem, linkCampanha, textoGrupoCampanha } from "../src/lib/campanhasCore.js";
+import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem, linkCampanha, textoGrupoCampanha, comPromo } from "../src/lib/campanhasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -140,3 +143,22 @@ console.log("divulgação no grupo");
 eq(linkCampanha("abc123", "https://outlet.exemplo/"), "https://outlet.exemplo/promo/abc123", "link da campanha");
 eq(textoGrupoCampanha({ nome: "Semana do Cliente", fim_em: "2026-11-16T02:59:00Z" }, "https://x/promo/abc", 30), "🔥 *Semana do Cliente*\nAté 30% OFF · válido até 15/11 às 23:59\nToque para ver as peças:\nhttps://x/promo/abc", "texto para o grupo com % e prazo");
 ok(!textoGrupoCampanha({ nome: "X", fim_em: "2026-11-16T02:59:00Z" }, "https://x", 0).includes("OFF"), "sem % não inventa 'OFF'");
+
+console.log("link gerado pela tela do produto leva o preço da campanha");
+const prodL = { sku: "NOG-1", produto: "Camisa Polo", preco_ideal: 100, estado: "Novo", marca: "X" };
+const pL = { sku: "NOG-1", preco: 70, preco_cheio: 100, desconto_pct: 30, campanha_fim: "2026-11-16T02:59:00Z" };
+const itL = comPromo(prodL, pL);
+eq([itL.preco_ideal, itL.preco_cheio, itL.desconto_pct], [70, 100, 30], "comPromo troca o preço e guarda o 'de'");
+eq(comPromo(prodL, null), prodL, "sem campanha o item fica intacto");
+ok(tituloOg(itL).includes("R$ 70") && tituloOg(itL).includes("(de R$ 100)"), "título do preview: preço da campanha e o 'de'");
+ok(!tituloOg(prodL).includes("(de "), "sem campanha o título é o de sempre");
+const payL = montarPayloadOferta([itL], {});
+eq(textoGrupo(payL, "https://x/p/abc", pL), `*${payL.titulo}*\n~R$ 100~ por *R$ 70* (-30%)\n🔥 Promoção até 15/11 às 23:59\nhttps://x/p/abc`, "texto do grupo: de riscado, por, % e prazo");
+ok(textoGrupo(montarPayloadOferta([prodL], {}), "https://x/p/abc", null).includes("*R$ 100*"), "texto do grupo sem campanha: igual ao de sempre");
+const euroT = textoGrupoEuro(payL, "https://x/p/abc", { taxa: 6, em: Date.parse("2026-11-10T12:00:00Z") }, pL);
+ok(euroT.includes("de ~R$ 100,00~") && /70,00/.test(euroT), "texto em € parte do preço da campanha");
+const cardL = cardOgProduto(itL, { mostrarPreco: true });
+const txts = cardL.ops.filter((o) => o.k === "text").map((o) => o.s);
+ok(txts.includes("R$ 70") && txts.includes("-30%") && txts.includes("DE R$ 100"), "card: preço da campanha, selo -30% e 'DE' riscado");
+ok(cardL.ops.some((o) => o.k === "rect" && o.h === 4), "card: linha do riscado");
+ok(!cardOgProduto(comPromo(prodL, null), { mostrarPreco: true }).ops.some((o) => o.k === "text" && /^-\d+%$/.test(o.s)), "card sem campanha não tem selo");

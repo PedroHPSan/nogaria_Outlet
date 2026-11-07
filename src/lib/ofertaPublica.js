@@ -8,6 +8,8 @@ import { cotacaoEuro } from "./cotacao.js";
 import { textoGrupoEuro } from "./precoEuro.js";
 import { carregarContato } from "./empresaConfig.js";
 import { indisponivelParaVenda, motivoIndisponivel } from "./model.js";
+import { precoVenda } from "./export.js";
+import { comPromo } from "./campanhasCore.js";
 
 const LIMITE_OG = 300 * 1024; // acima disso o WhatsApp pode ignorar a imagem
 
@@ -48,6 +50,17 @@ export async function separarDisponiveis(itens) {
 export const textoBloqueados = (bloqueados) =>
   bloqueados.map((b) => `${b.sku} (${b.motivo})`).join(", ");
 
+// Campanha vigente por SKU (linhas de precos_efetivos com campanha). O preço vem SEMPRE do servidor; falha = sem promo.
+export async function promosDosItens(itens) {
+  const skus = (itens || []).map((i) => i.sku);
+  if (!skus.length) return new Map();
+  try {
+    const { data, error } = await supabase.rpc("precos_efetivos", { p_skus: skus, p_canal: "whatsapp", p_em: new Date().toISOString() });
+    if (error) return new Map();
+    return new Map((data || []).filter((x) => x.campanha_id).map((x) => [x.sku, x]));
+  } catch { return new Map(); }
+}
+
 // itens: linhas de `itens` (1 → /p de produto; 2..12 → oferta com grade).
 // Itens vendidos ou separados em sacola são retirados; se não sobrar nenhum, recusa.
 // Retorna { url, slug, payload, expira_em, semImagem, bloqueados }.
@@ -58,13 +71,15 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
     if (bloqueados.length) throw new Error(`Não é possível gerar link: já vendido ou separado — ${textoBloqueados(bloqueados)}.`);
     throw new Error("Selecione ao menos 1 item.");
   }
+  const promos = await promosDosItens(lista);
+  const listaCard = lista.map((i) => comPromo(i, promos.get(i.sku))); // card, título e texto saem com o preço da campanha
   const slug = gerarSlug();
   // euro: true → busca a cotação agora; ela vai estampada no preview (a página busca outra a cada visita).
   const cotacao = euro && mostrarPreco ? await cotacaoEuro().catch(() => null) : null; // sem cotação: o link sai só em reais
 
   let imagem = null;
   try {
-    const blob = await gerarImagemPreview(lista, mostrarPreco, cotacao);
+    const blob = await gerarImagemPreview(listaCard, mostrarPreco, cotacao);
     const path = `${slug}.jpg`;
     const { error } = await supabase.storage.from("og-previews").upload(path, blob, { contentType: "image/jpeg", upsert: false });
     if (error) console.error("upload do preview falhou", error);
@@ -72,7 +87,9 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
   } catch (e) { console.error("preview da oferta falhou", e); /* sem preview: o link ainda funciona */ }
 
   const fotos = await fotosAssinadas(lista.map((i) => ({ rep: i })));
-  const payload = montarPayloadOferta(lista, { titulo, contato, mostrarPreco, euro: cotacao, fotos, og: { imagem } });
+  const payload = montarPayloadOferta(listaCard, { titulo, contato, mostrarPreco, euro: cotacao, fotos, og: { imagem } });
+  // O snapshot guarda o preço CHEIO: a página aplica a promoção ao vivo e, quando a campanha acaba, o link volta ao preço normal.
+  payload.itens = payload.itens.map((pi, k) => ({ ...pi, preco: mostrarPreco ? (precoVenda(lista[k]) ?? null) : null }));
   if (cotacao) payload.cotacao = { taxa: cotacao.taxa, em: cotacao.em }; // auditoria do preview
   const { data: sess } = await supabase.auth.getUser();
   const { data, error } = await supabase
@@ -81,7 +98,7 @@ export async function publicarOferta(itens, { titulo, contato, mostrarPreco = tr
     .select("slug, expira_em")
     .single();
   if (error) throw error;
-  return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, expira_em: data.expira_em, semImagem: !imagem, cotacao, semCotacao: euro && mostrarPreco && !cotacao, bloqueados };
+  return { url: `${window.location.origin}/p/${data.slug}`, slug: data.slug, payload, promo: lista.length === 1 ? (promos.get(lista[0].sku) || null) : null, expira_em: data.expira_em, semImagem: !imagem, cotacao, semCotacao: euro && mostrarPreco && !cotacao, bloqueados };
 }
 
 // SKUs desta oferta que já foram vendidos/entregues (RPC anônima por slug; falha → nenhum).
@@ -98,7 +115,7 @@ export async function skusIndisponiveis(slug) {
 export async function gerarLinkGrupo(item, { euro = true } = {}) {
   const c = await carregarContato();
   const r = await publicarOferta([item], { contato: { whatsapp: c.whatsapp, label: c.whatsappLabel }, euro });
-  const texto = r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao) : textoGrupo(r.payload, r.url);
+  const texto = r.cotacao ? textoGrupoEuro(r.payload, r.url, r.cotacao, r.promo) : textoGrupo(r.payload, r.url, r.promo);
   let copiado = true;
   try { await navigator.clipboard.writeText(texto); } catch { copiado = false; }
   return { texto, url: r.url, semImagem: r.semImagem, semCotacao: r.semCotacao, copiado };
