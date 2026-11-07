@@ -3,6 +3,7 @@
 import { precoVenda } from "./export.js";
 import { tamanhoEtiqueta } from "./tamanhos.js";
 import { precoMisto, fmtEUR, fmtDataCotacao } from "./precoEuro.js";
+import { emPromo, pctPromo, fmtPrazo } from "./campanhasCore.js";
 import { CATALOGO_ESTADO_BADGE, fraseCondicao } from "./catalogoCore.js";
 import { TEMAS } from "./catalogoSpec.js";
 
@@ -75,6 +76,16 @@ export function cardProduto(it, formato, ctx = {}) {
     ops.push({ k: "text", x: MARGEM, y: y + 86, s: brl(p), size: 84, bold: true, color: tx });
     const dupla = fmtDupla(p, ctx.euro); // € só quando pedido (ctx.euro = { taxa, em }); padrão do Instagram é só R$
     if (dupla) ops.push({ k: "text", x: MARGEM, y: y + 130, s: `${dupla.eur} · cotação ${fmtDataCotacao(ctx.euro.em)}`, size: 34, bold: true, color: escuro ? tema.acento : tema.forte });
+    // campanha: selo -30%, "DE R$ …" riscado à direita do preço e o prazo
+    if (emPromo(it)) {
+      const bx = fmt.w - MARGEM - 190;
+      ops.push({ k: "rect", x: bx, y: y + 26, w: 190, h: 64, fill: "#e11d48", r: 32 });
+      ops.push({ k: "text", x: bx + 36, y: y + 71, s: `-${pctPromo(it)}%`, size: 44, bold: true, color: "#ffffff" });
+      const de = `DE ${brl(it.preco_cheio)}`, dw = de.length * 20, mudo = escuro ? "#9fb3c8" : "#6b7a8c";
+      ops.push({ k: "text", x: fmt.w - MARGEM - dw, y: y + 128, s: de, size: 34, bold: true, color: mudo });
+      ops.push({ k: "rect", x: fmt.w - MARGEM - dw, y: y + 115, w: dw, h: 4, fill: mudo });
+      if (it.campanha_fim) ops.push({ k: "text", x: MARGEM, y: y + (dupla ? 176 : 132), s: `PROMOÇÃO ATÉ ${fmtPrazo(it.campanha_fim).toUpperCase()}`, size: 28, bold: true, color: escuro ? tema.acento : tema.forte });
+    }
   }
   rodapeContato(ops, fmt, tema, ctx);
   return { formato, w: fmt.w, h: fmt.h, ops };

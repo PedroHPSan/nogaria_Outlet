@@ -1,5 +1,8 @@
 // Teste das regras puras das campanhas (campanhasCore). Rode: npm run test:campanhas
 import assert from "node:assert/strict";
+import { textoWhatsApp, textoInstagram, legendaProduto, legendaCard } from "../src/lib/divulgacao.js";
+import { cardProduto } from "../src/lib/cardCore.js";
+import { emPromo, pctPromo, prazoPromo } from "../src/lib/campanhasCore.js";
 import { textoGrupo, tituloOg, montarPayloadOferta } from "../src/lib/ofertaCore.js";
 import { textoGrupoEuro } from "../src/lib/precoEuro.js";
 import { cardOgProduto } from "../src/lib/cardCore.js";
@@ -162,3 +165,24 @@ const txts = cardL.ops.filter((o) => o.k === "text").map((o) => o.s);
 ok(txts.includes("R$ 70") && txts.includes("-30%") && txts.includes("DE R$ 100"), "card: preço da campanha, selo -30% e 'DE' riscado");
 ok(cardL.ops.some((o) => o.k === "rect" && o.h === 4), "card: linha do riscado");
 ok(!cardOgProduto(comPromo(prodL, null), { mostrarPreco: true }).ops.some((o) => o.k === "text" && /^-\d+%$/.test(o.s)), "card sem campanha não tem selo");
+
+console.log("cards e legendas do Instagram/WhatsApp com a campanha");
+const pI = { sku: "NOG-1", preco: 70, preco_cheio: 100, desconto_pct: 30, campanha_fim: "2026-11-16T02:59:00Z", campanha_nome: "Semana" };
+const iP = comPromo({ sku: "NOG-1", produto: "Camisa Polo", preco_ideal: 100, estado: "Novo", marca: "X", grupo: "Vestuário" }, pI);
+const iN = { sku: "NOG-2", produto: "Tênis", preco_ideal: 200, estado: "Novo", grupo: "Calçados" };
+ok(emPromo(iP) && pctPromo(iP) === 30 && !emPromo(iN), "emPromo / pctPromo");
+eq(prazoPromo([iN, iP]), "15/11 às 23:59", "prazo da campanha entre os itens");
+eq(prazoPromo([iN]), null, "sem campanha, sem prazo");
+const wp = textoWhatsApp([iP, iN], { titulo: "Semana" });
+ok(wp.includes("~R$ 100~ *R$ 70* (-30%)") && wp.includes("*R$ 200*") && wp.includes("🔥 Promoção até 15/11 às 23:59"), "texto do WhatsApp: riscado, por, % e prazo; item sem campanha igual");
+ok(!textoWhatsApp([iN], {}).includes("🔥"), "sem campanha nada muda no texto do WhatsApp");
+const ig = textoInstagram([iP, iN], { titulo: "Semana" });
+ok(ig.includes("de R$ 100 por R$ 70 (-30%)") && !ig.includes("~") && !ig.includes("*") && ig.includes("🔥 Promoção até 15/11 às 23:59"), "legenda do Instagram: 'de … por …' sem ~ nem *");
+const lp = legendaProduto(iP, { contato: "Barbara" });
+ok(lp.includes("De R$ 100 por R$ 70 (-30%)") && lp.includes("🔥 Promoção até 15/11 às 23:59"), "legenda de 1 produto com de/por e prazo");
+ok(legendaProduto(iN, {}).includes("Por R$ 200") && !legendaProduto(iN, {}).includes("🔥"), "legenda de 1 produto sem campanha igual");
+ok(legendaCard(iP).includes("de R$ 100 por R$ 70"), "legenda curta do card");
+const cI = cardProduto(iP, "feed", {}).ops.filter((o) => o.k === "text").map((o) => o.s);
+ok(cI.includes("R$ 70") && cI.includes("-30%") && cI.includes("DE R$ 100") && cI.some((s) => s.startsWith("PROMOÇÃO ATÉ 15/11")), "card do Instagram: preço, selo, DE riscado e prazo");
+ok(!cardProduto(iN, "feed", {}).ops.some((o) => o.k === "text" && /^-\d+%$/.test(o.s)), "card do Instagram sem campanha: sem selo");
+ok(!cardProduto(iP, "feed", { mostrarPreco: false }).ops.some((o) => o.k === "text" && o.s === "-30%"), "sem mostrar preço, nada de selo");

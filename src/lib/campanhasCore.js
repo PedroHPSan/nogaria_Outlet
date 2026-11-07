@@ -208,4 +208,13 @@ export function textoGrupoCampanha(c, url, maxPct) {
 
 // Item como o cliente deve ver AGORA (card, título e texto do grupo): preço da campanha + "de" congelado.
 // `p` = linha de precos_efetivos com campanha; sem campanha o item volta intacto.
-export const comPromo = (it, p) => (p ? { ...it, preco_ideal: p.preco, preco_cheio: p.preco_cheio, desconto_pct: p.desconto_pct } : it);
+export const comPromo = (it, p) => (p ? { ...it, preco_ideal: p.preco, preco_cheio: p.preco_cheio, desconto_pct: p.desconto_pct, campanha_fim: p.campanha_fim ?? null, campanha_nome: p.campanha_nome ?? null } : it);
+
+// Item em campanha (preço cheio congelado maior que o preço atual).
+export const emPromo = (it) => Number(it?.preco_cheio) > 0 && Number(it?.preco_ideal) > 0 && Number(it.preco_cheio) > Number(it.preco_ideal);
+export const pctPromo = (it) => (emPromo(it) ? Math.round((1 - Number(it.preco_ideal) / Number(it.preco_cheio)) * 100) : 0);
+// Prazo mais próximo entre os itens em campanha ("15/11 às 23:59") ou null.
+export function prazoPromo(itens) {
+  const fins = (itens || []).filter((i) => emPromo(i) && i.campanha_fim).map((i) => i.campanha_fim).sort();
+  return fins.length ? fmtPrazo(fins[0]) : null;
+}
