@@ -1,7 +1,7 @@
 // Teste das regras puras das campanhas (campanhasCore). Rode: npm run test:campanhas
 import assert from "node:assert/strict";
 import { adicionarItem, mensagemCobranca, totaisComDecisao } from "../src/lib/sacolasCore.js";
-import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro } from "../src/lib/campanhasCore.js";
+import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem } from "../src/lib/campanhasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -112,3 +112,26 @@ eq(totaisComDecisao([com], 10, pend), { promo: 72, cheio: 90, diferenca: 18 }, "
 eq(pendentesDoErro({ message: "DECISAO_CAMPANHA", details: JSON.stringify(pend) }), pend, "lê os pendentes do erro");
 eq(pendentesDoErro({ message: "outro" }), null, "outro erro não é decisão");
 eq(pendentesDoErro({ message: "DECISAO_CAMPANHA", details: "lixo" }), [], "detalhe ilegível não quebra");
+
+console.log("resultado");
+const rr = {
+  itens_na_campanha: 10,
+  por_decisao: { no_prazo: { itens: 3, receita: 240, desconto: 60 }, manteve_promo: { itens: 1, receita: 160, desconto: 40 }, preco_cheio: { itens: 1, receita: 200, desconto: 0 } },
+  sacolas_abertas: { sacolas: 2, itens: 3, valor: 500, desconto_comprometido: 125.5 }, nao_vendidos: 4, fora_da_sacola: { itens: 1, receita: 48 },
+};
+const sr = resumoResultado(rr);
+eq([sr.vendidos, sr.receita, sr.desconto], [5, 600, 100], "vendidos, receita e desconto concedido");
+eq([sr.conversaoPct, sr.depoisDoFim], [50, 2], "conversão e vendas depois do fim");
+eq([sr.comprometido, sr.sacolasAbertas, sr.itensEmSacola, sr.naoVendidos, sr.foraDaSacola, sr.receitaFora], [125.5, 2, 3, 4, 1, 48], "comprometido, sacolas, não vendidos e fora da sacola");
+eq(resumoResultado(null), null, "sem dados");
+eq(resumoResultado({ itens_na_campanha: 0, por_decisao: {} }).conversaoPct, 0, "campanha vazia não divide por zero");
+
+console.log("aviso na ficha do item");
+const linha = (o) => ({ preco_cheio: 100, desconto_pct: 20, campanhas: { nome: "Semana", status: "PUBLICADA", inicio_em: "2026-11-09T00:00:00Z", fim_em: "2026-11-20T00:00:00Z", ...o } });
+const ag = new Date("2026-11-10T12:00:00Z");
+eq(avisoCampanhaItem([linha({})], ag).ativa, true, "campanha ativa avisa");
+eq(avisoCampanhaItem([linha({ inicio_em: "2026-11-15T00:00:00Z" })], ag).ativa, false, "agendada também avisa");
+eq(avisoCampanhaItem([linha({ fim_em: "2026-11-10T00:00:00Z" })], ag), null, "encerrada não avisa");
+eq(avisoCampanhaItem([linha({ status: "CANCELADA" })], ag), null, "cancelada não avisa");
+eq(avisoCampanhaItem([{ ...linha({}), desconto_pct: 0 }], ag), null, "0% (excluído) não avisa");
+eq(avisoCampanhaItem([], ag), null, "sem campanha");

@@ -4,11 +4,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Loader2, Plus, Trash2, Megaphone, AlertTriangle, Copy, Send, Ban } from "lucide-react";
 import { ESTADOS } from "../lib/model";
 import {
-  listarCampanhas, regrasDe, listarOpcoes, salvarRascunho, excluirRascunho, simular, publicar, encerrar, duplicar, margensDaSimulacao,
+  listarCampanhas, regrasDe, listarOpcoes, salvarRascunho, excluirRascunho, simular, publicar, encerrar, duplicar, margensDaSimulacao, resultadoCampanha,
 } from "../lib/campanhas";
 import {
   TIPOS_REGRA, ARREDONDAMENTOS, ROTULO_STATUS, regraVazia, validarCampanha, statusCampanha, rotuloRegra,
-  isoParaBrasilia, conflitosDoErro, resumoSimulacao, contagem,
+  isoParaBrasilia, conflitosDoErro, resumoSimulacao, contagem, resumoResultado, ROTULO_DECISAO,
 } from "../lib/campanhasCore";
 
 const money = (v) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -215,6 +215,8 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
         </div>
       )}
 
+      {campanha && !rascunho && <Resultado id={campanha.id} />}
+
       {(sim || simBusy) && (
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
@@ -280,6 +282,53 @@ function Tabela({ linhas, margens }) {
         </tbody>
       </table>
       {!todos && linhas.length > 50 && <button onClick={() => setTodos(true)} className="text-xs font-bold text-orange-600 mt-1">Ver todos os {linhas.length}</button>}
+    </div>
+  );
+}
+
+function Resultado({ id }) {
+  const [r, setR] = useState(undefined); // undefined = carregando · null = falhou
+  const carregar = useCallback(() => resultadoCampanha(id).then(setR).catch(() => setR(null)), [id]);
+  useEffect(() => { carregar(); }, [carregar]);
+  const x = resumoResultado(r);
+  const caixa = (rot, val, sub) => <div className="rounded-lg bg-gray-50 p-2"><p className="text-[11px] text-gray-500">{rot}</p><p className="font-extrabold text-gray-900">{val}</p>{sub && <p className="text-[11px] text-gray-500">{sub}</p>}</div>;
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Resultado {r === undefined && <Loader2 className="inline w-3 h-3 animate-spin" />}</h3>
+        <button onClick={carregar} className="text-xs font-bold text-orange-600">Atualizar</button>
+      </div>
+      {r === null && <p className="text-sm text-red-600">Não foi possível carregar o resultado.</p>}
+      {x && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            {caixa("Vendidos", `${x.vendidos} de ${x.total}`, `${String(x.conversaoPct).replace(".", ",")}% da campanha`)}
+            {caixa("Receita", money(x.receita), `desconto concedido ${money(x.desconto)}`)}
+          </div>
+          <ul className="text-sm space-y-1">
+            {x.decisoes.filter((d) => Number(d.itens) > 0).map((d) => (
+              <li key={d.k} className="flex justify-between gap-2"><span className="text-gray-700">{ROTULO_DECISAO[d.k]}</span><b>{d.itens} · {money(d.receita)}</b></li>
+            ))}
+            {x.vendidos === 0 && <li className="text-gray-500">Nenhuma venda registrada ainda.</li>}
+          </ul>
+          {x.depoisDoFim > 0 && <p className="text-xs text-amber-800 bg-amber-50 rounded-lg p-2">{x.depoisDoFim} venda(s) fechada(s) depois do fim da campanha.</p>}
+          <div className="rounded-lg bg-gray-50 p-2 text-sm space-y-0.5">
+            <p><b>{x.sacolasAbertas}</b> sacola(s) a pagar com {x.itensEmSacola} item(ns) da campanha — desconto ainda comprometido: <b>{money(x.comprometido)}</b></p>
+            <p><b>{x.naoVendidos}</b> item(ns) da campanha ainda à venda, fora de sacola</p>
+            {x.foraDaSacola > 0 && <p><b>{x.foraDaSacola}</b> item(ns) vendido(s) na janela por outro caminho ({money(x.receitaFora)}), sem registro de campanha</p>}
+          </div>
+          {r.vendas?.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="text-left text-gray-500"><th className="py-1">Item</th><th>De</th><th>Vendido</th><th>Quando</th></tr></thead>
+                <tbody>{r.vendas.map((v) => (
+                  <tr key={v.sku} className="border-t border-gray-100"><td className="py-1">{v.produto || v.sku}<span className="block text-[10px] text-gray-400">{ROTULO_DECISAO[v.decisao]} · {v.sacola}</span></td><td className="text-gray-400 line-through">{money(v.preco_cheio)}</td><td className="font-bold">{money(v.valor_vendido)}</td><td className="text-gray-500">{fmtData(v.fechado_em)}</td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

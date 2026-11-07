@@ -1,4 +1,5 @@
 import CustoItemCard from "../components/CustoItemCard";
+import CampanhaItemAviso from "../components/CampanhaItemAviso";
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { lazySeguro } from "../lib/lazySeguro";
 import { supabase } from "../lib/supabase";
@@ -700,6 +701,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 pb-32 desk:px-6">
         <div hidden={tab !== "item"} className="max-w-3xl mx-auto break-words">
+        <CampanhaItemAviso sku={it.sku} />
         <CustoItemCard item={it} params={params} />
         {it.caixa_id && (
           <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 mb-4 shadow-sm">

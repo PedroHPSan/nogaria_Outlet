@@ -24,6 +24,7 @@ $PSQL < $MIG || { echo "FALHA: migration não é idempotente (2ª aplicação)";
 $PSQL < supabase/migrations/20261031130000_interesses_oferta.sql || { echo "FALHA: interesses"; exit 1; }
 $PSQL < supabase/migrations/20261104100000_acrescimo_euro_25.sql || { echo "FALHA: acréscimo €"; exit 1; }
 MIG4=supabase/migrations/20261107170000_campanha_superficies.sql
+MIG6=supabase/migrations/20261107190000_campanha_resultado.sql
 MIG5=supabase/migrations/20261107180000_campanha_sacola.sql
 MIG3=supabase/migrations/20261107160000_campanha_publica.sql
 $PSQL < $MIG3 || { echo "FALHA ao aplicar a migration da página pública"; exit 1; }
@@ -32,11 +33,14 @@ $PSQL < $MIG4 || { echo "FALHA ao aplicar a migration das superfícies"; exit 1;
 $PSQL < $MIG4 || { echo "FALHA: migration das superfícies não é idempotente"; exit 1; }
 $PSQL < $MIG5 || { echo "FALHA ao aplicar a migration da sacola"; exit 1; }
 $PSQL < $MIG5 || { echo "FALHA: migration da sacola não é idempotente"; exit 1; }
+$PSQL < $MIG6 || { echo "FALHA ao aplicar a migration do resultado"; exit 1; }
+$PSQL < $MIG6 || { echo "FALHA: migration do resultado não é idempotente"; exit 1; }
 OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_campanhas.sql 2>&1) || { echo "$OUT"; echo "FALHA: test_campanhas.sql abortou"; exit 1; }
 OUT2=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_publica.sql 2>&1) || { echo "$OUT2"; echo "FALHA: test_campanha_publica.sql abortou"; exit 1; }
 OUT3=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_superficies.sql 2>&1) || { echo "$OUT3"; echo "FALHA: test_campanha_superficies.sql abortou"; exit 1; }
 OUT4=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_sacola.sql 2>&1) || { echo "$OUT4"; echo "FALHA: test_campanha_sacola.sql abortou"; exit 1; }
-OUT="$OUT"$'\n'"$OUT2"$'\n'"$OUT3"$'\n'"$OUT4"
+OUT5=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_resultado.sql 2>&1) || { echo "$OUT5"; echo "FALHA: test_campanha_resultado.sql abortou"; exit 1; }
+OUT="$OUT"$'\n'"$OUT2"$'\n'"$OUT3"$'\n'"$OUT4"$'\n'"$OUT5"
 echo "$OUT"
 echo "$OUT" | grep -q "^FAIL" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }

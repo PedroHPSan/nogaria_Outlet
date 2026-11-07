@@ -165,3 +165,36 @@ export function pendentesDoErro(err) {
   if (!err || !/DECISAO_CAMPANHA/.test(String(err.message || ""))) return null;
   try { const a = JSON.parse(err.details || err.detail || "[]"); return Array.isArray(a) ? a : []; } catch { return []; }
 }
+
+// ---- Resultado ----
+export const ROTULO_DECISAO = {
+  no_prazo: "Vendido no prazo", manteve_promo: "Fechado depois do fim · manteve a promoção",
+  preco_cheio: "Fechado depois do fim · cobrado a preço cheio", sem_decisao: "Fechado depois do fim · sem decisão registrada",
+};
+const g = (r, k) => r?.por_decisao?.[k] || { itens: 0, receita: 0, desconto: 0 };
+// Números do painel: vendidos, receita, desconto concedido (tudo que saiu com preço abaixo do "de") e conversão sobre os itens da campanha.
+export function resumoResultado(r) {
+  if (!r) return null;
+  const decisoes = ["no_prazo", "manteve_promo", "preco_cheio", "sem_decisao"].map((k) => ({ k, ...g(r, k) }));
+  const vendidos = decisoes.reduce((s, d) => s + Number(d.itens), 0);
+  const receita = r2(decisoes.reduce((s, d) => s + Number(d.receita), 0));
+  const desconto = r2(decisoes.reduce((s, d) => s + Number(d.desconto), 0));
+  const total = Number(r.itens_na_campanha) || 0;
+  return {
+    decisoes, vendidos, receita, desconto, total,
+    conversaoPct: total > 0 ? r2((vendidos / total) * 100) : 0,
+    depoisDoFim: ["manteve_promo", "preco_cheio", "sem_decisao"].reduce((s, k) => s + Number(g(r, k).itens), 0),
+    comprometido: r2(Number(r.sacolas_abertas?.desconto_comprometido) || 0),
+    sacolasAbertas: Number(r.sacolas_abertas?.sacolas) || 0, itensEmSacola: Number(r.sacolas_abertas?.itens) || 0,
+    naoVendidos: Number(r.nao_vendidos) || 0, foraDaSacola: Number(r.fora_da_sacola?.itens) || 0, receitaFora: r2(Number(r.fora_da_sacola?.receita) || 0),
+  };
+}
+
+// Aviso na ficha do item: campanhas publicadas e ainda não encerradas que cobrem o SKU com desconto.
+export function avisoCampanhaItem(linhas, agora = new Date()) {
+  const vig = (linhas || []).filter((l) => Number(l.desconto_pct) > 0 && l.campanhas?.status === "PUBLICADA" && new Date(l.campanhas.fim_em) > agora);
+  if (!vig.length) return null;
+  vig.sort((a, b) => new Date(a.campanhas.inicio_em) - new Date(b.campanhas.inicio_em));
+  const l = vig[0];
+  return { campanha: l.campanhas.nome, ativa: new Date(l.campanhas.inicio_em) <= agora, inicio_em: l.campanhas.inicio_em, fim_em: l.campanhas.fim_em, preco_cheio: Number(l.preco_cheio), desconto_pct: Number(l.desconto_pct) };
+}
