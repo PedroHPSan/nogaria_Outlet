@@ -218,3 +218,44 @@ export function prazoPromo(itens) {
   const fins = (itens || []).filter((i) => emPromo(i) && i.campanha_fim).map((i) => i.campanha_fim).sort();
   return fins.length ? fmtPrazo(fins[0]) : null;
 }
+
+// ---- Auditoria dos produtos da campanha ----
+export const SITUACOES = {
+  na_campanha: ["Na campanha", "bg-emerald-100 text-emerald-800", "A peça recebe o desconto."],
+  excluida_0pct: ["Excluída (0%)", "bg-gray-200 text-gray-600", "Uma regra com 0% tirou esta peça da campanha."],
+  sem_preco: ["Sem preço", "bg-amber-100 text-amber-800", "A peça não tem preço de venda: defina o preço para ela entrar."],
+  indisponivel: ["Vendida/descartada", "bg-gray-200 text-gray-600", "A peça já foi vendida, entregue ou descartada."],
+  conflito: ["Em outra campanha", "bg-red-100 text-red-700", "Um produto só pode estar em uma campanha por vez no mesmo período."],
+  nao_incluida: ["Não incluída", "bg-sky-100 text-sky-800", "Casa com as regras, mas a campanha publicada não a congelou: use Reaplicar regras ou Incluir."],
+};
+export const ORDEM_SITUACOES = ["na_campanha", "nao_incluida", "sem_preco", "conflito", "indisponivel", "excluida_0pct"];
+
+export function resumoAuditoria(linhas) {
+  const por = Object.fromEntries(ORDEM_SITUACOES.map((k) => [k, 0]));
+  for (const l of linhas || []) por[l.situacao] = (por[l.situacao] || 0) + 1;
+  const na = (linhas || []).filter((l) => l.situacao === "na_campanha");
+  return { total: (linhas || []).length, por, naCampanha: por.na_campanha, foraDoCatalogo: na.filter((l) => !l.no_catalogo).length, manuais: na.filter((l) => l.origem === "manual").length };
+}
+
+export function filtrarAuditoria(linhas, { situacao = "", busca = "" } = {}) {
+  const q = String(busca || "").trim().toLowerCase();
+  return (linhas || []).filter((l) => (!situacao || l.situacao === situacao) && (!q || `${l.sku} ${l.produto || ""} ${l.grupo || ""}`.toLowerCase().includes(q)));
+}
+
+// SKUs colados (um por linha ou separados por vírgula/espaço/;). Maiúsculos, sem repetição, ignora lixo.
+export function lerSkusColados(texto) {
+  const tokens = String(texto || "").split(/[\s,;]+/).map((t) => t.trim().toUpperCase()).filter((t) => /^[A-Z0-9][A-Z0-9-]{2,}$/.test(t));
+  return [...new Set(tokens)];
+}
+
+export const ROTULO_LOG = { item_incluido: "Item incluído", item_removido: "Item removido", publicada: "Campanha publicada", cancelada: "Campanha cancelada", prazo_alterado: "Prazo/estado alterado" };
+// Mensagem amigável para os erros de publicação (NENHUM_ITEM: …).
+export const msgErroCampanha = (e) => String(e?.message || e || "").replace(/^NENHUM_ITEM:\s*/, "");
+
+// Regras de item (rascunho): adiciona/atualiza a regra "item" de cada SKU com o desconto (0 = excluir da campanha).
+export function comRegrasDeItem(regras, skus, pct) {
+  const set = new Set(skus);
+  const resto = (regras || []).filter((r) => !(r.tipo === "item" && set.has(String(r.alvo).toUpperCase()) && !r.canal));
+  return [...resto, ...skus.map((s) => ({ tipo: "item", alvo: s, canal: "", desconto_pct: String(pct) }))];
+}
+export const semRegraDeItem = (regras, sku) => (regras || []).filter((r) => !(r.tipo === "item" && String(r.alvo).toUpperCase() === String(sku).toUpperCase() && !r.canal));

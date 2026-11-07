@@ -97,3 +97,13 @@ export async function campanhasDoItem(sku) {
     .select("preco_cheio,desconto_pct,canal,campanhas(nome,inicio_em,fim_em,status)").eq("sku", sku);
   return data || [];
 }
+
+// ---- Auditoria dos produtos (campanha_auditar) e manutenção da campanha publicada ----
+export const auditarCampanha = async (id, canal = "*") => ok(await supabase.rpc("campanha_auditar", { p_id: id, p_canal: canal }));
+export const incluirItens = async (id, skus, pct, user) =>
+  ok(await supabase.rpc("campanha_incluir_itens", { p_id: id, p_skus: skus, p_pct: Number(pct), p_user: user?.email ?? null }));
+export const removerItemCampanha = async (id, sku, user) =>
+  ok(await supabase.rpc("campanha_remover_item", { p_id: id, p_sku: sku, p_user: user?.email ?? null }));
+export const reaplicarRegras = async (id, user) => ok(await supabase.rpc("campanha_reaplicar", { p_id: id, p_user: user?.email ?? null }));
+export const logCampanha = async (id, limite = 200) =>
+  ok(await supabase.from("campanha_log").select("id,sku,acao,detalhe,usuario,ts").eq("campanha_id", id).order("ts", { ascending: false }).limit(limite));

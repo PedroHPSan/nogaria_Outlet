@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { textoWhatsApp, textoInstagram, legendaProduto, legendaCard } from "../src/lib/divulgacao.js";
 import { cardProduto } from "../src/lib/cardCore.js";
+import { resumoAuditoria, filtrarAuditoria, lerSkusColados, comRegrasDeItem, semRegraDeItem, msgErroCampanha, SITUACOES, ORDEM_SITUACOES } from "../src/lib/campanhasCore.js";
 import { emPromo, pctPromo, prazoPromo } from "../src/lib/campanhasCore.js";
 import { textoGrupo, tituloOg, montarPayloadOferta } from "../src/lib/ofertaCore.js";
 import { textoGrupoEuro } from "../src/lib/precoEuro.js";
@@ -186,3 +187,26 @@ const cI = cardProduto(iP, "feed", {}).ops.filter((o) => o.k === "text").map((o)
 ok(cI.includes("R$ 70") && cI.includes("-30%") && cI.includes("DE R$ 100") && cI.some((s) => s.startsWith("PROMOÇÃO ATÉ 15/11")), "card do Instagram: preço, selo, DE riscado e prazo");
 ok(!cardProduto(iN, "feed", {}).ops.some((o) => o.k === "text" && /^-\d+%$/.test(o.s)), "card do Instagram sem campanha: sem selo");
 ok(!cardProduto(iP, "feed", { mostrarPreco: false }).ops.some((o) => o.k === "text" && o.s === "-30%"), "sem mostrar preço, nada de selo");
+
+console.log("auditoria dos produtos da campanha");
+const aud = [
+  { sku: "A1", produto: "Camisa", grupo: "Vestuário", situacao: "na_campanha", no_catalogo: true, origem: "regra" },
+  { sku: "A2", produto: "Saia", grupo: "Vestuário", situacao: "na_campanha", no_catalogo: false, origem: "manual" },
+  { sku: "A3", produto: "Blusa", grupo: "Vestuário", situacao: "sem_preco", no_catalogo: false },
+  { sku: "A4", produto: "Calça", grupo: "Vestuário", situacao: "indisponivel", no_catalogo: true },
+  { sku: "A5", produto: "Tênis", grupo: "Calçados", situacao: "nao_incluida", no_catalogo: true },
+];
+const ra = resumoAuditoria(aud);
+eq([ra.total, ra.naCampanha, ra.foraDoCatalogo, ra.manuais], [5, 2, 1, 1], "resumo: total, na campanha, fora do catálogo e manuais");
+eq([ra.por.sem_preco, ra.por.indisponivel, ra.por.nao_incluida, ra.por.conflito], [1, 1, 1, 0], "resumo por situação");
+eq(filtrarAuditoria(aud, { situacao: "na_campanha" }).map((l) => l.sku), ["A1", "A2"], "filtro por situação");
+eq(filtrarAuditoria(aud, { busca: "tênis" }).map((l) => l.sku), ["A5"], "busca por nome");
+eq(filtrarAuditoria(aud, { busca: "vestu", situacao: "sem_preco" }).map((l) => l.sku), ["A3"], "situação + busca");
+ok(ORDEM_SITUACOES.every((k) => SITUACOES[k]?.length === 3), "toda situação tem rótulo, cor e explicação");
+eq(lerSkusColados("nog-1-001, NOG-1-002;\nnog-1-001  x  NOG-9"), ["NOG-1-001", "NOG-1-002", "NOG-9"], "SKUs colados: maiúsculos, sem repetição e sem lixo curto");
+eq(lerSkusColados(""), [], "SKUs vazio");
+const rg = [{ tipo: "grupo", alvo: "Vestuário", canal: "", desconto_pct: "20" }, { tipo: "item", alvo: "NOG-1-001", canal: "", desconto_pct: "5" }, { tipo: "item", alvo: "NOG-1-002", canal: "instagram", desconto_pct: "9" }];
+const rg2 = comRegrasDeItem(rg, ["NOG-1-001", "NOG-1-003"], 0);
+eq(rg2.filter((r) => r.tipo === "item").map((r) => `${r.alvo}:${r.desconto_pct}:${r.canal || "*"}`), ["NOG-1-002:9:instagram", "NOG-1-001:0:*", "NOG-1-003:0:*"], "regra de item substitui a do mesmo SKU (sem canal) e preserva as de canal");
+eq(semRegraDeItem(rg2, "nog-1-001").some((r) => r.alvo === "NOG-1-001"), false, "desfazer a exceção do item");
+eq(msgErroCampanha({ message: "NENHUM_ITEM: nenhuma peça elegível" }), "nenhuma peça elegível", "erro de publicação sem o prefixo técnico");

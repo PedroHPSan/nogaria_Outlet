@@ -4,11 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Loader2, Plus, Trash2, Megaphone, AlertTriangle, Copy, Send, Ban } from "lucide-react";
 import { ESTADOS } from "../lib/model";
 import {
-  listarCampanhas, regrasDe, listarOpcoes, salvarRascunho, excluirRascunho, simular, publicar, encerrar, duplicar, margensDaSimulacao, resultadoCampanha,
+  listarCampanhas, regrasDe, listarOpcoes, salvarRascunho, excluirRascunho, simular, publicar, encerrar, duplicar, margensDaSimulacao, resultadoCampanha, auditarCampanha, incluirItens, removerItemCampanha, reaplicarRegras, logCampanha,
 } from "../lib/campanhas";
 import {
   TIPOS_REGRA, ARREDONDAMENTOS, ROTULO_STATUS, regraVazia, validarCampanha, statusCampanha, rotuloRegra,
   isoParaBrasilia, conflitosDoErro, resumoSimulacao, contagem, resumoResultado, ROTULO_DECISAO, linkCampanha, textoGrupoCampanha,
+  SITUACOES, ORDEM_SITUACOES, resumoAuditoria, filtrarAuditoria, lerSkusColados, comRegrasDeItem, semRegraDeItem, ROTULO_LOG, msgErroCampanha,
 } from "../lib/campanhasCore";
 
 const money = (v) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -78,6 +79,7 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
   const [canalSim, setCanalSim] = useState("*");
   const [sim, setSim] = useState(null); // { linhas, margens }
   const [simBusy, setSimBusy] = useState(false);
+  const [auditRev, setAuditRev] = useState(0); // sobe ao salvar/simular: recarrega a auditoria
 
   useEffect(() => { if (campanha) regrasDe(campanha.id).then((r) => setRegras(r.map((x) => ({ ...x, alvo: x.alvo || "", canal: x.canal || "", desconto_pct: String(Number(x.desconto_pct)) })))).catch((e) => setMsgs([e.message])); }, [campanha]);
 
@@ -108,7 +110,7 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
 
   const resumo = useMemo(() => (sim ? resumoSimulacao(sim.linhas, sim.margens) : null), [sim]);
 
-  const salvarESimular = async () => { const cid = await salvar(); if (cid) await rodarSimulacao(cid); };
+  const salvarESimular = async () => { const cid = await salvar(); if (cid) { await rodarSimulacao(cid); setAuditRev((x) => x + 1); } };
 
   const doPublicar = async () => {
     const cid = await salvar();
@@ -125,7 +127,7 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
         if (window.confirm(`Estes itens já estão em outra campanha no mesmo período:\n${txt}\n\nPublicar SEM esses itens?`)) {
           try { await publicar(cid, true, user); onVoltar(); } catch (e2) { setMsgs([e2.message || String(e2)]); }
         }
-      } else setMsgs([e.message || String(e)]);
+      } else setMsgs([msgErroCampanha(e)]);
     } finally { setBusy(false); }
   };
 
@@ -218,6 +220,11 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
       {campanha && !rascunho && campanha.status === "PUBLICADA" && <Divulgar c={campanha} regras={regras} />}
       {campanha && !rascunho && <Resultado id={campanha.id} />}
 
+      {id && (
+        <Auditoria key={`${id}|${canalSim}`} id={id} campanha={campanha} rascunho={rascunho} canal={canalSim} regras={regras} setRegras={setRegras} user={user}
+          rev={auditRev} onMudou={() => { setAuditRev((x) => x + 1); if (!rascunho) rodarSimulacao(id, canalSim); }} />
+      )}
+
       {(sim || simBusy) && (
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
@@ -227,7 +234,7 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
             </select>
           </div>
           {resumo && <Resumo r={resumo} />}
-          {sim && <Tabela linhas={sim.linhas} margens={sim.margens} />}
+          {sim && !id && <Tabela linhas={sim.linhas} margens={sim.margens} />}
         </div>
       )}
     </div>
@@ -354,6 +361,119 @@ function Divulgar({ c, regras }) {
       </div>
       {msg && <p className="text-xs text-emerald-700" role="status">{msg}</p>}
       <p className="text-[11px] text-gray-500">A página mostra só as peças já publicadas no catálogo (com foto). Antes do início aparece "começa em"; depois do fim, "encerrada".</p>
+    </div>
+  );
+}
+
+// Auditoria: todos os produtos que a campanha toca, com situação e motivo; incluir, excluir, remover, reaplicar e histórico.
+function Auditoria({ id, campanha, rascunho, canal, regras, setRegras, user, rev, onMudou }) {
+  const [linhas, setLinhas] = useState(undefined); // undefined = carregando · null = falhou
+  const [filtro, setFiltro] = useState("");
+  const [busca, setBusca] = useState("");
+  const [todos, setTodos] = useState(false);
+  const [colados, setColados] = useState("");
+  const [pct, setPct] = useState("20");
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState(null);
+  const publicada = campanha?.status === "PUBLICADA";
+  const andamento = publicada && new Date(campanha.fim_em) > new Date();
+
+  useEffect(() => { let vivo = true; setLinhas(undefined); auditarCampanha(id, canal).then((l) => vivo && setLinhas(l)).catch(() => vivo && setLinhas(null)); return () => { vivo = false; }; }, [id, canal, rev]);
+
+  const r = resumoAuditoria(linhas || []);
+  const vis = filtrarAuditoria(linhas || [], { situacao: filtro, busca });
+  const mostra = todos ? vis : vis.slice(0, 60);
+
+  const agir = async (fn, ok) => {
+    setBusy(true); setMsg(null);
+    try { const res = await fn(); setMsg({ ok: true, t: typeof ok === "function" ? ok(res) : ok }); onMudou(); }
+    catch (e) { setMsg({ ok: false, t: msgErroCampanha(e) }); } finally { setBusy(false); }
+  };
+  const incluir = () => {
+    const skus = lerSkusColados(colados);
+    const p = Number(String(pct).replace(",", "."));
+    if (!skus.length) { setMsg({ ok: false, t: "Cole um ou mais SKUs (um por linha ou separados por vírgula)." }); return; }
+    if (!(p > 0 && p <= 90)) { setMsg({ ok: false, t: "Desconto entre 0,01% e 90%." }); return; }
+    if (rascunho) { setRegras(comRegrasDeItem(regras || [], skus, p)); setColados(""); setMsg({ ok: true, t: `${skus.length} regra(s) de item adicionada(s). Toque em "Salvar e simular" para atualizar a auditoria.` }); return; }
+    agir(() => incluirItens(id, skus, p, user), (res) => `${res.incluidos.length} incluído(s)${res.ignorados.length ? `. Ignorados: ${res.ignorados.map((x) => `${x.sku} (${x.motivo})`).join("; ")}` : ""}`).then(() => setColados(""));
+  };
+  const excluirLinha = (l) => (rascunho ? setRegras(comRegrasDeItem(regras || [], [l.sku], 0)) : agir(() => removerItemCampanha(id, l.sku, user), `${l.sku} removido da campanha.`));
+  const carregarLog = () => logCampanha(id).then(setLog).catch(() => setLog([]));
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
+      <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Produtos da campanha {linhas === undefined && <Loader2 className="inline w-3 h-3 animate-spin" />}</h3>
+      {linhas === null && <p className="text-sm text-red-600">Não foi possível carregar a auditoria.</p>}
+      {linhas && (<>
+        <p className="text-sm text-gray-700"><b>{r.naCampanha}</b> peça(s) na campanha{r.manuais ? ` (${r.manuais} incluída(s) manualmente)` : ""}{canal !== "*" ? " neste canal" : ""}. {rascunho ? "Prévia: vale para quando você publicar." : "Lista congelada na publicação."}</p>
+        {r.naCampanha === 0 && <p className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-2">Nenhuma peça entra nesta campanha. Veja abaixo o motivo de cada peça que casa com as regras (sem preço, vendida, em outra campanha…) ou inclua peças por SKU.</p>}
+        {r.foraDoCatalogo > 0 && <p className="text-xs bg-sky-50 border border-sky-200 text-sky-900 rounded-lg p-2">{r.foraDoCatalogo} peça(s) da campanha <b>não aparecem no link /promo</b> porque não estão publicadas no catálogo (precisam de foto e preço validado). O desconto vale mesmo assim na sacola e nos links /p.</p>}
+        {andamento && r.por.nao_incluida > 0 && (
+          <div className="text-xs bg-sky-50 border border-sky-200 text-sky-900 rounded-lg p-2 flex flex-wrap items-center gap-2">
+            <span>{r.por.nao_incluida} peça(s) casam com as regras mas não entraram (chegaram depois da publicação).</span>
+            <button disabled={busy} onClick={() => agir(() => reaplicarRegras(id, user), (x) => `${x.linhas_incluidas} peça(s) incluída(s)${x.ignoradas_por_conflito ? `, ${x.ignoradas_por_conflito} ignorada(s) por conflito` : ""}.`)} className="px-3 py-1 rounded-lg bg-sky-700 text-white font-bold">Reaplicar regras</button>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          <button onClick={() => setFiltro("")} className={`px-2.5 py-1 rounded-full text-xs font-bold ${filtro === "" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>Todas {r.total}</button>
+          {ORDEM_SITUACOES.filter((k) => r.por[k] > 0).map((k) => (
+            <button key={k} onClick={() => setFiltro(filtro === k ? "" : k)} className={`px-2.5 py-1 rounded-full text-xs font-bold ${filtro === k ? "bg-gray-900 text-white" : SITUACOES[k][1]}`}>{SITUACOES[k][0]} {r.por[k]}</button>
+          ))}
+        </div>
+        {filtro && <p className="text-[11px] text-gray-500">{SITUACOES[filtro][2]}</p>}
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar SKU, produto ou categoria" className={inp} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead><tr className="text-left text-gray-500"><th className="py-1">Peça</th><th>De → Por</th><th>Situação</th><th /></tr></thead>
+            <tbody>
+              {mostra.map((l) => {
+                const sit = SITUACOES[l.situacao] || [l.situacao, "bg-gray-100 text-gray-600", ""];
+                const promo = Number(l.pct) > 0 && l.situacao === "na_campanha";
+                return (
+                  <tr key={l.sku} className="border-t border-gray-100 align-top">
+                    <td className="py-1.5 pr-2"><p className="font-semibold text-gray-800">{l.produto || l.sku}</p><p className="text-[10px] text-gray-400 font-mono">{l.sku} · {l.status}{l.origem === "manual" ? " · manual" : ""}{l.situacao === "na_campanha" ? (l.no_catalogo ? " · no catálogo" : " · fora do catálogo") : ""}</p></td>
+                    <td className="py-1.5 whitespace-nowrap">{promo ? <><span className="text-gray-400 line-through">{money(l.preco_cheio)}</span> <b>{money(l.preco)}</b> <span className="text-gray-500">({Number(l.pct)}%)</span></> : <span className="text-gray-500">{money(l.preco_ideal)}</span>}</td>
+                    <td className="py-1.5"><span title={sit[2]} className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${sit[1]}`}>{sit[0]}</span>{l.situacao === "conflito" && l.conflito_nome ? <p className="text-[10px] text-red-600">em "{l.conflito_nome}"</p> : null}</td>
+                    <td className="py-1.5 text-right">
+                      {l.situacao === "na_campanha" && (rascunho || andamento) && <button disabled={busy} onClick={() => excluirLinha(l)} className="text-[11px] font-bold text-red-600">{rascunho ? "Excluir" : "Remover"}</button>}
+                      {l.situacao === "excluida_0pct" && rascunho && <button onClick={() => setRegras(semRegraDeItem(regras || [], l.sku))} className="text-[11px] font-bold text-sky-700">Desfazer</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {vis.length === 0 && <tr><td colSpan={4} className="py-3 text-gray-400">Nenhuma peça neste filtro.</td></tr>}
+            </tbody>
+          </table>
+          {!todos && vis.length > 60 && <button onClick={() => setTodos(true)} className="text-xs font-bold text-orange-600 mt-1">Ver todas as {vis.length}</button>}
+        </div>
+
+        {(rascunho || andamento) && (
+          <details className="rounded-xl bg-gray-50 p-2.5">
+            <summary className="text-xs font-bold text-gray-700 cursor-pointer">Incluir produtos por SKU</summary>
+            <p className="text-[11px] text-gray-500 mt-1.5">Cole os SKUs (um por linha ou separados por vírgula) e o desconto. {rascunho ? "Vira regra de item (vale mais que categoria e geral); salve para atualizar." : "Entram na hora, com o preço de hoje como \"de\"; só entra peça com preço, não vendida e fora de outra campanha."}</p>
+            <textarea value={colados} onChange={(e) => setColados(e.target.value)} rows={3} placeholder={"NOG-1001-001\nNOG-1001-002"} className={`mt-1.5 ${inp} font-mono`} />
+            <div className="flex items-center gap-2 mt-1.5">
+              <div className="relative w-24"><input inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} className={`${inp} pr-5`} aria-label="Desconto" /><span className="absolute right-1.5 top-1.5 text-xs text-gray-400">%</span></div>
+              <button disabled={busy || !colados.trim()} onClick={incluir} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold disabled:opacity-40">Incluir</button>
+            </div>
+          </details>
+        )}
+        {msg && <p className={`text-xs ${msg.ok ? "text-emerald-700" : "text-red-600"}`} role="status">{msg.t}</p>}
+
+        {id && (
+          <details className="rounded-xl bg-gray-50 p-2.5" onToggle={(e) => e.target.open && log === null && carregarLog()}>
+            <summary className="text-xs font-bold text-gray-700 cursor-pointer">Histórico da campanha (quem incluiu/removeu e quando)</summary>
+            <div className="mt-1.5 space-y-1">
+              {log === null && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+              {log && log.length === 0 && <p className="text-[11px] text-gray-400">Sem registros.</p>}
+              {(log || []).map((h) => (
+                <p key={h.id} className="text-[11px] text-gray-600"><span className="text-gray-400">{fmtData(h.ts)}</span> · {ROTULO_LOG[h.acao] || h.acao}{h.sku ? ` · ${h.sku}` : ""}{h.detalhe?.origem === "manual" ? " (manual)" : ""} · {h.usuario || "—"}</p>
+              ))}
+            </div>
+          </details>
+        )}
+      </>)}
     </div>
   );
 }
