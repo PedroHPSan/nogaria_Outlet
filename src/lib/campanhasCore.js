@@ -259,3 +259,42 @@ export function comRegrasDeItem(regras, skus, pct) {
   return [...resto, ...skus.map((s) => ({ tipo: "item", alvo: s, canal: "", desconto_pct: String(pct) }))];
 }
 export const semRegraDeItem = (regras, sku) => (regras || []).filter((r) => !(r.tipo === "item" && String(r.alvo).toUpperCase() === String(sku).toUpperCase() && !r.canal));
+
+// ---- Publicar no catálogo as peças da campanha que ainda não estão lá ----
+export const MOTIVO_CATALOGO = { etapa: "etapa do item ainda não permite", sem_foto: "sem foto", sem_preco: "sem preço", sem_estado: "sem condição (estado)", sem_categoria: "sem categoria", reservado: "reservado/separado", vendido: "vendido" };
+
+/**
+ * Decide o que publicar: só peças da campanha (situação na_campanha), ainda fora do catálogo e ELEGÍVEIS pela regra do catálogo
+ * (`elegiveis` = { sku: { elegivel, motivos[] } }). As demais ficam com o motivo. Nunca mexe em peça fora da campanha.
+ */
+export function planejarPublicacaoCatalogo(linhasAuditoria, elegiveis) {
+  const alvo = (linhasAuditoria || []).filter((l) => l.situacao === "na_campanha" && !l.no_catalogo);
+  const publicar = [], ficam = [];
+  for (const l of alvo) {
+    const e = elegiveis?.[l.sku];
+    if (e?.elegivel) publicar.push(l.sku);
+    else ficam.push({ sku: l.sku, produto: l.produto, motivos: (e?.motivos?.length ? e.motivos : ["não avaliada"]).map((m) => MOTIVO_CATALOGO[m] || m) });
+  }
+  return { publicar, ficam, total: alvo.length };
+}
+
+// ---- Auditoria por produto (ficha do item): em quais campanhas ele está/esteve ----
+// `linhas` = campanha_itens do SKU (+ campanhas(...)); `vendas` = campanha_vendas do SKU. Mais recente primeiro.
+export function historicoDoProduto(linhas, vendas = [], agora = new Date()) {
+  const vend = new Map((vendas || []).map((v) => [v.campanha_id, v]));
+  const porCamp = new Map();
+  for (const l of linhas || []) {
+    if (!l.campanhas) continue;
+    const k = l.campanha_id;
+    const base = porCamp.get(k) || { campanha_id: k, nome: l.campanhas.nome, inicio_em: l.campanhas.inicio_em, fim_em: l.campanhas.fim_em, status: l.campanhas.status, canais: [], preco_cheio: Number(l.preco_cheio), desconto_pct: Number(l.desconto_pct), origem: l.regra_tipo === "manual" ? "manual" : "regra" };
+    base.canais.push(`${l.canal === "*" ? "todos" : l.canal}:${Number(l.desconto_pct)}%`);
+    if (Number(l.desconto_pct) > base.desconto_pct) base.desconto_pct = Number(l.desconto_pct);
+    porCamp.set(k, base);
+  }
+  return [...porCamp.values()].map((c) => {
+    const ini = new Date(c.inicio_em), fim = new Date(c.fim_em);
+    const estado = c.status === "CANCELADA" ? "cancelada" : ini > agora ? "agendada" : fim > agora ? "ativa" : "encerrada";
+    const v = vend.get(c.campanha_id) || null;
+    return { ...c, estado, preco_promo: Math.round(c.preco_cheio * (1 - c.desconto_pct / 100) * 100) / 100, venda: v };
+  }).sort((a, b) => new Date(b.inicio_em) - new Date(a.inicio_em));
+}

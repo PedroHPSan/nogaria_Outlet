@@ -701,7 +701,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 pb-32 desk:px-6">
         <div hidden={tab !== "item"} className="max-w-3xl mx-auto break-words">
-        <CampanhaItemAviso sku={it.sku} />
+        <CampanhaItemAviso sku={it.sku} user={user} />
         <CustoItemCard item={it} params={params} />
         {it.caixa_id && (
           <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 mb-4 shadow-sm">

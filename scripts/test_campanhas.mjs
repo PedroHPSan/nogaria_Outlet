@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { textoWhatsApp, textoInstagram, legendaProduto, legendaCard } from "../src/lib/divulgacao.js";
 import { cardProduto } from "../src/lib/cardCore.js";
-import { resumoAuditoria, filtrarAuditoria, lerSkusColados, comRegrasDeItem, semRegraDeItem, msgErroCampanha, SITUACOES, ORDEM_SITUACOES } from "../src/lib/campanhasCore.js";
+import { resumoAuditoria, filtrarAuditoria, lerSkusColados, comRegrasDeItem, semRegraDeItem, msgErroCampanha, SITUACOES, ORDEM_SITUACOES, planejarPublicacaoCatalogo, historicoDoProduto } from "../src/lib/campanhasCore.js";
 import { emPromo, pctPromo, prazoPromo } from "../src/lib/campanhasCore.js";
 import { textoGrupo, tituloOg, montarPayloadOferta } from "../src/lib/ofertaCore.js";
 import { textoGrupoEuro } from "../src/lib/precoEuro.js";
@@ -210,3 +210,32 @@ const rg2 = comRegrasDeItem(rg, ["NOG-1-001", "NOG-1-003"], 0);
 eq(rg2.filter((r) => r.tipo === "item").map((r) => `${r.alvo}:${r.desconto_pct}:${r.canal || "*"}`), ["NOG-1-002:9:instagram", "NOG-1-001:0:*", "NOG-1-003:0:*"], "regra de item substitui a do mesmo SKU (sem canal) e preserva as de canal");
 eq(semRegraDeItem(rg2, "nog-1-001").some((r) => r.alvo === "NOG-1-001"), false, "desfazer a exceção do item");
 eq(msgErroCampanha({ message: "NENHUM_ITEM: nenhuma peça elegível" }), "nenhuma peça elegível", "erro de publicação sem o prefixo técnico");
+
+console.log("publicar no catálogo as peças da campanha");
+const audC = [
+  { sku: "A1", produto: "Camisa", situacao: "na_campanha", no_catalogo: false },
+  { sku: "A2", produto: "Saia", situacao: "na_campanha", no_catalogo: false },
+  { sku: "A3", produto: "Blusa", situacao: "na_campanha", no_catalogo: true },
+  { sku: "A4", produto: "Calça", situacao: "sem_preco", no_catalogo: false },
+  { sku: "A5", produto: "Vestido", situacao: "na_campanha", no_catalogo: false },
+];
+const pl2 = planejarPublicacaoCatalogo(audC, { A1: { elegivel: true, motivos: [] }, A2: { elegivel: false, motivos: ["sem_foto", "sem_estado"] }, A3: { elegivel: true, motivos: [] }, A4: { elegivel: true, motivos: [] } });
+eq(pl2.publicar, ["A1"], "publica só a que é da campanha, está fora do catálogo e é elegível");
+eq(pl2.ficam.map((f) => `${f.sku}:${f.motivos.join("+")}`), ["A2:sem foto+sem condição (estado)", "A5:não avaliada"], "as demais ficam com o motivo em português");
+eq(pl2.total, 3, "total = peças da campanha fora do catálogo");
+ok(!pl2.publicar.includes("A4") && !pl2.publicar.includes("A3"), "nunca publica peça fora da campanha nem já publicada");
+eq(planejarPublicacaoCatalogo([], {}).publicar, [], "sem peças, nada a publicar");
+
+console.log("auditoria por produto (ficha do item)");
+const agP = new Date("2026-11-10T12:00:00Z");
+const linP = [
+  { campanha_id: "c1", preco_cheio: 100, desconto_pct: 20, canal: "whatsapp", regra_tipo: "grupo", campanhas: { nome: "Black", inicio_em: "2026-11-07T17:30:00Z", fim_em: "2026-11-20T00:00:00Z", status: "PUBLICADA" } },
+  { campanha_id: "c1", preco_cheio: 100, desconto_pct: 30, canal: "instagram", regra_tipo: "grupo", campanhas: { nome: "Black", inicio_em: "2026-11-07T17:30:00Z", fim_em: "2026-11-20T00:00:00Z", status: "PUBLICADA" } },
+  { campanha_id: "c0", preco_cheio: 90, desconto_pct: 10, canal: "*", regra_tipo: "manual", campanhas: { nome: "Antiga", inicio_em: "2026-10-01T00:00:00Z", fim_em: "2026-10-05T00:00:00Z", status: "PUBLICADA" } },
+];
+const hp = historicoDoProduto(linP, [{ campanha_id: "c0", valor_vendido: 81, decisao: "no_prazo", origem_ref: "ORC-1" }], agP);
+eq(hp.map((h) => `${h.nome}:${h.estado}`), ["Black:ativa", "Antiga:encerrada"], "mais recente primeiro, com o estado de cada campanha");
+eq([hp[0].canais.join("|"), hp[0].desconto_pct, hp[0].preco_promo], ["whatsapp:20%|instagram:30%", 30, 70], "canais com % e o maior desconto");
+eq([hp[1].origem, hp[1].venda?.valor_vendido, hp[1].preco_promo], ["manual", 81, 81], "inclusão manual e a venda dentro da campanha");
+eq(historicoDoProduto([], []), [], "produto sem campanha");
+eq(historicoDoProduto([{ ...linP[0], campanhas: { ...linP[0].campanhas, status: "CANCELADA" } }], [], agP)[0].estado, "cancelada", "campanha cancelada");

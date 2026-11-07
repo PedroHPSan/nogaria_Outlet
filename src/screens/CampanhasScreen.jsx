@@ -4,12 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Loader2, Plus, Trash2, Megaphone, AlertTriangle, Copy, Send, Ban } from "lucide-react";
 import { ESTADOS } from "../lib/model";
 import {
-  listarCampanhas, regrasDe, listarOpcoes, salvarRascunho, excluirRascunho, simular, publicar, encerrar, duplicar, margensDaSimulacao, resultadoCampanha, auditarCampanha, incluirItens, removerItemCampanha, reaplicarRegras, logCampanha,
+  listarCampanhas, regrasDe, listarOpcoes, salvarRascunho, excluirRascunho, simular, publicar, encerrar, duplicar, margensDaSimulacao, resultadoCampanha, auditarCampanha, incluirItens, removerItemCampanha, reaplicarRegras, logCampanha, elegibilidadeDe, publicarPecasNoCatalogo,
 } from "../lib/campanhas";
 import {
   TIPOS_REGRA, ARREDONDAMENTOS, ROTULO_STATUS, regraVazia, validarCampanha, statusCampanha, rotuloRegra,
   isoParaBrasilia, conflitosDoErro, resumoSimulacao, contagem, resumoResultado, ROTULO_DECISAO, linkCampanha, textoGrupoCampanha,
-  SITUACOES, ORDEM_SITUACOES, resumoAuditoria, filtrarAuditoria, lerSkusColados, comRegrasDeItem, semRegraDeItem, ROTULO_LOG, msgErroCampanha,
+  SITUACOES, ORDEM_SITUACOES, resumoAuditoria, filtrarAuditoria, lerSkusColados, comRegrasDeItem, semRegraDeItem, ROTULO_LOG, msgErroCampanha, planejarPublicacaoCatalogo,
 } from "../lib/campanhasCore";
 
 const money = (v) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -376,6 +376,8 @@ function Auditoria({ id, campanha, rascunho, canal, regras, setRegras, user, rev
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState(null);
+  const [prog, setProg] = useState(null); // publicação no catálogo: { ok, falhas, total }
+  const [planoPub, setPlanoPub] = useState(null); // confirmação na tela: { publicar:[], ficam:[] }
   const publicada = campanha?.status === "PUBLICADA";
   const andamento = publicada && new Date(campanha.fim_em) > new Date();
 
@@ -399,6 +401,26 @@ function Auditoria({ id, campanha, rascunho, canal, regras, setRegras, user, rev
     agir(() => incluirItens(id, skus, p, user), (res) => `${res.incluidos.length} incluído(s)${res.ignorados.length ? `. Ignorados: ${res.ignorados.map((x) => `${x.sku} (${x.motivo})`).join("; ")}` : ""}`).then(() => setColados(""));
   };
   const excluirLinha = (l) => (rascunho ? setRegras(comRegrasDeItem(regras || [], [l.sku], 0)) : agir(() => removerItemCampanha(id, l.sku, user), `${l.sku} removido da campanha.`));
+  // Publica no catálogo SÓ as peças desta campanha que ainda estão fora e são elegíveis (foto, preço, condição, etapa).
+  const prepararPublicacao = async () => {
+    setBusy(true); setMsg(null); setProg(null); setPlanoPub(null);
+    try {
+      const alvo = (linhas || []).filter((l) => l.situacao === "na_campanha" && !l.no_catalogo).map((l) => l.sku);
+      const plano = planejarPublicacaoCatalogo(linhas, await elegibilidadeDe(alvo));
+      if (!plano.publicar.length) { setMsg({ ok: false, t: `Nenhuma das ${plano.total} peça(s) está elegível para o catálogo: ${plano.ficam.slice(0, 5).map((f) => `${f.sku} (${f.motivos.join(", ")})`).join("; ")}` }); return; }
+      setPlanoPub(plano);
+    } catch (e) { setMsg({ ok: false, t: msgErroCampanha(e) }); } finally { setBusy(false); }
+  };
+  const publicarNoCatalogo = async () => {
+    const plano = planoPub; setPlanoPub(null);
+    setBusy(true); setMsg(null); setProg(null);
+    try {
+      const r = await publicarPecasNoCatalogo(plano.publicar, setProg);
+      const fora = plano.ficam.map((f) => `${f.sku} (${f.motivos.join(", ")})`);
+      setMsg({ ok: r.erros.length === 0, t: `${r.ok} peça(s) publicada(s) no catálogo.${r.erros.length ? ` Falhas: ${r.erros.map((e) => `${e.sku} (${e.erro})`).join("; ")}.` : ""}${fora.length ? ` Ficaram de fora: ${fora.join("; ")}.` : ""}` });
+      onMudou();
+    } catch (e) { setMsg({ ok: false, t: msgErroCampanha(e) }); } finally { setBusy(false); setProg(null); }
+  };
   const carregarLog = () => logCampanha(id).then(setLog).catch(() => setLog([]));
 
   return (
@@ -408,7 +430,20 @@ function Auditoria({ id, campanha, rascunho, canal, regras, setRegras, user, rev
       {linhas && (<>
         <p className="text-sm text-gray-700"><b>{r.naCampanha}</b> peça(s) na campanha{r.manuais ? ` (${r.manuais} incluída(s) manualmente)` : ""}{canal !== "*" ? " neste canal" : ""}. {rascunho ? "Prévia: vale para quando você publicar." : "Lista congelada na publicação."}</p>
         {r.naCampanha === 0 && <p className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-2">Nenhuma peça entra nesta campanha. Veja abaixo o motivo de cada peça que casa com as regras (sem preço, vendida, em outra campanha…) ou inclua peças por SKU.</p>}
-        {r.foraDoCatalogo > 0 && <p className="text-xs bg-sky-50 border border-sky-200 text-sky-900 rounded-lg p-2">{r.foraDoCatalogo} peça(s) da campanha <b>não aparecem no link /promo</b> porque não estão publicadas no catálogo (precisam de foto e preço validado). O desconto vale mesmo assim na sacola e nos links /p.</p>}
+        {r.foraDoCatalogo > 0 && (
+          <div className="text-xs bg-sky-50 border border-sky-200 text-sky-900 rounded-lg p-2 space-y-1.5">
+            <p>{r.foraDoCatalogo} peça(s) da campanha <b>não aparecem no link /promo</b> porque não estão publicadas no catálogo (precisam de foto, preço, condição e etapa ≥ Fotografado). O desconto vale mesmo assim na sacola e nos links /p.</p>
+            {!planoPub ? (
+              <button disabled={busy} onClick={prepararPublicacao} className="px-3 py-1.5 rounded-lg bg-sky-700 text-white font-bold disabled:opacity-50">{prog ? `Publicando… ${prog.ok + prog.falhas}/${prog.total}` : "Publicar no catálogo as elegíveis desta campanha"}</button>
+            ) : (
+              <div className="rounded-lg bg-white border border-sky-300 p-2 space-y-1.5">
+                <p className="font-bold">Publicar {planoPub.publicar.length} peça(s) desta campanha no catálogo (WhatsApp/Meta)?</p>
+                {planoPub.ficam.length > 0 && <p className="text-[11px] text-gray-600">{planoPub.ficam.length} ficam de fora por não atenderem às regras: {planoPub.ficam.map((f) => `${f.sku} (${f.motivos.join(", ")})`).join("; ")}.</p>}
+                <div className="flex gap-2"><button onClick={publicarNoCatalogo} className="px-3 py-1.5 rounded-lg bg-sky-700 text-white font-bold">Confirmar e publicar</button><button onClick={() => setPlanoPub(null)} className="px-3 py-1.5 rounded-lg border border-gray-300 font-bold text-gray-700">Cancelar</button></div>
+              </div>
+            )}
+          </div>
+        )}
         {andamento && r.por.nao_incluida > 0 && (
           <div className="text-xs bg-sky-50 border border-sky-200 text-sky-900 rounded-lg p-2 flex flex-wrap items-center gap-2">
             <span>{r.por.nao_incluida} peça(s) casam com as regras mas não entraram (chegaram depois da publicação).</span>
