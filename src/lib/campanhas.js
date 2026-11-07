@@ -94,7 +94,22 @@ export const resultadoCampanha = async (id) => ok(await supabase.rpc("campanha_r
 // Campanhas que cobrem o SKU (para o aviso na ficha do item).
 export async function campanhasDoItem(sku) {
   const { data } = await supabase.from("campanha_itens")
-    .select("preco_cheio,desconto_pct,canal,campanhas(nome,inicio_em,fim_em,status)").eq("sku", sku);
+    .select("campanha_id,preco_cheio,desconto_pct,canal,regra_tipo,campanhas(nome,inicio_em,fim_em,status)").eq("sku", sku);
+  return data || [];
+}
+
+// Vendas do SKU dentro de campanhas e o log (quem incluiu/removeu) — auditoria por produto.
+export async function vendasEHistoricoDoItem(sku) {
+  const [v, l] = await Promise.all([
+    supabase.from("campanha_vendas").select("campanha_id,valor_vendido,preco_promo,decisao,fechado_em,origem_ref").eq("sku", sku),
+    supabase.from("campanha_log").select("id,campanha_id,acao,detalhe,usuario,ts").eq("sku", sku).order("ts", { ascending: false }).limit(50),
+  ]);
+  return { vendas: v.data || [], log: l.data || [] };
+}
+
+// Campanhas publicadas e ainda em andamento (destino de "incluir este produto").
+export async function campanhasEmAndamento() {
+  const { data } = await supabase.from("campanhas").select("id,nome,inicio_em,fim_em,status").eq("status", "PUBLICADA").gt("fim_em", new Date().toISOString()).order("inicio_em", { ascending: false });
   return data || [];
 }
 
@@ -107,3 +122,21 @@ export const removerItemCampanha = async (id, sku, user) =>
 export const reaplicarRegras = async (id, user) => ok(await supabase.rpc("campanha_reaplicar", { p_id: id, p_user: user?.email ?? null }));
 export const logCampanha = async (id, limite = 200) =>
   ok(await supabase.from("campanha_log").select("id,sku,acao,detalhe,usuario,ts").eq("campanha_id", id).order("ts", { ascending: false }).limit(limite));
+
+// Elegibilidade ao catálogo (regra única C1) de várias peças: { sku: { elegivel, motivos } }.
+export async function elegibilidadeDe(skus) {
+  const out = {};
+  for (let i = 0; i < skus.length; i += 10) {
+    const res = await Promise.all(skus.slice(i, i + 10).map((sku) => supabase.rpc("catalogo_elegibilidade", { p_sku: sku })));
+    res.forEach((r, k) => { const row = r.data?.[0]; if (row) out[skus[i + k]] = { elegivel: !!row.elegivel, motivos: row.motivos || [] }; });
+  }
+  return out;
+}
+
+// Publica no catálogo (WhatsApp/Meta) SÓ as peças dadas (as elegíveis da campanha). Idempotente. Devolve { ok, erros:[{sku, erro}] }.
+export async function publicarPecasNoCatalogo(skus, onProgresso) {
+  const { publicarLote } = await import("./catalogoMeta");
+  const itens = [];
+  for (let i = 0; i < skus.length; i += 100) itens.push(...ok(await supabase.from("itens").select("*").in("sku", skus.slice(i, i + 100))));
+  return publicarLote(itens, { simultaneos: 3, onProgresso });
+}
