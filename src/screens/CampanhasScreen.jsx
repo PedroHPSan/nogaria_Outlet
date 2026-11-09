@@ -1,6 +1,6 @@
 // Campanhas de promoção (equipe): lista, editor de regras, simulação/previsibilidade e publicar/encerrar.
 // Preço sempre calculado no servidor (RPC campanha_simular); aqui só se mostra. Spec: docs/superpowers/specs/2026-11-07-campanhas-promocao-design.md
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Loader2, Plus, Trash2, Megaphone, AlertTriangle, Copy, Send, Ban } from "lucide-react";
 import { ESTADOS } from "../lib/model";
 import {
@@ -82,6 +82,14 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
   const [auditRev, setAuditRev] = useState(0); // sobe ao salvar/simular: recarrega a auditoria
 
   useEffect(() => { if (campanha) regrasDe(campanha.id).then((r) => setRegras(r.map((x) => ({ ...x, alvo: x.alvo || "", canal: x.canal || "", desconto_pct: String(Number(x.desconto_pct)) })))).catch((e) => setMsgs([e.message])); }, [campanha]);
+
+  // Campanha só com regras de UM canal (ex.: só WhatsApp): "Todos os canais" mostraria 0 peças. Abre direto nesse canal.
+  const tocouCanal = useRef(false);
+  useEffect(() => {
+    if (tocouCanal.current || !regras?.length) return;
+    const canais = [...new Set(regras.map((r) => r.canal))];
+    if (canais.length === 1 && canais[0]) { tocouCanal.current = true; setCanalSim(canais[0]); }
+  }, [regras]);
 
   const nomes = useMemo(() => Object.fromEntries(opcoes.canais.map((c) => [c.codigo, c.nome])), [opcoes.canais]);
   const macros = useMemo(() => [...new Set(opcoes.grupos.map((g) => g.macro).filter(Boolean))].sort(), [opcoes.grupos]);
@@ -229,7 +237,7 @@ function Editor({ campanha, user, params, lotes, opcoes, onVoltar, onAbrir }) {
         <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Previsibilidade {simBusy && <Loader2 className="inline w-3 h-3 animate-spin" />}</h3>
-            <select className="rounded-lg border border-gray-300 px-2 py-1 text-xs" value={canalSim} onChange={(e) => setCanalSim(e.target.value)}>
+            <select className="rounded-lg border border-gray-300 px-2 py-1 text-xs" value={canalSim} onChange={(e) => { tocouCanal.current = true; setCanalSim(e.target.value); }}>
               <option value="*">Todos os canais</option>{opcoes.canais.map((c) => <option key={c.codigo} value={c.codigo}>{c.nome}</option>)}
             </select>
           </div>
