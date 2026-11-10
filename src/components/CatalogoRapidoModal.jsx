@@ -105,7 +105,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   // Preço e campanha relidos do banco NA HORA de gerar: o modal pode ter ficado aberto enquanto o preço ou a campanha mudava.
   // Devolve os itens como o cliente vê agora (preço da campanha + "de" riscado) — para cards, legendas, texto do WhatsApp, fila do
-  // Instagram e CSV. Os links /p e /c e o PDF levam o preço cheio (as páginas aplicam a promoção ao vivo).
+  // Instagram, CSV e PDF. Os links /p e /c levam o preço cheio (as páginas aplicam a promoção ao vivo).
   const itensAgora = async () => {
     const lista = await comPrecosAtuais(itens);
     const m = await promosDosItens(lista); // campanha vigente por SKU (o preço vem do servidor)
@@ -119,7 +119,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      const { blob, resumo: r } = await gerarCatalogoPdfDeItens(await comPrecosAtuais(itens), {
+      const { blob, resumo: r } = await gerarCatalogoPdfDeItens(await itensAgora(), {
         modelo, tema, colunas, titulo, edicao: edicaoAtual(), validade,
         campos: { foto: modelo === "lista" ? comFoto : comFoto, preco: mostrarPreco, qr: comQr },
         contato: { nome: contatoNome, ...(contatoBase || {}) },

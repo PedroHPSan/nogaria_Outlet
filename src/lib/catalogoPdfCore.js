@@ -28,7 +28,10 @@ export function formatarPreco(v) {
 }
 
 // "de" só aparece quando há referência rastreável MAIOR que o preço de venda.
+// Peça em campanha: o "de" é o preço cheio da peça (o PDF sai com o preço da promoção, como card e texto).
 export function precoDe(it, spec) {
+  const cheio = Number(it.preco_cheio);
+  if (Number(it.desconto_pct) > 0 && cheio > (precoVenda(it) || 0)) return cheio;
   if (!spec.campos.de) return null;
   const ref = Number(it.preco_ref_novo);
   return ref > (precoVenda(it) || 0) ? ref : null;
