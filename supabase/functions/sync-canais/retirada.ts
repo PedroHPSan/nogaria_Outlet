@@ -1,7 +1,7 @@
 // Handlers de retirada de canal (job criado pelo trigger itens_retirar_canais): catalogo.retirar e amazon.quantidade.
 // Em dry-run (SYNC_DRY_RUN=1 / AMZ_DRY_RUN=1) só registram no log. Falha NÃO é silenciosa: erro vira retry/`morto` e aparece nos alertas.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { marcarEmEstoque, marcarSemEstoque } from "../_shared/metaCatalogo.ts";
+import { atualizarPrecos, marcarEmEstoque, marcarSemEstoque, type PrecoCatalogo } from "../_shared/metaCatalogo.ts";
 import { atualizarQuantidade } from "../_shared/amazon.ts";
 
 type Ctx = { dryRun: boolean; admin: SupabaseClient };
@@ -25,6 +25,23 @@ export async function reporCatalogo(payload: Record<string, unknown>, ctx: Ctx) 
   const token = Deno.env.get("META_CATALOG_TOKEN"), catalogId = Deno.env.get("META_CATALOG_ID");
   if (!token || !catalogId) { console.warn(`catalogo.repor ${sku}: META_CATALOG_TOKEN/META_CATALOG_ID ausentes — o feed repõe em até 1 h`); return; }
   await marcarEmEstoque([sku], { catalogId, token, versao: Deno.env.get("META_API_VERSION") ?? undefined });
+}
+
+// Preço/promoção mudou (ficha, campanha publicada/encerrada, peça incluída/removida): empurra o preço ATUAL para a Meta.
+// O estado é lido na hora de executar (RPC catalogo_meta_preco, mesma regra do feed); o feed de hora em hora reconcilia.
+export async function precoCatalogo(payload: Record<string, unknown>, ctx: Ctx) {
+  const skus = ((payload.skus ?? []) as unknown[]).map(String);
+  if (!skus.length) return;
+  if (ctx.dryRun) { console.log(`[catalogo dry-run] atualizaria o preço de ${skus.length} peça(s) na Meta`); return; }
+  const token = Deno.env.get("META_CATALOG_TOKEN"), catalogId = Deno.env.get("META_CATALOG_ID");
+  if (!token || !catalogId) { console.warn(`catalogo.preco (${skus.length} peças): META_CATALOG_TOKEN/META_CATALOG_ID ausentes — o feed atualiza em até 1 h`); return; }
+  const { data, error } = await ctx.admin.rpc("catalogo_meta_preco", { p_skus: skus });
+  if (error) throw new Error(`catalogo_meta_preco: ${error.message}`);
+  const itens = ((data ?? []) as Record<string, unknown>[]).map((r): PrecoCatalogo => ({
+    sku: String(r.sku), price: Number(r.price),
+    sale_price: r.sale_price == null ? null : Number(r.sale_price), janela: r.janela == null ? null : String(r.janela),
+  }));
+  await atualizarPrecos(itens, { catalogId, token, versao: Deno.env.get("META_API_VERSION") ?? undefined });
 }
 
 async function tokenLwa(admin: SupabaseClient): Promise<string> {

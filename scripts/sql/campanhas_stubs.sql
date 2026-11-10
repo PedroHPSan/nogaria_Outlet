@@ -16,3 +16,10 @@ create function canal_ativo(p_canal text) returns boolean language sql stable as
 -- F4: colunas/funções que o feed e a /i usam
 alter table itens add column if not exists titulo_anuncio text, add column if not exists tamanho text;
 create function catalogo_elegibilidade(p_sku text) returns table (motivos text[]) language sql stable as $$ select array[]::text[] $$;
+
+-- Fila de jobs (omnichannel_base): os gatilhos de preço do catálogo da Meta (20261110130000) enfileiram `catalogo.preco`.
+create table if not exists integracao_jobs (id bigint generated always as identity primary key, tipo text not null, payload jsonb not null default '{}'::jsonb,
+  idem_key text not null unique, status text not null default 'pendente', proximo_em timestamptz not null default now());
+create or replace function enfileirar_job(p_tipo text, p_payload jsonb, p_idem_key text, p_proximo_em timestamptz default now()) returns bigint
+language sql as $$ insert into integracao_jobs (tipo, payload, idem_key, proximo_em) values (p_tipo, coalesce(p_payload,'{}'::jsonb), p_idem_key, coalesce(p_proximo_em, now()))
+  on conflict (idem_key) do nothing returning id; $$;
