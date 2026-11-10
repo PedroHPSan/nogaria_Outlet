@@ -14,7 +14,7 @@ import { textoGrupoEuro } from "../lib/precoEuro";
 import { MAX_ITENS_OFERTA, textoGrupo } from "../lib/ofertaCore";
 import { textoWhatsApp, textoInstagram, legendaProduto, csvCatalogo } from "../lib/divulgacao";
 import { enviarParaFilaInstagram } from "../lib/filaPublicacao";
-import { promosDosItens } from "../lib/ofertaPublica";
+import { promosDosItens, comPrecosAtuais } from "../lib/ofertaPublica";
 import { comPromo } from "../lib/campanhasCore";
 import { FORMATOS } from "../lib/cardCore";
 import { normalizarSpec } from "../lib/catalogoSpec";
@@ -96,7 +96,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     (async () => {
       try {
         // Aba Catálogo já entrega os itens filtrados; seleção e sala buscam pelo servidor.
-        const lista = itensProntos || await listarItensCatalogo(salaId ? { salaId } : { skus });
+        const lista = await comPrecosAtuais(itensProntos || await listarItensCatalogo(salaId ? { salaId } : { skus }));
         if (cancel) return;
         setItens(lista);
         promosDosItens(lista).then((m) => !cancel && setPromos(m)).catch(() => {});
@@ -147,7 +147,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   };
 
   const gerarLinkPublico = () => executar(async () => {
-    const secoes = agruparCatalogo(dedupCatalogo(itens), "categoria");
+    const secoes = agruparCatalogo(dedupCatalogo(await comPrecosAtuais(itens)), "categoria");
     const c = contato();
     const res = await publicarCatalogo(secoes, { titulo, edicao: edicaoAtual(), comFoto, mostrarPreco, contato: { nome: c.nome, whatsapp: c.whatsapp, label: c.whatsappLabel, extras: c.extras } });
     setLink(res.url); registrar("link");
