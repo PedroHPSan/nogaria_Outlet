@@ -8,7 +8,7 @@ import { textoGrupo, tituloOg, montarPayloadOferta } from "../src/lib/ofertaCore
 import { textoGrupoEuro } from "../src/lib/precoEuro.js";
 import { cardOgProduto } from "../src/lib/cardCore.js";
 import { adicionarItem, mensagemCobranca, totaisComDecisao } from "../src/lib/sacolasCore.js";
-import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem, linkCampanha, textoGrupoCampanha, comPromo } from "../src/lib/campanhasCore.js";
+import { brasiliaParaIso, isoParaBrasilia, validarCampanha, statusCampanha, rotuloRegra, contagem, conflitosDoErro, resumoSimulacao, offsetServidor, msAte, faseCampanha, fmtPrazo, mensagemQuero, aplicarPromo, promoQueTerminaPrimeiro, aplicarPromoSacola, promoVencida, pendentesDoErro, resumoResultado, avisoCampanhaItem, linkCampanha, textoGrupoCampanha, comPromo, comPrecoAtual } from "../src/lib/campanhasCore.js";
 
 const ok = (c, msg) => { assert.ok(c, msg); console.log(`  ok  ${msg}`); };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); console.log(`  ok  ${msg}`); };
@@ -96,6 +96,10 @@ eq(aplicarPromo(base, { preco: 80, preco_cheio: 100, desconto_pct: 20 }), { ...b
 eq(aplicarPromo(base, null), base, "sem promo não mexe");
 eq(aplicarPromo(base, { preco: 100, preco_cheio: 100, desconto_pct: 0 }), base, "promo que não baixa o preço é ignorada");
 eq(aplicarPromo(base, { preco: 0, preco_cheio: 100 }), base, "preço promocional inválido é ignorado");
+eq(comPrecoAtual({ sku: "X", preco: 29.07 }, 57), { sku: "X", preco: 57 }, "link enviado: preço atual substitui o do snapshot");
+eq(comPrecoAtual({ sku: "X", preco: null }, 57), { sku: "X", preco: null }, "link sem preço continua sem preço");
+eq(comPrecoAtual({ sku: "X", preco: 29.07 }, undefined), { sku: "X", preco: 29.07 }, "sem resposta do servidor vale o snapshot");
+eq(aplicarPromo(comPrecoAtual({ sku: "X", preco: 29.07 }, 57), { preco: 45.6, preco_cheio: 57, desconto_pct: 20 }).preco, 45.6, "preço atual + promoção");
 eq(promoQueTerminaPrimeiro({ a: { fim_em: "2026-11-20T00:00:00Z" }, b: { fim_em: "2026-11-15T00:00:00Z" } }).fim_em, "2026-11-15T00:00:00Z", "a que termina primeiro");
 eq(promoQueTerminaPrimeiro({}), null, "sem promoções");
 

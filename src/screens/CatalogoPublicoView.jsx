@@ -1,8 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { buscarCatalogoPublico, registrarVisualizacao } from "../lib/catalogoPublico";
+import { buscarPrecosOferta } from "../lib/ofertaPublica";
+import { aplicarPromo, comPrecoAtual } from "../lib/campanhasCore";
+import { useRevalidar } from "../lib/useRevalidar";
 import { EMPRESA } from "../lib/empresa";
 import { fmtBRL } from "../lib/model";
 import { Loader2, Boxes, MessageCircle } from "lucide-react";
+
+// Preço com centavos quando houver (o preço promocional quase nunca é redondo; fmtBRL arredondaria R$ 45,60 para R$ 46).
+const brl = (v) => (Number.isInteger(Number(v)) ? fmtBRL(v) : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 
 // Selos de condição → cor (mesma paleta da galeria interna).
 const BADGE_CLS = {
@@ -12,11 +18,19 @@ const BADGE_CLS = {
   asis: "bg-gray-200 text-gray-700",
 };
 
-// Página PÚBLICA (sem login) de um catálogo compartilhado. Lê só o snapshot do
-// slug; renderiza a partir do payload autocontido.
+// Página PÚBLICA (sem login) de um catálogo compartilhado. Fotos e textos vêm do snapshot do slug;
+// preço e promoção vêm ao vivo do servidor (rebuscados a cada 2 min) — sem resposta, vale o snapshot.
 export default function CatalogoPublicoView({ slug }) {
   const [estado, setEstado] = useState("carregando"); // carregando | ok | indisponivel
   const [dados, setDados] = useState(null);
+  const [vivo, setVivo] = useState({ itens: {}, precos: {} }); // promoções e preço cheio atual por SKU
+
+  const recarregarPrecos = useCallback(async () => {
+    const pr = await buscarPrecosOferta(slug);
+    if (pr) setVivo(pr);
+  }, [slug]);
+  useEffect(() => { recarregarPrecos(); }, [recarregarPrecos]);
+  useRevalidar(recarregarPrecos, 120000, estado === "ok");
 
   useEffect(() => {
     let vivo = true;
@@ -65,7 +79,7 @@ export default function CatalogoPublicoView({ slug }) {
               <span className="text-xs text-gray-400">{sec.cards.length} {sec.cards.length === 1 ? "item" : "itens"}</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
-              {sec.cards.map((c, ci) => (
+              {sec.cards.map((c0, ci) => { const c = aplicarPromo(comPrecoAtual(c0, vivo.precos[c0.sku]), vivo.itens[c0.sku]); return (
                 <div key={ci} className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
                   <div className="aspect-square bg-gray-100 relative">
                     {c.foto ? (
@@ -80,7 +94,10 @@ export default function CatalogoPublicoView({ slug }) {
                     <p className="text-xs font-bold text-gray-900 leading-tight line-clamp-2">{c.produto}</p>
                     <p className="text-[11px] text-gray-500 mt-0.5 truncate">{[c.marca, c.cor].filter(Boolean).join(" · ") || "—"}</p>
                     {p.mostrarPreco && c.preco != null && (
-                      <p className="text-sm font-extrabold text-emerald-600 mt-auto pt-1">{fmtBRL(c.preco)}</p>
+                      <p className="text-sm font-extrabold text-emerald-600 mt-auto pt-1">
+                        {c.preco_cheio > c.preco && <span className="block text-[11px] font-semibold text-gray-400 line-through">{brl(c.preco_cheio)}</span>}
+                        {brl(c.preco)}
+                      </p>
                     )}
                     {c.sku && (
                       <a href={wa(`Olá! Tenho interesse no item ${c.sku} (${c.produto}) do catálogo Nogária Outlet.`)} target="_blank" rel="noreferrer"
@@ -90,7 +107,7 @@ export default function CatalogoPublicoView({ slug }) {
                     )}
                   </div>
                 </div>
-              ))}
+              ); })}
             </div>
           </section>
         ))}

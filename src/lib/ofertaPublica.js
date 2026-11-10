@@ -134,10 +134,11 @@ export async function gerarLinkGrupo(item, { euro = true } = {}) {
   return { texto, url: r.url, semImagem: r.semImagem, semCotacao: r.semCotacao, copiado };
 }
 
-// Preços promocionais ao vivo de um link /p (campanhas). Falha de rede = sem promo (a página segue com o preço do snapshot).
+// Preços ao vivo de um link /p ou /c: `itens` = promoções vigentes por SKU, `precos` = preço cheio atual por SKU.
+// Falha de rede → null (a página mantém o que já tinha; na primeira carga, o snapshot).
 export async function buscarPrecosOferta(slug) {
   try {
     const { data, error } = await supabase.rpc("oferta_precos", { p_slug: slug });
-    return error || !data ? { agora: null, itens: {} } : data;
-  } catch { return { agora: null, itens: {} }; }
+    return error || !data ? null : { agora: data.agora || null, itens: data.itens || {}, precos: data.precos || {} };
+  } catch { return null; }
 }

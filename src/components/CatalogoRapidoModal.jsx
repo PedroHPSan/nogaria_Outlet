@@ -33,10 +33,6 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     () => (todos && soIntl ? todos.filter((i) => destinosInternacionais().includes(i.destino)) : todos),
     [todos, soIntl],
   );
-  const [promos, setPromos] = useState(new Map()); // campanha vigente por SKU (preço vem do servidor)
-  // Itens COMO O CLIENTE VÊ AGORA (preço da campanha + "de" riscado) — para cards, legendas, texto do WhatsApp, fila do Instagram e CSV.
-  // Os links /p usam `itens` originais (o snapshot guarda o preço cheio e a página aplica a promoção ao vivo).
-  const itensP = useMemo(() => (itens ? itens.map((i) => comPromo(i, promos.get(i.sku))) : itens), [itens, promos]);
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState(null);
   const [titulo, setTitulo] = useState(tituloInicial);
@@ -99,7 +95,6 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
         const lista = await comPrecosAtuais(itensProntos || await listarItensCatalogo(salaId ? { salaId } : { skus }));
         if (cancel) return;
         setItens(lista);
-        promosDosItens(lista).then((m) => !cancel && setPromos(m)).catch(() => {});
         if (skus) setResumo(resumoSelecao(skus, lista));
       } catch (e) {
         if (!cancel) setErro(e.message || "Falha ao carregar os itens.");
@@ -108,6 +103,15 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     return () => { cancel = true; };
   }, [skus, salaId, itensProntos]);
 
+  // Preço e campanha relidos do banco NA HORA de gerar: o modal pode ter ficado aberto enquanto o preço ou a campanha mudava.
+  // Devolve os itens como o cliente vê agora (preço da campanha + "de" riscado) — para cards, legendas, texto do WhatsApp, fila do
+  // Instagram e CSV. Os links /p e /c e o PDF levam o preço cheio (as páginas aplicam a promoção ao vivo).
+  const itensAgora = async () => {
+    const lista = await comPrecosAtuais(itens);
+    const m = await promosDosItens(lista); // campanha vigente por SKU (o preço vem do servidor)
+    return lista.map((i) => comPromo(i, m.get(i.sku)));
+  };
+
   // PDF como ARQUIVO (jsPDF): compartilha (WhatsApp etc.) ou baixa.
   const gerarPdf = async (acao) => {
     if (!itens?.length) return;
@@ -115,7 +119,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      const { blob, resumo: r } = await gerarCatalogoPdfDeItens(itens, {
+      const { blob, resumo: r } = await gerarCatalogoPdfDeItens(await comPrecosAtuais(itens), {
         modelo, tema, colunas, titulo, edicao: edicaoAtual(), validade,
         campos: { foto: modelo === "lista" ? comFoto : comFoto, preco: mostrarPreco, qr: comQr },
         contato: { nome: contatoNome, ...(contatoBase || {}) },
@@ -183,13 +187,14 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   });
 
   const textoWpp = () => executar(async () => {
-    const msg = textoWhatsApp(itensP, { titulo, link, validade, contato: rotuloContato(), mostrarPreco });
+    const msg = textoWhatsApp(await itensAgora(), { titulo, link, validade, contato: rotuloContato(), mostrarPreco });
     const r = await compartilharTexto(msg, titulo); registrar("texto");
     setAviso(r === "copiado" ? "Texto copiado — cole no WhatsApp." : r === "compartilhado" ? "Compartilhado." : null);
   });
 
   const legendaIg = () => executar(async () => {
     // 1 item → legenda de produto (condição, tamanho, preço, código); vários → legenda de destaques
+    const itensP = await itensAgora();
     const legenda = itensP.length === 1
       ? legendaProduto(itensP[0], { contato: rotuloContato(), mostrarPreco })
       : textoInstagram(itensP, { titulo, validade, contato: rotuloContato(), mostrarPreco });
@@ -200,7 +205,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   const cardsPng = () => executar(async (signal) => {
     const c = contato();
-    const arqs = await gerarCardsDivulgacao(itensP, { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco }, { signal, onProgress: setProgresso });
+    const arqs = await gerarCardsDivulgacao(await itensAgora(), { formato: formatoCard, titulo, tema, contato: { nome: c.nome, whatsapp: c.whatsapp, whatsappLabel: c.whatsappLabel }, mostrarPreco }, { signal, onProgress: setProgresso });
     const r = await compartilharArquivos(arqs, { titulo });
     registrar(formatoCard === "status" ? "cards" : "instagram");
     if (r !== "cancelado") setAviso(`${arqs.length} imagens (JPEG) ${r === "baixado" ? "baixadas" : "compartilhadas"}.`);
@@ -208,6 +213,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
 
   const paraFilaIg = () => executar(async (signal) => {
     const c = contato();
+    const itensP = await itensAgora();
     const legenda = itensP.length === 1
       ? legendaProduto(itensP[0], { contato: rotuloContato(), mostrarPreco })
       : textoInstagram(itensP, { titulo, validade, contato: rotuloContato(), mostrarPreco });
@@ -217,7 +223,7 @@ export default function CatalogoRapidoModal({ skus, salaId, itens: itensProntos,
   });
 
   const baixarCsv = () => executar(async () => {
-    const blob = new Blob([csvCatalogo(itensP, { linkDe: (it) => linkInteresseItem(it, contato().whatsapp) })], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([csvCatalogo(await itensAgora(), { linkDe: (it) => linkInteresseItem(it, contato().whatsapp) })], { type: "text/csv;charset=utf-8" });
     baixarArquivo(blob, "catalogo-nogaria.csv"); registrar("csv");
     setAviso("CSV baixado (nome, preço, descrição, código, link).");
   });
