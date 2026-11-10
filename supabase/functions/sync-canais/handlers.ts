@@ -4,7 +4,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 
 import { processarWhatsapp } from "./whatsapp.ts";
 import { enviarTemplate } from "./waTemplate.ts";
-import { retirarCatalogo, reporCatalogo, amazonQuantidade } from "./retirada.ts";
+import { retirarCatalogo, reporCatalogo, precoCatalogo, amazonQuantidade } from "./retirada.ts";
 import { comentarVendido, publicarInstagram, renovarTokenInstagram } from "./instagram.ts";
 
 export type Ctx = { dryRun: boolean; admin: SupabaseClient; job: { id: number; tentativas: number } };
@@ -25,6 +25,7 @@ export const handlers: Record<string, Handler> = {
   "ig.comentar_vendido": comentarVendido,
   "catalogo.retirar": retirarCatalogo,
   "catalogo.repor": reporCatalogo,
+  "catalogo.preco": precoCatalogo,
   "amazon.quantidade": amazonQuantidade,
   "ig.refresh_token": renovarTokenInstagram,
   "processar.instagram": marcarProcessado,

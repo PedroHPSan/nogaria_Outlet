@@ -41,6 +41,9 @@ $PSQL < $MIG7 || { echo "FALHA: migration da auditoria não é idempotente"; exi
 MIG8=supabase/migrations/20261110110000_preco_ao_vivo.sql
 $PSQL < $MIG8 || { echo "FALHA ao aplicar a migration do preço ao vivo"; exit 1; }
 $PSQL < $MIG8 || { echo "FALHA: migration do preço ao vivo não é idempotente"; exit 1; }
+MIG9=supabase/migrations/20261110130000_catalogo_preco_push.sql
+$PSQL < $MIG9 || { echo "FALHA ao aplicar a migration do push de preço da Meta"; exit 1; }
+$PSQL < $MIG9 || { echo "FALHA: migration do push de preço da Meta não é idempotente"; exit 1; }
 OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_campanhas.sql 2>&1) || { echo "$OUT"; echo "FALHA: test_campanhas.sql abortou"; exit 1; }
 OUT2=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_publica.sql 2>&1) || { echo "$OUT2"; echo "FALHA: test_campanha_publica.sql abortou"; exit 1; }
 OUT3=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_superficies.sql 2>&1) || { echo "$OUT3"; echo "FALHA: test_campanha_superficies.sql abortou"; exit 1; }
@@ -48,7 +51,8 @@ OUT4=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_sacola.sql 2>&1) || { ech
 OUT5=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_resultado.sql 2>&1) || { echo "$OUT5"; echo "FALHA: test_campanha_resultado.sql abortou"; exit 1; }
 OUT6=$($PSQL -A -t -F' | ' < scripts/sql/test_campanha_auditoria.sql 2>&1) || { echo "$OUT6"; echo "FALHA: test_campanha_auditoria.sql abortou"; exit 1; }
 OUT7=$($PSQL -A -t -F' | ' < scripts/sql/test_preco_ao_vivo.sql 2>&1) || { echo "$OUT7"; echo "FALHA: test_preco_ao_vivo.sql abortou"; exit 1; }
-OUT="$OUT"$'\n'"$OUT2"$'\n'"$OUT3"$'\n'"$OUT4"$'\n'"$OUT5"$'\n'"$OUT6"$'\n'"$OUT7"
+OUT8=$($PSQL -A -t -F' | ' < scripts/sql/test_catalogo_preco.sql 2>&1) || { echo "$OUT8"; echo "FALHA: test_catalogo_preco.sql abortou"; exit 1; }
+OUT="$OUT"$'\n'"$OUT2"$'\n'"$OUT3"$'\n'"$OUT4"$'\n'"$OUT5"$'\n'"$OUT6"$'\n'"$OUT7"$'\n'"$OUT8"
 echo "$OUT"
 echo "$OUT" | grep -q "^FAIL" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }

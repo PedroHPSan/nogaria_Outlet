@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { marcarEmEstoque, marcarSemEstoque } from "./metaCatalogo.ts";
+import { atualizarPrecos, marcarEmEstoque, marcarSemEstoque } from "./metaCatalogo.ts";
 import { atualizarQuantidade } from "./amazon.ts";
 import { mensagemVendido } from "./instagram.ts";
 
@@ -56,4 +56,23 @@ Deno.test("catálogo Meta: repor marca in stock", async () => {
   const fetchFn = ((_u: string, init: RequestInit) => { corpo = init.body as URLSearchParams; return resp({ handles: ["h"] }); }) as unknown as typeof fetch;
   await marcarEmEstoque(["NOG-1-1"], { catalogId: "C", token: "T", fetchFn });
   assert.deepEqual(JSON.parse(corpo!.get("requests")!), [{ method: "UPDATE", data: { id: "NOG-1-1", availability: "in stock" } }]);
+});
+
+Deno.test("catálogo Meta: items_batch UPDATE de preço (com promo e sem promo → null)", async () => {
+  let corpo: URLSearchParams | undefined;
+  const fetchFn = ((_u: string, init: RequestInit) => { corpo = init.body as URLSearchParams; return resp({ handles: ["h9"] }); }) as unknown as typeof fetch;
+  const r = await atualizarPrecos([
+    { sku: "A", price: 100, sale_price: 80, janela: "2026-11-09T11:27-03:00/2026-11-11T00:00-03:00" },
+    { sku: "B", price: 69.5, sale_price: null, janela: null },
+  ], { catalogId: "CAT1", token: "T", fetchFn });
+  assert.deepEqual(JSON.parse(corpo!.get("requests")!), [
+    { method: "UPDATE", data: { id: "A", price: "100.00 BRL", sale_price: "80.00 BRL", sale_price_effective_date: "2026-11-09T11:27-03:00/2026-11-11T00:00-03:00" } },
+    { method: "UPDATE", data: { id: "B", price: "69.50 BRL", sale_price: null, sale_price_effective_date: null } }]);
+  assert.deepEqual(r.handles, ["h9"]);
+  assert.deepEqual((await atualizarPrecos([], { catalogId: "C", token: "T", fetchFn })).handles, []);
+});
+
+Deno.test("catálogo Meta: erro HTTP no push de preço vira exceção", async () => {
+  const fetchFn = (() => resp({ error: { message: "sem permissão" } }, 403)) as unknown as typeof fetch;
+  await assert.rejects(atualizarPrecos([{ sku: "A", price: 1, sale_price: null, janela: null }], { catalogId: "C", token: "T", fetchFn }), /Meta catálogo 403.*sem permissão/);
 });
