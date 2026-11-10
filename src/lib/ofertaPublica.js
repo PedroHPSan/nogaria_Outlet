@@ -30,11 +30,11 @@ async function gerarImagemPreview(itens, mostrarPreco, euro) {
 }
 
 // Trava contra revenda: relê do banco status e reserva (a tela pode estar desatualizada) e separa
-// o que ainda pode ser oferecido. Vendido/entregue/descarte e separado em sacola não entram.
+// o que ainda pode ser oferecido. Também devolve `preco_ideal` atual (a tela pode ter o valor antigo). Vendido/entregue/descarte e separado em sacola não entram.
 export async function separarDisponiveis(itens) {
   const skus = (itens || []).map((i) => i.sku);
   if (!skus.length) return { disponiveis: [], bloqueados: [] };
-  const { data, error } = await supabase.from("itens").select("sku, status, reservado_ate, reservado_por_orc").in("sku", skus);
+  const { data, error } = await supabase.from("itens").select("sku, status, reservado_ate, reservado_por_orc, preco_ideal").in("sku", skus);
   if (error) throw error;
   const atual = new Map((data || []).map((r) => [r.sku, r]));
   const disponiveis = [], bloqueados = [];
@@ -42,9 +42,22 @@ export async function separarDisponiveis(itens) {
     const a = atual.get(it.sku);
     if (!a) bloqueados.push({ sku: it.sku, motivo: "não encontrado" });
     else if (indisponivelParaVenda(a)) bloqueados.push({ sku: it.sku, motivo: motivoIndisponivel(a) });
-    else disponiveis.push(it);
+    else disponiveis.push({ ...it, preco_ideal: a.preco_ideal }); // preço sempre do banco, não da tela
   }
   return { disponiveis, bloqueados };
+}
+
+// Relê `preco_ideal` do banco e devolve a lista com o preço atual (a tela pode estar com o valor antigo).
+// Falha de rede = lista como veio.
+export async function comPrecosAtuais(itens) {
+  const skus = (itens || []).map((i) => i.sku);
+  if (!skus.length) return itens;
+  try {
+    const { data, error } = await supabase.from("itens").select("sku, preco_ideal").in("sku", skus);
+    if (error || !data) return itens;
+    const m = new Map(data.map((r) => [r.sku, r.preco_ideal]));
+    return itens.map((i) => (m.has(i.sku) ? { ...i, preco_ideal: m.get(i.sku) } : i));
+  } catch { return itens; }
 }
 
 export const textoBloqueados = (bloqueados) =>

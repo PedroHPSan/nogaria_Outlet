@@ -142,6 +142,8 @@ export default function App() {
       .channel("itens-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "itens" }, () => setRefreshKey((k) => k + 1))
       .on("postgres_changes", { event: "*", schema: "public", table: "lotes" }, () => { loadLotes(); setRefreshKey((k) => k + 1); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "campanhas" }, () => setRefreshKey((k) => k + 1))
+      .on("postgres_changes", { event: "*", schema: "public", table: "campanha_itens" }, () => setRefreshKey((k) => k + 1))
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "eventos" }, (p) =>
         setEventos((prev) => [p.new, ...prev].slice(0, 80))
       )
