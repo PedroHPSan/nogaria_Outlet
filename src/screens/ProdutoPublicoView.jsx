@@ -3,7 +3,8 @@ import { buscarCatalogoPublico, registrarVisualizacao } from "../lib/catalogoPub
 import { skusIndisponiveis, buscarPrecosOferta } from "../lib/ofertaPublica";
 import { buscarItemPublico } from "../lib/catalogoMeta";
 import { linkInteresseOferta, linkWa } from "../lib/ofertaCore";
-import { aplicarPromo, promoQueTerminaPrimeiro, mensagemQuero } from "../lib/campanhasCore";
+import { aplicarPromo, comPrecoAtual, promoQueTerminaPrimeiro, mensagemQuero } from "../lib/campanhasCore";
+import { useRevalidar } from "../lib/useRevalidar";
 import PrecoDePor from "../components/PrecoDePor";
 import ContagemPromo from "../components/ContagemPromo";
 import { registrarInteresse } from "../lib/interesses";
@@ -24,7 +25,8 @@ const BADGE_CLS = {
 };
 
 // Página PÚBLICA (sem login) de uma oferta: 1 produto (destaque) ou vários (grade).
-// Renderiza só do snapshot do slug; "Quero este" abre o WhatsApp da Nogária.
+// Fotos e textos vêm do snapshot do slug; preço, promoção e "vendido" vêm ao vivo do servidor e são rebuscados a cada minuto.
+// "Quero este" abre o WhatsApp da Nogária.
 export default function ProdutoPublicoView({ slug, sku }) {
   const [estado, setEstado] = useState("carregando"); // carregando | ok | indisponivel
   const [dados, setDados] = useState(null);
@@ -34,6 +36,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
   const [confirmar, setConfirmar] = useState(null); // { item, cotacao } — pedido em confirmação (cotação recalculada)
   const [cotacao, setCotacao] = useState(null); // modo euro: cotação buscada a cada abertura do link
   const [promos, setPromos] = useState({}); // campanhas vigentes: { [sku]: { preco, preco_cheio, desconto_pct, fim_em, campanha } }
+  const [precos, setPrecos] = useState({}); // /p: preço cheio atual por SKU (o snapshot pode estar defasado)
   const [agoraSrv, setAgoraSrv] = useState(null); // relógio do servidor (ancora a contagem)
 
   useEffect(() => {
@@ -56,16 +59,22 @@ export default function ProdutoPublicoView({ slug, sku }) {
       registrarVisualizacao(slug);
       if (d.payload.euro) cotacaoEuro({ forcar: true, soProprio: true }).then((c) => vivo && setCotacao(c)).catch(() => vivo && setCotacao(false));
       const [v, pr] = await Promise.all([skusIndisponiveis(slug), buscarPrecosOferta(slug)]);
-      if (vivo) { setVendidos(v); setPromos(pr.itens || {}); setAgoraSrv(pr.agora || null); }
+      if (vivo) { setVendidos(v); if (pr) { setPromos(pr.itens); setPrecos(pr.precos); setAgoraSrv(pr.agora); } }
     });
     return () => { vivo = false; };
   }, [slug, sku]);
 
-  // Promoção encerrou (ou mudou): confirma com o servidor e atualiza os preços na hora.
+  // Preço ou promoção mudou (ou a promoção encerrou): confirma com o servidor e atualiza a página aberta.
   const recarregarPromos = useCallback(async () => {
-    if (sku) { const r = await buscarItemPublico(sku); if (r) { setPromos(r.promo ? { [sku]: r.promo } : {}); setAgoraSrv(r.agora || null); setVendidos(r.disponivel ? [] : [sku]); } }
-    else if (slug) { const pr = await buscarPrecosOferta(slug); setPromos(pr.itens || {}); setAgoraSrv(pr.agora || null); }
+    if (sku) {
+      const r = await buscarItemPublico(sku);
+      if (r && Array.isArray(r.payload?.itens)) { setDados({ payload: r.payload }); setPromos(r.promo ? { [sku]: r.promo } : {}); setAgoraSrv(r.agora || null); setVendidos(r.disponivel ? [] : [sku]); }
+    } else if (slug) {
+      const [v, pr] = await Promise.all([skusIndisponiveis(slug), buscarPrecosOferta(slug)]);
+      if (pr) { setVendidos(v); setPromos(pr.itens); setPrecos(pr.precos); setAgoraSrv(pr.agora); }
+    }
   }, [sku, slug]);
+  useRevalidar(recarregarPromos, 60000, estado === "ok");
   const euro = !!dados?.payload?.euro && pub === "eu";
   useEffect(() => { document.documentElement.lang = euro ? lang : "pt-BR"; }, [euro, lang]);
   const t = T[euro ? lang : "pt"];
@@ -133,7 +142,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
         {!euro && <p className="rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold px-3 py-2">🚚 {EMPRESA.entrega}</p>}
         {p.itens.map((item0) => {
           const promo = promos[item0.sku];
-          const it = aplicarPromo(item0, promo); // preço promocional + "de" riscado quando há campanha vigente
+          const it = aplicarPromo(comPrecoAtual(item0, precos[item0.sku]), promo); // preço atual + promoção ("de" riscado) quando há campanha vigente
           const vendido = vendidos.includes(it.sku);
           const misto = euro && it.preco > 0 ? precoMisto(it.preco, cotacao?.taxa) : null;
           const mistoDe = euro && it.preco_cheio > 0 ? precoMisto(it.preco_cheio, cotacao?.taxa) : null;

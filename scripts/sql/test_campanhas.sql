@@ -34,7 +34,8 @@ do $$ declare c1 uuid; c2 uuid; c3 uuid; r jsonb; m text; d text; n int; begin
   insert into res values ('sem preço e vendido ficam fora', not exists (select 1 from campanha_itens where sku in ('A4','A5')), null);
   insert into res values ('preco_cheio congelado', (select preco_cheio from campanha_itens where sku='A2' and canal='*') = 200, null);
   update itens set preco_ideal = 400 where sku = 'A2';
-  insert into res values ('mudar preco_ideal não altera a promo', preco('A2') = 180 and (select preco_cheio from precos_efetivos(array['A2']) ) = 200, preco('A2')::text);
+  -- 20261110110000: campanha em andamento acompanha o preço da ficha (antes o "de" ficava congelado e o preço novo era ignorado)
+  insert into res values ('mudar preco_ideal atualiza a promo em andamento', preco('A2') = 360 and (select preco_cheio from precos_efetivos(array['A2']) ) = 400, preco('A2')::text);
   update itens set preco_ideal = 200 where sku = 'A2';
 
   -- bordas [inicio, fim)

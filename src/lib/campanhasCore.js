@@ -140,6 +140,13 @@ export function aplicarPromo(item, promo) {
   return { ...item, preco: Number(promo.preco), preco_cheio: Number(promo.preco_cheio), desconto_pct: Number(promo.desconto_pct) };
 }
 
+// Preço cheio ATUAL (vindo do servidor) sobre o item de um link já enviado. Só troca quando o snapshot mostra preço
+// (link gerado sem preço continua sem) e o servidor mandou um valor válido; sem isso fica o do snapshot.
+export function comPrecoAtual(item, precoAtual) {
+  if (item?.preco == null || !(Number(precoAtual) > 0)) return item;
+  return { ...item, preco: Number(precoAtual) };
+}
+
 // Entre várias promoções vigentes (itens de campanhas diferentes), a que termina primeiro manda na contagem.
 export function promoQueTerminaPrimeiro(promos) {
   const v = Object.values(promos || {}).filter((p) => p?.fim_em);
@@ -248,7 +255,7 @@ export function lerSkusColados(texto) {
   return [...new Set(tokens)];
 }
 
-export const ROTULO_LOG = { item_incluido: "Item incluído", item_removido: "Item removido", publicada: "Campanha publicada", cancelada: "Campanha cancelada", prazo_alterado: "Prazo/estado alterado" };
+export const ROTULO_LOG = { item_incluido: "Item incluído", item_removido: "Item removido", publicada: "Campanha publicada", cancelada: "Campanha cancelada", prazo_alterado: "Prazo/estado alterado", preco_atualizado: "Preço atualizado" };
 // Mensagem amigável para os erros de publicação (NENHUM_ITEM: …).
 export const msgErroCampanha = (e) => String(e?.message || e || "").replace(/^NENHUM_ITEM:\s*/, "");
 
