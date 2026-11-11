@@ -99,6 +99,24 @@ ok(JSON.stringify(cardOgProduto(it(1, { grupo: "Calçados", tamanho: "38 BR" }))
 eq(montarPayloadOferta([it(1, { grupo: "Calçados", tamanho: "39 BR" })]).itens[0].tamanho, "39 BR", "payload guarda a numeração crua (a página converte)");
 const { tamanhoEtiqueta } = await import("../src/lib/tamanhos.js");
 eq([tamanhoEtiqueta({ grupo: "Calçados", tamanho: "38 BR" }), tamanhoEtiqueta({ grupo: "Calçados", tamanho: "US 9" })], ["EU 40 · BR 38", "EU 42"], "etiqueta: EU + BR original para conferência");
+
+console.log("vestuário → EU (só o que é seguro; resto marcado como BR)");
+const V = (tamanho, produto = "Camiseta") => tamanhoEtiqueta({ grupo: "Vestuário", tamanho, produto });
+eq(["PP", "P", "M", "G", "GG", "EG", "XG", "EGG", "g"].map((t) => V(t)),
+  ["EU XS · BR PP", "EU S · BR P", "EU M · BR M", "EU L · BR G", "EU XL · BR GG", "EU XXL · BR EG", "EU XXL · BR XG", "EU 3XL · BR EGG", "EU L · BR G"], "letras: grade internacional, sempre com o BR ao lado");
+eq([V("40", "Vestido longo"), V("38/40", "Blusa feminina"), V("44", "Saia midi"), V("42 BR", "Calça Feminina Jeans")],
+  ["EU 38 · BR 40", "EU 36/38 · BR 38/40", "EU 42 · BR 44", "EU 40 · BR 42"], "número feminino: tabela BR→EU (EU = BR − 2)");
+eq([V("40", "Calça jeans"), V("40", "Calça Masculina Social"), V("42", "Bermuda unissex")], ["BR 40", "BR 40", "BR 42"], "número sem gênero feminino: não converte, marca BR");
+eq([V("35-44", "Kit Meias Femininas"), V("G1", "Blusa feminina"), V("G2-48", "Vestido"), V("7", "Vestido infantil"), V("Único"), V("XL"), V("38 EU", "Vestido")],
+  ["BR 35-44", "G1", "G2-48", "BR 7", "Único", "XL", "38 EU"], "meia, plus size, infantil, texto livre e já-EU: sem conversão");
+eq(V("56", "Vestido"), "BR 56", "número feminino fora da tabela: não converte");
+eq(tamanhoExibicao({ grupo: "Vestuário", tamanho: "40", produto: "Vestido" }), "EU 38", "exibição curta (anúncio/catálogo)");
+// Valores distintos de vestuário no banco em 11/11/2026 (peça feminina e sem gênero).
+const reais = ["M", "G", "GG", "P", "44", "40", "G1", "7", "40-46", "32", "G2-48", "38", "35-44", "42"];
+eq(reais.map((t) => V(t, "Blusa feminina")),
+  ["EU M · BR M", "EU L · BR G", "EU XL · BR GG", "EU S · BR P", "EU 42 · BR 44", "EU 38 · BR 40", "G1", "BR 7", "EU 38-44 · BR 40-46", "BR 32", "G2-48", "EU 36 · BR 38", "BR 35-44", "EU 40 · BR 42"], "valores reais do banco (feminino)");
+eq(reais.map((t) => V(t)),
+  ["EU M · BR M", "EU L · BR G", "EU XL · BR GG", "EU S · BR P", "BR 44", "BR 40", "G1", "BR 7", "BR 40-46", "BR 32", "G2-48", "BR 38", "BR 35-44", "BR 42"], "valores reais do banco (sem gênero)");
 const { publicoPadrao } = await import("../src/lib/precoEuro.js");
 eq(["pt-BR", "pt", "pt-PT", "es-ES", "en-GB"].map(publicoPadrao), ["br", "br", "eu", "eu", "eu"], "público padrão: pt-BR → reais; resto → euros");
 const { traduzirBadge, traduzirCondicao, fmtDataCotacao } = await import("../src/lib/precoEuro.js");
