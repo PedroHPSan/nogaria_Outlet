@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { COLUNAS, condicaoMeta, faixaPreco, linhaCsv, montarFeed, precoPromoFeed, slugMacro } from "./catalogoMeta.ts";
+import { COLUNAS, condicaoMeta, faixaPreco, linhaCsv, montarFeed, precoPromoFeed, slugMacro, tamanhoMeta } from "./catalogoMeta.ts";
 
 const it = { sku: "NOG-103-001", produto: "Tênis, Nike \"Air\"", marca: "Nike", cor: "Preto", condicao: "Usado em ótimo estado", medidas: "", badge: { cls: "semi" }, preco: 199.9, foto: "https://x/f.jpg" };
 const l = (o = {}) => ({ sku: it.sku, payload: { itens: [it] }, disponivel: true, ...o });
@@ -34,7 +34,7 @@ Deno.test("CSV: aspas/vírgula escapadas e fórmula neutralizada", () => {
 Deno.test("C4: faixa de preço e rótulos (categoria, lote, estado, tamanho)", () => {
   assert.deepEqual([50, 50.01, 150, 199.9, 500, 900].map(faixaPreco), ["ate-50", "51-100", "101-150", "151-250", "251-500", "acima-500"]);
   const c = linhaCsv(l({ payload: { itens: [{ ...it, rotulos: { grupo: "Calçados", lote: 12, estado: "BOM", tamanho: "38" } }] } }), "https://x")!;
-  assert.deepEqual(c.slice(10, 15), ["Calçados", "lote-12", "151-250", "BOM", "38"]);
+  assert.deepEqual(c.slice(10, 15), ["Calçados", "lote-12", "151-250", "BOM", "EU 40 · BR 38"]);
   const vazio = linhaCsv(l(), "https://x")!;
   assert.deepEqual(vazio.slice(10), ["", "", "151-250", "", "", "", "", "", ""]);
 });
@@ -65,4 +65,25 @@ Deno.test("campanha: sale_price >= price é omitido (a Meta rejeitaria) e sem pr
   const sem = linhaCsv(l(), "https://x")!;
   assert.deepEqual(sem.slice(17), ["", ""]);
   assert.equal(precoPromoFeed({ ...it, promo: null }).sale, "");
+});
+
+Deno.test("size: EU + BR para roupa e calçado, vazio para as demais peças (#183)", () => {
+  const t = (produto: string, grupo_norm: string, tamanho: string, grupo = grupo_norm) =>
+    tamanhoMeta({ sku: "X", produto, rotulos: { grupo, grupo_norm, tamanho } });
+  assert.deepEqual([
+    t("Calça Jeans Feminina Skinny", "Vestuário", "38"),
+    t("Chinelo Piccadilly", "Calçados", "35"),
+    t("Camisa Social Masculina", "Vestuário", "GG"),
+    t("Calça Jeans Masculina", "Vestuário", "40"),
+    t("Kit 12 Pares De Meia Soquete", "Vestuário", "35-44"),
+    t("Perfume Eau de Parfum 100ml", "Perfumaria", "100 ml"),
+    t("iPhone 17 Pro Max", "Celulares", "512 GB"),
+    t("Vestido", "Vestuário", ""),
+  ], ["EU 36 · BR 38", "EU 37 · BR 35", "EU XL · BR GG", "BR 40", "BR 35-44", "", "", ""]);
+  // categoria normalizada vale mesmo com o grupo cru sujo ("Loja de roupas")
+  assert.equal(t("Blusa feminina", "Vestuário", "M", "Loja de roupas"), "EU M · BR M");
+  // sem grupo_norm (snapshot antigo) cai no grupo cru
+  assert.equal(tamanhoMeta({ sku: "X", produto: "Bota", rotulos: { grupo: "Calçados", tamanho: "39 BR" } }), "EU 41 · BR 39");
+  const c = linhaCsv(l({ payload: { itens: [{ ...it, produto: "Perfume", rotulos: { grupo_norm: "Perfumaria", tamanho: "100 ml" } }] } }), "https://x")!;
+  assert.equal(c[COLUNAS.indexOf("size")], "");
 });

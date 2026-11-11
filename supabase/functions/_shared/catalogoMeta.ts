@@ -7,6 +7,8 @@ type ItemPayload = {
   promo?: { preco: number; preco_cheio: number; ativa: boolean; janela: string } | null;
   rotulos?: { grupo?: string | null; lote?: string | number | null; tamanho?: string | null; estado?: string | null; macro?: string | null; grupo_norm?: string | null } | null;
 };
+import { ehCalcado, ehVestuario, tamanhoEtiqueta } from "./tamanhos.js";
+
 export type LinhaFeed = { sku: string; payload: { itens?: ItemPayload[] } | null; disponivel: boolean };
 
 export const COLUNAS = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "color",
@@ -40,6 +42,15 @@ export function precoPromoFeed(it: ItemPayload): { price: number; sale: string; 
   return { price: base, sale: valida ? `${sale.toFixed(2)} BRL` : "", janela: valida ? it.promo!.janela : "" };
 }
 
+// Coluna "size": mesma regra das páginas públicas (tamanhos.js). Calçado e roupa → "EU 40 · BR 38"
+// (ou "BR 40" quando não dá para converter com segurança); demais peças (perfume "100 ml",
+// celular "512 GB"…) → vazio. Categoria pela normalizada (grupo_norm) e, na falta, o grupo cru.
+export function tamanhoMeta(it: ItemPayload): string {
+  const item = { grupo: it.rotulos?.grupo_norm || it.rotulos?.grupo || "", tamanho: it.rotulos?.tamanho ?? "", produto: it.produto ?? "" };
+  if (!ehCalcado(item) && !ehVestuario(item)) return "";
+  return tamanhoEtiqueta(item);
+}
+
 export function linhaCsv(l: LinhaFeed, site: string): string[] | null {
   const it = l.payload?.itens?.[0];
   if (!it || !it.foto || !(Number(it.preco) > 0)) return null; // sem foto/preço a Meta rejeita o item
@@ -51,7 +62,7 @@ export function linhaCsv(l: LinhaFeed, site: string): string[] | null {
     `${pf.price.toFixed(2)} BRL`, `${site.replace(/\/+$/, "")}/i/${encodeURIComponent(l.sku)}`,
     it.foto, limpa(it.marca || "Nogária Outlet"), limpa(it.cor || ""),
     limpa(it.rotulos?.grupo || ""), it.rotulos?.lote != null && it.rotulos.lote !== "" ? limpa(`lote-${it.rotulos.lote}`) : "",
-    faixaPreco(Number(it.preco)), limpa(it.rotulos?.estado || ""), limpa(it.rotulos?.tamanho || ""),
+    faixaPreco(Number(it.preco)), limpa(it.rotulos?.estado || ""), limpa(tamanhoMeta(it)),
     it.rotulos?.macro ? slugMacro(it.rotulos.macro) : "", limpa(it.rotulos?.grupo_norm || ""),
     pf.sale, pf.janela,
   ];
