@@ -6,7 +6,7 @@ import { linkWa } from "../lib/ofertaCore";
 import { EMPRESA } from "../lib/empresa";
 import { offsetServidor, msAte, faseCampanha, contagem, fmtPrazo, mensagemQuero } from "../lib/campanhasCore";
 import PrecoDePor from "../components/PrecoDePor";
-import { tamanhoExibicao } from "../lib/tamanhos";
+import { tamanhoEtiqueta } from "../lib/tamanhos";
 import { Loader2, MessageCircle, Clock } from "lucide-react";
 
 const RECHECAR_MS = 5 * 60 * 1000;
@@ -97,7 +97,7 @@ export default function CampanhaPublicaView({ slug }) {
         {d.itens.length === 0 && <p className="text-sm text-gray-500">Nenhuma peça disponível nesta campanha.</p>}
         {d.itens.map((it) => {
           const vendido = it.disponivel === false;
-          const tam = tamanhoExibicao({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho });
+          const tam = tamanhoEtiqueta({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho, produto: it.produto });
           return (
             <article key={it.sku} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {it.foto && <img src={it.foto} alt={it.produto} loading="lazy" className="w-full aspect-square object-contain bg-gray-50" />}

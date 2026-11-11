@@ -251,7 +251,7 @@ export default function NewItem({ lotes, user, params = DEFAULT_PARAMS, onClose,
             <Field label="Tamanho / numeração (opcional)">
               <input className={inputCls} value={tamanho} onChange={(e) => setTamanho(e.target.value)}
                 placeholder="ex.: 42, 38 BR, M" />
-              {tamanhoExibicao({ grupo, tamanho }) !== tamanho.trim() && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoExibicao({ grupo, tamanho })}</b> nas telas, etiquetas e imagens.</p>}
+              {tamanhoExibicao({ grupo, tamanho, produto }) !== tamanho.trim() && <p className="text-xs text-gray-500 mt-1">Aparece como <b>{tamanhoExibicao({ grupo, tamanho, produto })}</b> nas telas, etiquetas e imagens.</p>}
             </Field>
           )}
           <Field label="Quantidade de unidades">

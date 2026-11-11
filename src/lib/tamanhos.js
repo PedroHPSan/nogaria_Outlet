@@ -56,36 +56,60 @@ export function tamanhoEU(t) {
 }
 
 // --- Vestuário → padrão europeu (EU) ----------------------------------------------
-// Número (36, 38, 40…) é manequim brasileiro: EU = BR − 4 (BR 40 = EU 36). Letras seguem a
-// grade internacional (P=S, M=M, G=L, GG=XL…). Ajuste só estas constantes se a regra mudar.
-export const BR_PARA_EU_VEST = -4;
-const LETRAS_EU = { pp: "XS", p: "S", m: "M", g: "L", gg: "XL", xg: "XL", xgg: "XXL", exg: "XXL" };
+// Não existe regra única BR→EU para roupa: a numeração depende de gênero e modelagem
+// (calça masculina 40 ≠ blusa feminina 40) e varia por marca. Por isso só convertemos o
+// que dá para afirmar com segurança e, no resto, mostramos o tamanho marcado como BR:
+//   • Letras: grade internacional (P=S, G=L, GG=XL, EG/XG=XXL…).
+//   • Número feminino (gênero inferido pelo nome do produto): tabela abaixo (EU = BR − 2,
+//     referência de mercado; ex.: BR 40 = EU 38).
+//   • Número masculino/indefinido, meias, plus size (G1, G2…), infantil: sem conversão → "BR 40".
+// Para corrigir uma equivalência, ajuste só estas tabelas.
+const LETRAS_EU = { pp: "XS", p: "S", m: "M", g: "L", gg: "XL", xg: "XXL", eg: "XXL", xgg: "3XL", egg: "3XL" };
+export const VEST_FEM_BR_EU = { 34: 32, 36: 34, 38: 36, 40: 38, 42: 40, 44: 42, 46: 44, 48: 46, 50: 48, 52: 50, 54: 52 };
 
-// "40" → "EU 36"; "38/40" → "EU 34/36"; "M" → "EU M"; "G" → "EU L". Null se não der (texto livre,
-// já marcado EU/US/UK, ou fora de BR 34–60 — ex.: tamanhos infantis).
-export function tamanhoEUVestuario(t) {
+const semAcento = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const RE_MASC = /\b(masculin[oa]s?|homem|homens|unissex|unisex|cuecas?)\b/;
+const RE_FEM = /\b(feminin[oa]s?|mulher|mulheres|vestidos?|saias?|blusas?|blusinhas?|sutias?|biquinis?|leggings?|calcinhas?|camisolas?|maios?|croppeds?|lingeries?|gestante)\b/;
+const RE_MEIA = /\b(meias?|soquetes?)\b/; // meia usa numeração de calçado (35-44)
+
+// "f" | "m" | null, a partir do nome do produto. Masculino/unissex tem precedência.
+export function generoVestuario(it) {
+  const s = semAcento(it?.produto);
+  if (RE_MASC.test(s)) return "m";
+  return RE_FEM.test(s) ? "f" : null;
+}
+
+const RE_NUM_FAIXA = /^\d+(?:[.,]\d+)?(?:\s*[/-]\s*\d+(?:[.,]\d+)?)*$/;
+
+// "G" → "EU L"; "40" + feminino → "EU 38"; "38/40" + feminino → "EU 36/38". Null quando não dá
+// para afirmar (número sem gênero feminino, meia, plus size, texto livre, já em EU/US/UK).
+export function tamanhoEUVestuario(t, it = null) {
   const s = String(t ?? "").trim().toLowerCase().replace(/\s*br$/, "");
   if (!s || /(^|[^a-z])(eu|us|usa|eua|uk)([^a-z]|$)/.test(s)) return null;
   if (LETRAS_EU[s]) return `EU ${LETRAS_EU[s]}`;
-  if (!/^\d+(?:[.,]\d+)?(?:\s*[/-]\s*\d+(?:[.,]\d+)?)*$/.test(s)) return null;
-  const nums = s.match(/\d+(?:[.,]\d+)?/g).map((n) => parseFloat(n.replace(",", ".")));
-  if (nums.some((v) => v < 34 || v > 60)) return null;
-  const sep = s.includes("-") ? "-" : "/";
-  return `EU ${nums.map((v) => String(v + BR_PARA_EU_VEST).replace(".", ",")).join(sep)}`;
+  if (!RE_NUM_FAIXA.test(s) || RE_MEIA.test(semAcento(it?.produto)) || generoVestuario(it) !== "f") return null;
+  const eu = s.match(/\d+(?:[.,]\d+)?/g).map((n) => VEST_FEM_BR_EU[n]);
+  if (eu.some((v) => v == null)) return null;
+  return `EU ${eu.join(s.includes("-") ? "-" : "/")}`;
 }
 
-// Etiqueta interna: "EU 40 · BR 38" (confere o par com a numeração original). Só quando a origem é BR.
+// Número de vestuário não convertido → "BR 40" (deixa claro que é grade brasileira).
+const marcaBR = (bruto) => (RE_NUM_FAIXA.test(bruto.replace(/\s*br$/i, "")) ? `BR ${bruto.replace(/\s*br$/i, "")}` : null);
+
+// Etiqueta: "EU 40 · BR 38" (confere o par com a numeração original). Só quando a origem é BR.
 export function tamanhoEtiqueta(it) {
   const eu = tamanhoExibicao(it);
   const bruto = String(it?.tamanho ?? "").trim();
   const origemBR = ehVestuario(it) ? /^([\d\s.,/-]+|[a-z]{1,3})(\s*br)?$/i : /^[\d\s.,/-]+(br)?$/i;
-  if (!eu || eu === bruto || eu === `EU ${bruto.toUpperCase()}` || !origemBR.test(bruto)) return eu;
-  return `${eu} · BR ${bruto.replace(/\s*br$/i, "")}`;
+  if (!eu.startsWith("EU ") || eu === bruto || !origemBR.test(bruto)) return eu;
+  return `${eu} · BR ${bruto.replace(/\s*br$/i, "").toUpperCase()}`;
 }
 
-// Tamanho para exibir: calçado e vestuário → EU (quando convertível); demais → texto original.
+// Tamanho para exibir: calçado → EU; vestuário → EU quando seguro, senão "BR n"; demais → original.
 export function tamanhoExibicao(it) {
   const bruto = String(it?.tamanho ?? "").trim();
   if (!bruto) return "";
-  return (ehCalcado(it) && tamanhoEU(bruto)) || (ehVestuario(it) && tamanhoEUVestuario(bruto)) || bruto;
+  if (ehCalcado(it)) return tamanhoEU(bruto) || bruto;
+  if (ehVestuario(it)) return tamanhoEUVestuario(bruto, it) || marcaBR(bruto) || bruto;
+  return bruto;
 }

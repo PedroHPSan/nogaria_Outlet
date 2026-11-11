@@ -10,7 +10,7 @@ import ContagemPromo from "../components/ContagemPromo";
 import { registrarInteresse } from "../lib/interesses";
 import { EMPRESA } from "../lib/empresa";
 import { cotacaoEuro } from "../lib/cotacao";
-import { tamanhoExibicao } from "../lib/tamanhos";
+import { tamanhoEtiqueta } from "../lib/tamanhos";
 import {
   precoMisto, fmtEUR, textoCotacao, mensagemInteresseEuro, idiomaDoNavegador, publicoPadrao,
   traduzirBadge, traduzirCondicao, fonteCotacao, horaConsulta, IDIOMAS, T,
@@ -146,7 +146,7 @@ export default function ProdutoPublicoView({ slug, sku }) {
           const vendido = vendidos.includes(it.sku);
           const misto = euro && it.preco > 0 ? precoMisto(it.preco, cotacao?.taxa) : null;
           const mistoDe = euro && it.preco_cheio > 0 ? precoMisto(it.preco_cheio, cotacao?.taxa) : null;
-          const tam = tamanhoExibicao({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho });
+          const tam = tamanhoEtiqueta({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho, produto: it.produto });
           const condicao = euro ? traduzirCondicao(it.condicao, lang) : it.condicao;
           return (
             <article key={it.sku} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
