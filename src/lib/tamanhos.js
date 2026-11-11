@@ -113,3 +113,12 @@ export function tamanhoExibicao(it) {
   if (ehVestuario(it)) return tamanhoEUVestuario(bruto, it) || marcaBR(bruto) || bruto;
   return bruto;
 }
+
+// Rótulo de tamanho das páginas públicas, a partir do item do payload ({ tamanho, calcado, vestuario, produto }):
+// calçado → "Nº EU 40 · BR 38"; vestuário → "Tam. EU M · BR M"; demais (perfume, celular…) → só o valor ("100 ml").
+export function tamanhoPublico(it) {
+  const grupo = it?.calcado ? "Calçados" : it?.vestuario ? "Vestuário" : "";
+  const tam = tamanhoEtiqueta({ grupo, tamanho: it?.tamanho, produto: it?.produto });
+  if (!tam) return "";
+  return it?.calcado ? `Nº ${tam}` : it?.vestuario ? `Tam. ${tam}` : tam;
+}

@@ -6,7 +6,7 @@ import { linkWa } from "../lib/ofertaCore";
 import { EMPRESA } from "../lib/empresa";
 import { offsetServidor, msAte, faseCampanha, contagem, fmtPrazo, mensagemQuero } from "../lib/campanhasCore";
 import PrecoDePor from "../components/PrecoDePor";
-import { tamanhoEtiqueta } from "../lib/tamanhos";
+import { tamanhoPublico } from "../lib/tamanhos";
 import { Loader2, MessageCircle, Clock } from "lucide-react";
 
 const RECHECAR_MS = 5 * 60 * 1000;
@@ -97,7 +97,7 @@ export default function CampanhaPublicaView({ slug }) {
         {d.itens.length === 0 && <p className="text-sm text-gray-500">Nenhuma peça disponível nesta campanha.</p>}
         {d.itens.map((it) => {
           const vendido = it.disponivel === false;
-          const tam = tamanhoEtiqueta({ grupo: it.calcado ? "Calçados" : it.vestuario ? "Vestuário" : "", tamanho: it.tamanho, produto: it.produto });
+          const tam = tamanhoPublico(it);
           return (
             <article key={it.sku} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {it.foto && <img src={it.foto} alt={it.produto} loading="lazy" className="w-full aspect-square object-contain bg-gray-50" />}
@@ -105,7 +105,7 @@ export default function CampanhaPublicaView({ slug }) {
                 <h2 className="font-bold text-gray-900">{it.produto}</h2>
                 <PrecoDePor preco={it.preco} precoCheio={ativa ? it.preco_cheio : null} pct={ativa ? it.desconto_pct : null} />
                 {it.condicao && <p className="text-sm text-gray-600">{it.condicao}</p>}
-                <p className="text-xs text-gray-500">{[tam && `${it.vestuario ? "Tam." : "Nº"} ${tam}`, it.marca, it.medidas, it.cor].filter(Boolean).join(" · ")}</p>
+                <p className="text-xs text-gray-500">{[tam, it.marca, it.medidas, it.cor].filter(Boolean).join(" · ")}</p>
                 {vendido ? (
                   <p className="rounded-xl bg-gray-100 text-gray-500 text-center py-3 font-bold">Vendido</p>
                 ) : fase === "agendada" ? null : (
