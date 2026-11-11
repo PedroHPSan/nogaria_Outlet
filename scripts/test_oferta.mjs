@@ -115,6 +115,15 @@ eq(tamanhoExibicao({ grupo: "Vestuário", tamanho: "40", produto: "Vestido" }), 
 const reais = ["M", "G", "GG", "P", "44", "40", "G1", "7", "40-46", "32", "G2-48", "38", "35-44", "42"];
 eq(reais.map((t) => V(t, "Blusa feminina")),
   ["EU M · BR M", "EU L · BR G", "EU XL · BR GG", "EU S · BR P", "EU 42 · BR 44", "EU 38 · BR 40", "G1", "BR 7", "EU 38-44 · BR 40-46", "BR 32", "G2-48", "EU 36 · BR 38", "BR 35-44", "EU 40 · BR 42"], "valores reais do banco (feminino)");
+const { tamanhoPublico } = await import("../src/lib/tamanhos.js");
+eq([
+  tamanhoPublico({ tamanho: "100 ml", calcado: false, vestuario: false, produto: "Perfume Eau de Parfum 100ml" }),
+  tamanhoPublico({ tamanho: "512 GB", calcado: false, vestuario: false, produto: "iPhone 17 Pro Max" }),
+  tamanhoPublico({ tamanho: "35", calcado: true, vestuario: null, produto: "Chinelo" }),
+  tamanhoPublico({ tamanho: "38", calcado: false, vestuario: true, produto: "Calça Jeans Feminina Skinny" }),
+  tamanhoPublico({ tamanho: "40", calcado: false, vestuario: true, produto: "Calça Jeans Masculina" }),
+  tamanhoPublico({ tamanho: "", calcado: true }),
+], ["100 ml", "512 GB", "Nº EU 37 · BR 35", "Tam. EU 36 · BR 38", "Tam. BR 40", ""], "página pública: Nº só para calçado, Tam. para roupa, sem prefixo nos demais");
 eq(reais.map((t) => V(t)),
   ["EU M · BR M", "EU L · BR G", "EU XL · BR GG", "EU S · BR P", "BR 44", "BR 40", "G1", "BR 7", "BR 40-46", "BR 32", "G2-48", "BR 38", "BR 35-44", "BR 42"], "valores reais do banco (sem gênero)");
 const { publicoPadrao } = await import("../src/lib/precoEuro.js");
