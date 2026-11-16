@@ -8,6 +8,7 @@ import { lucroEm, canalV2, REGRAS } from "../lib/motorPreco";
 import PriceRuler from "./pricing/PriceRuler";
 import MemoriaCalculoV2 from "./pricing/MemoriaCalculoV2";
 import { STATUS_V2 } from "./pricing/statusV2";
+import { usePodeGerirVenda, MSG_SO_GESTOR_PRECO } from "../lib/permissoes";
 import { aoTrocarCategoria } from "../lib/categoriaTroca";
 import Ajuda from "./pricing/Ajuda";
 
@@ -90,6 +91,10 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onCha
   const [erro, setErro] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState(null);
+  // Preço já gravado (cadastro inicial feito): só gestor troca. O valor de abertura da ficha conta como "gravado".
+  const gestor = usePodeGerirVenda();
+  const [precoGravado] = useState(() => Number(item.preco_ideal) > 0);
+  const precoTravado = precoGravado && !gestor;
 
   // Motor novo: recalcula quando muda qualquer entrada que afeta custo/preço.
   const chave = [item.sku, item.lote, item.estado, item.cond_embalagem, canal, item.grupo,
@@ -208,7 +213,7 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onCha
             </p>
             {r.semCusto && <p className="text-xs text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Lote sem custo cadastrado: o piso não inclui custo de aquisição.</p>}
             {r.custoOrigem && /estimad/.test(r.custoOrigem) && <p className="text-[11px] text-gray-400">Custo do lote: {r.custoOrigem}.</p>}
-            {pode && (
+            {pode && !precoTravado && (
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => onChange?.({ preco_ideal: r.sugerido })}
                   className="px-3 py-2 rounded-xl text-sm font-semibold border border-orange-300 text-orange-700 bg-white">Usar</button>
@@ -230,8 +235,10 @@ export default function PricingCard({ item, params = DEFAULT_PARAMS, user, onCha
               <input type="number" inputMode="decimal"
                 className={`w-full rounded-xl border px-3 py-2.5 text-2xl font-bold bg-white focus:outline-none focus:ring-2 ${abaixoPiso ? "border-red-400 text-red-700 focus:ring-red-400" : "border-gray-300 text-gray-900 focus:ring-orange-500"}`}
                 value={item.preco_ideal ?? ""} onChange={(e) => setVenda(e.target.value)}
+                readOnly={precoTravado} title={precoTravado ? MSG_SO_GESTOR_PRECO : undefined}
                 placeholder={r.sugerido ? String(r.sugerido) : "0"} />
             </div>
+            {precoTravado && <p className="text-[11px] text-gray-500">{MSG_SO_GESTOR_PRECO}</p>}
 
             <PriceRuler piso={pisoE} recomendado={r.alvo} preco={precoVenda} fmtBRL={fmtBRL} />
 

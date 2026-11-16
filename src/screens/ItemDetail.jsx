@@ -1137,7 +1137,7 @@ export default function ItemDetail({ item, user, params = DEFAULT_PARAMS, onClos
         <div hidden={tab !== "preco"} className="max-w-3xl mx-auto break-words">
         {/* Precificação & venda — card único (motor + preço final + anúncio + destino + venda) */}
         <div className="mb-4">
-          <PricingCard item={it} params={params} user={user} onChange={(patch) => set(patch)} />
+          <PricingCard key={it.sku} item={it} params={params} user={user} onChange={(patch) => set(patch)} />
         </div>
         </div>
 

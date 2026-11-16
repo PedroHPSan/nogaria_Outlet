@@ -8,6 +8,7 @@ import {
   valorTexto, valorEdicao, filtrarPorTexto, ordenarItens,
 } from "../lib/planilha";
 import { gerarXlsx, baixarXlsx } from "../lib/xlsx";
+import { usePodeGerirVenda, MSG_SO_GESTOR_PRECO } from "../lib/permissoes";
 import {
   Search, Filter, Columns3, FileSpreadsheet, Loader2, RefreshCw, X, Check,
   ArrowUpDown, ArrowUp, ArrowDown, Pencil, ExternalLink, AlertCircle,
@@ -41,6 +42,7 @@ const salvarColunas = (keys) => { try { localStorage.setItem(CHAVE_LS, JSON.stri
  * O nome do produto é um link para a ficha completa (ItemDetail).
  */
 export default function PlanilhaScreen({ lotes, params, user, onOpen, refreshKey, onBarraAcao }) {
+  const gestor = usePodeGerirVenda(); // preço já definido: só gestor troca
   const [q, setQ] = useState("");
   const [fLote, setFLote] = useState("");
   const [fStatus, setFStatus] = useState("");
@@ -135,6 +137,7 @@ export default function PlanilhaScreen({ lotes, params, user, onOpen, refreshKey
 
   const abrirEdicao = (it, col) => {
     if (!col.editavel || salvando) return;
+    if (col.key === "preco_ideal" && Number(it.preco_ideal) > 0 && !gestor) { setMsg({ tom: "erro", texto: MSG_SO_GESTOR_PRECO }); return; }
     setMsg(null);
     setEdicao({ sku: it.sku, key: col.key, valor: valorEdicao(col, it) });
   };
