@@ -71,7 +71,17 @@ do $$ declare m text; begin
   exception when others then m := 'ERRO: ' || sqlerrm; end;
   insert into res values ('operador assume reserva do bot na sacola (N8)', m is null, m); m := null;
   begin insert into gestores_venda (email) values ('aline@nogaria.com.br'); exception when others then m := sqlerrm; end;
-  insert into res values ('operador NÃO se inclui em gestores_venda', m is not null, m);
+  insert into res values ('operador NÃO se inclui em gestores_venda', m is not null, m); m := null;
+  begin update orcamentos set validade = now() - interval '1 minute' where codigo = 'SAC-1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO vence a validade da sacola com reserva', m like '%encurtar o prazo%', m); m := null;
+  begin update orcamentos set validade = now() + interval '1 hour' where codigo = 'SAC-1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO encurta a validade para poucas horas', m like '%encurtar o prazo%', m); m := null;
+  begin update orcamentos set validade = now() + interval '1 day' where codigo = 'SAC-1'; exception when others then m := 'ERRO: ' || sqlerrm; end;
+  insert into res values ('operador ajusta validade para 1 dia (renovar/re-separar)', m is null, m); m := null;
+  begin update orcamentos set validade = now() - interval '1 day' where codigo = 'SAC-3'; exception when others then m := 'ERRO: ' || sqlerrm; end;
+  insert into res values ('operador mexe na validade de orçamento SEM reserva', m is null, m); m := null;
+  begin delete from itens where sku = 'P2'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO apaga item', m like '%excluir um item%', m);
 end $$;
 reset role;
 
