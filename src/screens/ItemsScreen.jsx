@@ -26,6 +26,7 @@ const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base
 const PAGE = 50;
 import { DESTINO_INTL } from "../lib/catalogoCore";
 import { destinosInternacionais } from "../lib/destinos";
+import { usePodeGerirVenda } from "../lib/permissoes";
 const DESTINO_SEM = "__sem__"; // sentinela: itens sem destino definido (campo nulo)
 
 export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, params, user, onBarraAcao }) {
@@ -70,6 +71,7 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
   const [orcamento, setOrcamento] = useState(null); // itens do orçamento em prévia
   const [catalogoSkus, setCatalogoSkus] = useState(null); // SKUs do catálogo rápido (seleção)
   const [precoRapido, setPrecoRapido] = useState(null); // itens do preço rápido em massa
+  const gestor = usePodeGerirVenda(); // preço rápido só baixa preço já definido: só gestor
   const [revisaoPrecos, setRevisaoPrecos] = useState(null); // itens da revisão de preços (motor v2)
   const [rateioLote, setRateioLote] = useState(null); // lote aberto no rateio (pesos)
   const [custoLote, setCustoLote] = useState(null); // linha do lote aberta no custeio (valor do lote / custo por peça / extras)
@@ -533,8 +535,8 @@ export default function ItemsScreen({ lotes, initialFilter, onOpen, refreshKey, 
             <div className="grid grid-cols-2 gap-2">
               <BotaoAcao cor="bg-orange-500" icone={BookOpen} titulo={`Catálogo (${selected.size})`}
                 sub="PDF, link, WhatsApp e Instagram" desativado={selected.size === 0} onClick={catalogarSelecionados} />
-              <BotaoAcao cor="bg-blue-600" icone={Tag} titulo={`Preço rápido (${selected.size})`}
-                sub="desconto por tempo parado" desativado={selected.size === 0} onClick={precificarSelecionados} />
+              {gestor && <BotaoAcao cor="bg-blue-600" icone={Tag} titulo={`Preço rápido (${selected.size})`}
+                sub="desconto por tempo parado" desativado={selected.size === 0} onClick={precificarSelecionados} />}
               <BotaoAcao cor="bg-purple-600" icone={Tag} titulo={`Revisar preços (${selected.size})`}
                 sub="custo real, lucro e validar" desativado={selected.size === 0} onClick={revisarPrecosSelecionados} />
               <BotaoAcao cor="bg-emerald-600" icone={FileText}

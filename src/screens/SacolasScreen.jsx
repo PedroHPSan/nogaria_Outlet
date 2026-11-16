@@ -8,6 +8,7 @@ import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO,
 import { promoVencida, pendentesDoErro } from "../lib/campanhasCore";
 import { fmtBRL } from "../lib/model";
 import { reservasDoBot } from "../lib/canais";
+import { usePodeGerirVenda } from "../lib/permissoes";
 import { WA_API_ATIVA, eventoDaSacola, ROTULO_EVENTO, previaEnvio, enviarPelaApi, situacaoEnvios, rotuloEnvio } from "../lib/waEnvio";
 
 const COR = {
@@ -21,6 +22,7 @@ const fmtData = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit",
 export default function SacolasScreen({ user, onClose, onMudou }) {
   const [todas, setTodas] = useState(null);
   const [filtro, setFiltro] = useState("ABERTA");
+  const gestor = usePodeGerirVenda(); // tirar item / cancelar sacola: só gestor
   const [q, setQ] = useState("");
   const [erro, setErro] = useState(null);
   const [ocupado, setOcupado] = useState(null);
@@ -165,7 +167,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                       {promoVencida(i) && ef === "ABERTA" && <span className="ml-1 text-[10px] font-bold text-amber-700">promo encerrada: decidir no pagamento</span>}
                     </span>
                     <span className="ml-auto whitespace-nowrap">{Number(i.preco_cheio) > Number(i.preco) && <span className="line-through text-gray-400 mr-1">{fmtBRL(i.preco_cheio)}</span>}{fmtBRL(i.preco)}</span>
-                    {(ef === "ABERTA" || ef === "EXPIRADO") && (
+                    {gestor && (ef === "ABERTA" || ef === "EXPIRADO") && (
                       <button disabled={ocup} aria-label={`Tirar ${i.sku}`} onClick={() => window.confirm(`Tirar ${i.sku} da sacola e liberar o item?`) && agir(s, () => tirarDaSacola(s, i.sku))}>
                         <X className="w-3.5 h-3.5 text-gray-400" />
                       </button>
@@ -204,7 +206,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                       className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">{ef === "EXPIRADO" ? "Reabrir" : "Estender"}</button>
                   </span>
                 )}
-                {(ef === "ABERTA" || ef === "EXPIRADO") && <button disabled={ocup} onClick={() => window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
+                {gestor && (ef === "ABERTA" || ef === "EXPIRADO") && <button disabled={ocup} onClick={() => window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
                 {(envios[s.codigo] || []).map((e) => { const r = rotuloEnvio(e); return (
                   <span key={e.evento} className={`text-[11px] self-center ${r.falhou ? "text-red-600 font-bold" : "text-gray-500"}`}>{ROTULO_EVENTO[e.evento]}: {r.texto}</span>
                 ); })}

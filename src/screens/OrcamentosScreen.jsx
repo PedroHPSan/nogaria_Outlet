@@ -7,6 +7,7 @@ import {
 } from "../lib/orcamentos";
 import { STATUS_ORC, statusEfetivo, totais, mensagemCliente, podeTransitar } from "../lib/orcamentosCore";
 import { fmtBRL } from "../lib/model";
+import { usePodeGerirVenda } from "../lib/permissoes";
 
 const COR = {
   RASCUNHO: "bg-gray-100 text-gray-700", ENVIADO: "bg-sky-100 text-sky-700", RESERVADO: "bg-amber-100 text-amber-700",
@@ -14,6 +15,7 @@ const COR = {
 };
 
 export default function OrcamentosScreen({ user, onClose, onMudou }) {
+  const gestor = usePodeGerirVenda(); // cancelar (libera a reserva): só gestor
   const [lista, setLista] = useState(null);
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
@@ -89,7 +91,7 @@ export default function OrcamentosScreen({ user, onClose, onMudou }) {
                 )}
                 {pode("RESERVADO") && <button disabled={ocupado === orc.id} onClick={() => agir(orc, () => reservarOrcamento(orc, user))} className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">Reservar 48 h</button>}
                 {pode("VENDIDO") && <button disabled={ocupado === orc.id} onClick={() => window.confirm(`Confirmar venda de ${orc.itens.length} item(ns) por ${fmtBRL(t.total)}?`) && agir(orc, () => confirmarVenda(orc, user))} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Confirmar venda</button>}
-                {pode("CANCELADO") && <button disabled={ocupado === orc.id} onClick={() => window.confirm("Cancelar o orçamento e liberar a reserva?") && agir(orc, () => cancelarOrcamento(orc))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
+                {gestor && pode("CANCELADO") && <button disabled={ocupado === orc.id} onClick={() => window.confirm("Cancelar o orçamento e liberar a reserva?") && agir(orc, () => cancelarOrcamento(orc))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
                 {ocupado === orc.id && <Loader2 className="w-4 h-4 animate-spin text-orange-500 self-center" />}
               </div>
             </div>

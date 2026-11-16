@@ -22,6 +22,7 @@ import SalasScreen from "./screens/SalasScreen";
 import OndeEstaModal from "./components/OndeEstaModal";
 import MenuLateral from "./components/MenuLateral";
 import { useLayoutPref } from "./lib/layoutPref";
+import { limparPermissoes } from "./lib/permissoes";
 import { Monitor } from "lucide-react";
 
 // Abas principais (barra inferior no celular, menu lateral no desktop).
@@ -91,7 +92,10 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>
-      setSession((prev) => (prev?.user?.id === s?.user?.id && prev?.access_token === s?.access_token ? prev : s)));
+      setSession((prev) => {
+        if (prev?.user?.id !== s?.user?.id) limparPermissoes(); // trocou de login: recarrega quem é gestor
+        return prev?.user?.id === s?.user?.id && prev?.access_token === s?.access_token ? prev : s;
+      }));
     return () => sub.subscription.unsubscribe();
   }, []);
 
