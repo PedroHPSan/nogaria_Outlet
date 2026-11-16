@@ -18,7 +18,7 @@ alter table orcamentos drop constraint if exists orcamentos_status_check; -- bas
 create temp table res (teste text, ok boolean, detalhe text);
 grant all on res to authenticated;
 grant select, insert, update, delete on itens, reservas, orcamentos to authenticated;
-insert into itens (sku, produto, status, preco_ideal) values ('P1','A','PRONTO',100),('P2','B','PRONTO',null),('P3','C','PRONTO',100),('P4','D','PRONTO',10),('P5','E','PRONTO',10);
+insert into itens (sku, produto, status, preco_ideal) values ('P1','A','PRONTO',100),('P2','B','PRONTO',null),('P3','C','PRONTO',100),('P4','D','PRONTO',10),('P5','E','PRONTO',10),('P9','I','PRONTO',10);
 insert into orcamentos (codigo, slug, status, itens, validade) values
   ('SAC-1','s1','ABERTA','[{"sku":"P1"}]', now()+interval '1 day'),
   ('SAC-2','s2','ABERTA','[{"sku":"P3"}]', now()+interval '1 day'),
@@ -28,7 +28,8 @@ insert into reservas (sku, canal, origem_tipo, origem_ref, status, expira_em) va
   ('P3','whatsapp','sacola','SAC-2','ATIVA', now()+interval '1 day'),
   ('P2','whatsapp','carrinho_wa','wa:1','ATIVA', now()+interval '1 day'),
   ('P4','whatsapp','carrinho_wa','wa:2','ATIVA', now()-interval '1 hour'),
-  ('P5','whatsapp','carrinho_wa','wa:3','ATIVA', now()+interval '1 hour');
+  ('P5','whatsapp','carrinho_wa','wa:3','ATIVA', now()+interval '1 hour'),
+  ('P9','direto','sacola','SAC-9X','ATIVA', null);
 
 -- operador comum
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"aline@nogaria.com.br"}', false);
@@ -94,7 +95,13 @@ do $$ declare m text; begin
   insert into res values ('operador NÃO renomeia SKU de item precificado', m like '%trocar o SKU%', m); m := null;
   insert into itens (sku, produto, status) values ('P6','F','PRONTO');
   begin update itens set sku = 'P6Z' where sku = 'P6'; exception when others then m := 'ERRO: ' || sqlerrm; end;
-  insert into res values ('operador renomeia SKU de item sem preço (atribuir lote)', m is null, m);
+  insert into res values ('operador renomeia SKU de item sem preço (atribuir lote)', m is null, m); m := null;
+  begin update reservas set status = 'EXPIRADA' where sku = 'P9'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO expira reserva SEM prazo (NULL)', m like '%cancelar a separação%', m); m := null;
+  begin update reservas set expira_em = now() + interval '1 minute' where sku = 'P9'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO dá prazo curto a reserva SEM prazo (NULL)', m like '%cancelar a separação%', m); m := null;
+  begin update reservas set expira_em = now() + interval '2 days' where sku = 'P9'; exception when others then m := 'ERRO: ' || sqlerrm; end;
+  insert into res values ('operador dá prazo de 2 dias a reserva sem prazo', m is null, m);
 end $$;
 reset role;
 
