@@ -81,7 +81,20 @@ do $$ declare m text; begin
   begin update orcamentos set validade = now() - interval '1 day' where codigo = 'SAC-3'; exception when others then m := 'ERRO: ' || sqlerrm; end;
   insert into res values ('operador mexe na validade de orçamento SEM reserva', m is null, m); m := null;
   begin delete from itens where sku = 'P2'; exception when others then m := sqlerrm; end;
-  insert into res values ('operador NÃO apaga item', m like '%excluir um item%', m);
+  insert into res values ('operador NÃO apaga item', m like '%excluir um item%', m); m := null;
+  begin update reservas set expira_em = now() + interval '1 minute' where sku = 'P2'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO encurta reserva para 1 minuto', m like '%cancelar a separação%', m); m := null;
+  begin update orcamentos set codigo = 'SAC-1X' where codigo = 'SAC-1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO renomeia sacola com reserva', m like '%cancelar a separação%', m); m := null;
+  begin delete from orcamentos where codigo = 'SAC-1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO apaga sacola com reserva', m like '%cancelar a separação%', m); m := null;
+  begin delete from orcamentos where codigo = 'SAC-3'; exception when others then m := 'ERRO: ' || sqlerrm; end;
+  insert into res values ('operador apaga orçamento SEM reserva (rollback do separar)', m is null, m); m := null;
+  begin update itens set sku = 'P1Z' where sku = 'P1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador NÃO renomeia SKU de item precificado', m like '%trocar o SKU%', m); m := null;
+  insert into itens (sku, produto, status) values ('P6','F','PRONTO');
+  begin update itens set sku = 'P6Z' where sku = 'P6'; exception when others then m := 'ERRO: ' || sqlerrm; end;
+  insert into res values ('operador renomeia SKU de item sem preço (atribuir lote)', m is null, m);
 end $$;
 reset role;
 
@@ -106,5 +119,18 @@ update itens set preco_ideal = 80 where sku = 'P1';
 select set_config('request.jwt.claims', '', false);
 update itens set preco_ideal = 70 where sku = 'P1';
 insert into res select 'service_role e cron trocam preço', (select preco_ideal from itens where sku='P1') = 70, null;
+
+-- cron: sacola com validade vencida mas reserva no prazo NÃO solta a reserva; a vencida solta
+insert into itens (sku, produto, status) values ('P7','G','PRONTO'),('P8','H','PRONTO');
+insert into orcamentos (codigo, slug, status, itens, validade) values
+  ('SAC-7','s7','ABERTA','[{"sku":"P7"}]', now()-interval '1 minute'),
+  ('SAC-8','s8','ABERTA','[{"sku":"P8"}]', now()-interval '1 minute');
+insert into reservas (sku, canal, origem_tipo, origem_ref, status, expira_em) values
+  ('P7','whatsapp','sacola','SAC-7','ATIVA', now()+interval '2 days'),
+  ('P8','whatsapp','sacola','SAC-8','ATIVA', now()-interval '1 minute');
+select set_config('request.jwt.claims', '', false);
+select sacolas_expirar();
+insert into res select 'cron: sacola forjada vencida NÃO solta reserva no prazo', (select status from reservas where sku='P7')='ATIVA', null;
+insert into res select 'cron: reserva vencida da sacola é solta', (select status from reservas where sku='P8')='LIBERADA', null;
 
 select case when ok then 'PASS' else 'FAIL' end as r, teste, detalhe from res;
