@@ -43,11 +43,13 @@ begin
   select preco_ideal into v_base from itens where sku = p_sku;
   if coalesce(v_base, 0) <= 0 then return null; end if;   -- item inexistente ou sem preço: sem piso (o guarda recusa para operador)
   begin
-    select min(c.preco_cheio), coalesce(max(c.desconto_pct), 0) into v_cheio, v_desc
+    select c.preco_cheio, coalesce(c.desconto_pct, 0) into v_cheio, v_desc
       from campanha_itens c join campanhas k on k.id = c.campanha_id
-     where c.sku = p_sku and k.status in ('PUBLICADA', 'ENCERRADA') and k.inicio_em <= now();
+     where c.sku = p_sku and c.canal in ('whatsapp', '*') and k.status in ('PUBLICADA', 'ENCERRADA')
+       and k.inicio_em <= now() and k.fim_em > now() - interval '48 hours'   -- janela da campanha + a validade de uma sacola
+     order by (c.canal = 'whatsapp') desc, k.inicio_em desc limit 1;        -- mesma escolha de linha de precos_efetivos
   exception when undefined_table then v_cheio := null; v_desc := 0; end;
-  return round(least(v_base, coalesce(v_cheio, v_base)) * (1 - least(coalesce(v_desc, 0), 90) / 100) - 1, 2);
+  return round(least(v_base, coalesce(v_cheio, v_base)) * (1 - least(coalesce(v_desc, 0), 90) / 100) - 1, 2);   -- R$ 1 de folga de arredondamento
 end $$;
 revoke all on function public.orc_piso_item(text) from public, anon;
 grant execute on function public.orc_piso_item(text) to authenticated, service_role;
@@ -88,8 +90,9 @@ begin
     if tg_op = 'UPDATE' then
       for e in select value from jsonb_array_elements(v_antigos) loop
         if not exists (select 1 from jsonb_array_elements(new.itens) x where x->>'sku' = e->>'sku')
-           and exists (select 1 from reservas r where r.status = 'ATIVA' and r.origem_tipo = 'sacola' and r.origem_ref = old.codigo and r.sku = e->>'sku') then
-          raise exception '%: o item % continua reservado nesta sacola; só Bárbara, Valentina e Pedro tiram item.', old.codigo, e->>'sku' using errcode = '42501';
+           and (exists (select 1 from reservas r where r.status in ('ATIVA', 'CONFIRMADA') and r.origem_tipo = 'sacola' and r.origem_ref = old.codigo and r.sku = e->>'sku')
+                or exists (select 1 from itens it where it.sku = e->>'sku' and it.pedido_ref = old.codigo and it.status::text in ('VENDIDO', 'ENTREGUE'))) then
+          raise exception '%: o item % está reservado ou já vendido nesta sacola; só Bárbara, Valentina e Pedro tiram item.', old.codigo, e->>'sku' using errcode = '42501';
         end if;
       end loop;
     end if;
@@ -99,7 +102,7 @@ begin
       if v_piso is null then
         raise exception '%: item inexistente ou sem preço de venda; defina o preço antes de separar.', e->>'sku' using errcode = '42501';
       end if;
-      if coalesce((e->>'preco')::numeric, 0) < v_piso then
+      if coalesce((e->>'preco')::numeric, 0) * (1 - least(90, greatest(0, coalesce(new.desconto_pct, 0))) / 100) < v_piso then   -- preço já com o desconto da sacola
         raise exception '%: preço R$ % abaixo do mínimo permitido (R$ %). Só Bárbara, Valentina e Pedro mudam preço.',
           e->>'sku', coalesce(e->>'preco', '0'), to_char(v_piso, 'FM999G990D00') using errcode = '42501';
       end if;
@@ -118,8 +121,11 @@ declare o orcamentos%rowtype; v_saldo numeric;
 begin
   if new.status = 'VENDIDO' and old.status is distinct from 'VENDIDO' and nullif(new.pedido_ref, '') is not null
      and not public.pode_gerir_venda() then
-    select * into o from orcamentos where codigo = new.pedido_ref and origem = 'whatsapp' and status = 'ABERTA';
+    select * into o from orcamentos where codigo = new.pedido_ref and origem = 'whatsapp';
     if found then
+      if o.status <> 'ABERTA' then
+        raise exception '%: a sacola % está % e não aceita venda de item.', new.sku, new.pedido_ref, o.status using errcode = '42501';
+      end if;
       if not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(o.itens) = 'array' then o.itens else '[]'::jsonb end) x where x->>'sku' = new.sku) then
         raise exception '%: o item não está listado na sacola %.', new.sku, new.pedido_ref using errcode = '42501';
       end if;

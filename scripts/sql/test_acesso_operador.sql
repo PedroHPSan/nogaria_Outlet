@@ -4,8 +4,10 @@ create temp table res (teste text, ok boolean, detalhe text);
 grant all on res to authenticated, anon;
 insert into itens (sku, produto, status, preco_ideal) values ('A1','A','PRONTO',100),('A2','B','PRONTO',100),('A3','C','PRONTO',50);
 insert into campanhas (id, status, inicio_em, fim_em) values ('00000000-0000-0000-0000-00000000000a','PUBLICADA', now()-interval '1 day', now()+interval '1 day'), ('00000000-0000-0000-0000-00000000000b','RASCUNHO', null, null);
-insert into campanha_itens (campanha_id, sku, preco_cheio, desconto_pct) values ('00000000-0000-0000-0000-00000000000a','A2',100,20), ('00000000-0000-0000-0000-00000000000b','A3',50,60);
-insert into itens (sku, produto, status, preco_ideal) values ('A4','sem preço','PRONTO',null);
+insert into campanha_itens (campanha_id, sku, canal, preco_cheio, desconto_pct) values ('00000000-0000-0000-0000-00000000000a','A2','whatsapp',100,20), ('00000000-0000-0000-0000-00000000000b','A3','*',50,60);
+insert into itens (sku, produto, status, preco_ideal) values ('A4','sem preço','PRONTO',null),('A5','promo velha','PRONTO',100),('A6','vendido','PRONTO',100);
+insert into campanhas (id, status, inicio_em, fim_em) values ('00000000-0000-0000-0000-00000000000c','PUBLICADA', now()-interval '6 days', now()-interval '3 days');
+insert into campanha_itens (campanha_id, sku, canal, preco_cheio, desconto_pct) values ('00000000-0000-0000-0000-00000000000c','A5','whatsapp',100,50);
 insert into orcamentos (codigo, slug, status, itens, total, validade, origem, cliente_nome) values
   ('OP-1','op1','ABERTA','[{"sku":"A1","preco":100}]',100, now()+interval '1 day','whatsapp','Ana');
 insert into reservas (sku, canal, origem_tipo, origem_ref, status, expira_em) values ('A1','whatsapp','sacola','OP-1','ATIVA', now()+interval '1 day');
@@ -50,6 +52,9 @@ do $$ declare m text; begin
   -- rascunho de campanha (60% off) NÃO baixa o piso do A3 (50 → piso 49)
   m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-R','opr','ABERTA','[{"sku":"A3","preco":21}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
   insert into res values ('campanha em rascunho não baixa o piso', m like '%abaixo do mínimo%', m);
+
+  m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-V2','opv2','ABERTA','[{"sku":"A5","preco":40}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
+  insert into res values ('campanha publicada mas já encerrada há dias não baixa o piso', m like '%abaixo do mínimo%', m);
   m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-S','ops','ABERTA','[{"sku":"A4","preco":5}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
   insert into res values ('item sem preço de tabela: recusado (fecha fechado)', m like '%sem preço de venda%', m);
   m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-X','opx','ABERTA','[{"sku":"NAO-EXISTE","preco":5}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
@@ -59,7 +64,7 @@ do $$ declare m text; begin
   m := null; begin update orcamentos set origem = 'orcamento' where codigo='OP-1'; exception when others then m := sqlerrm; end;
   insert into res values ('operador não troca a origem', m like '%mudam a origem%', m);
   m := null; begin update orcamentos set itens = '[{"sku":"A2","preco":80},{"sku":"A3","preco":50}]' where codigo='OP-1'; exception when others then m := sqlerrm; end;
-  insert into res values ('operador não tira do JSON item que segue reservado', m like '%continua reservado%', m);
+  insert into res values ('operador não tira do JSON item que segue reservado', m like '%reservado ou já vendido%', m);
   m := null; begin insert into campanhas (status) values ('PUBLICADA'); exception when others then m := sqlerrm; end;
   insert into res values ('operador não cria campanha', m like '%Campanhas: só%', m);
   m := null; begin update campanha_itens set desconto_pct = 90 where sku='A2'; exception when others then m := sqlerrm; end;
@@ -80,7 +85,26 @@ do $$ begin
   update orcamentos set itens = '[{"sku":"A1","preco":10}]', desconto_pct = 0 where codigo='OP-1';
   insert into res values ('gestor muda preço livremente', (select total from orcamentos where codigo='OP-1') = 10, null);
   insert into campanhas (status) values ('RASCUNHO');
-  insert into res values ('gestor cria campanha', (select count(*) from campanhas) = 3, null);
+  insert into res values ('gestor cria campanha', (select count(*) from campanhas) = 4, null);
+end $$;
+reset role;
+
+-- sacola paga: reserva confirmada / item vendido / desconto da sacola
+insert into orcamentos (codigo, slug, status, itens, total, validade, origem) values
+  ('OP-2','op2','ABERTA','[{"sku":"A6","preco":100}]',100, now()+interval '1 day','whatsapp');
+insert into reservas (sku, canal, origem_tipo, origem_ref, status, expira_em) values ('A6','whatsapp','sacola','OP-2','CONFIRMADA', null);
+insert into orcamentos (codigo, slug, status, itens, total, validade, origem, desconto_pct) values
+  ('OP-3','op3','ABERTA','[{"sku":"A3","preco":50}]',25, now()+interval '1 day','whatsapp', 50);
+insert into orcamentos (codigo, slug, status, itens, total, validade, origem) values ('OP-4','op4','VENDIDO','[{"sku":"A3","preco":50}]',50, now()+interval '1 day','whatsapp');
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"aline@nogaria.com.br"}', false) \gset
+do $$ declare m text; begin
+  begin update orcamentos set itens = '[]' where codigo='OP-2'; exception when others then m := sqlerrm; end;
+  insert into res values ('não tira item com reserva CONFIRMADA', m like '%reservado ou já vendido%', m);
+  m := null; begin update orcamentos set itens = '[{"sku":"A3","preco":50},{"sku":"A2","preco":100}]' where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('piso considera o desconto da sacola', m like '%abaixo do mínimo%', m);
+  m := null; begin perform baixar_venda('A3', 50, 'WhatsApp', 'OP-4', 'x', null, null, 'aline'); exception when others then m := sqlerrm; end;
+  insert into res values ('venda sob sacola VENDIDA recusada', m like '%não aceita venda de item%', m);
 end $$;
 reset role;
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || teste || coalesce(' | ' || detalhe, '') from res;
