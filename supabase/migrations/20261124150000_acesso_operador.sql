@@ -12,12 +12,12 @@
 revoke all on all tables in schema public from anon;
 revoke all on all sequences in schema public from anon;
 grant select on public.catalogos_publicos to anon;
+alter default privileges for role postgres in schema public revoke all on tables from anon;       -- falha aborta a migration
+alter default privileges for role postgres in schema public revoke all on sequences from anon;
 do $$ begin
-  alter default privileges for role postgres in schema public revoke all on tables from anon;
-  alter default privileges for role postgres in schema public revoke all on sequences from anon;
   alter default privileges for role supabase_admin in schema public revoke all on tables from anon;
   alter default privileges for role supabase_admin in schema public revoke all on sequences from anon;
-exception when others then raise notice 'default privileges não ajustados (%).', sqlerrm; end $$;
+exception when insufficient_privilege then raise notice 'default privileges de supabase_admin não ajustados (sem permissão).'; end $$;
 
 -- 2) reservas só por RPC ---------------------------------------------------------------------------------------------
 revoke insert, update, delete on public.reservas from authenticated;
@@ -41,9 +41,11 @@ language plpgsql stable security definer set search_path = public as $$
 declare v_base numeric; v_cheio numeric; v_desc numeric := 0;
 begin
   select preco_ideal into v_base from itens where sku = p_sku;
-  if coalesce(v_base, 0) <= 0 then return null; end if;   -- sem preço de tabela não há piso (separar já recusa item sem preço)
+  if coalesce(v_base, 0) <= 0 then return null; end if;   -- item inexistente ou sem preço: sem piso (o guarda recusa para operador)
   begin
-    select min(preco_cheio), coalesce(max(desconto_pct), 0) into v_cheio, v_desc from campanha_itens where sku = p_sku;
+    select min(c.preco_cheio), coalesce(max(c.desconto_pct), 0) into v_cheio, v_desc
+      from campanha_itens c join campanhas k on k.id = c.campanha_id
+     where c.sku = p_sku and k.status in ('PUBLICADA', 'ENCERRADA') and k.inicio_em <= now();
   exception when undefined_table then v_cheio := null; v_desc := 0; end;
   return round(least(v_base, coalesce(v_cheio, v_base)) * (1 - least(coalesce(v_desc, 0), 90) / 100) - 1, 2);
 end $$;
@@ -65,6 +67,9 @@ begin
       raise exception 'Só Bárbara, Valentina e Pedro dão desconto.' using errcode = '42501';
     end if;
   else
+    if new.origem is distinct from old.origem then
+      raise exception '%: só Bárbara, Valentina e Pedro mudam a origem.', old.codigo using errcode = '42501';
+    end if;
     if coalesce(new.desconto_pct, 0) <> coalesce(old.desconto_pct, 0) then
       raise exception '%: só Bárbara, Valentina e Pedro mudam o desconto.', old.codigo using errcode = '42501';
     end if;
@@ -74,12 +79,27 @@ begin
     end if;
   end if;
 
-  if new.origem = 'whatsapp' and jsonb_typeof(new.itens) = 'array' then
-    v_antigos := case when tg_op = 'UPDATE' and jsonb_typeof(old.itens) = 'array' then old.itens else '[]'::jsonb end;
+  if new.origem = 'whatsapp' then
+    if jsonb_typeof(new.itens) is distinct from 'array' then
+      raise exception 'Itens da sacola inválidos.' using errcode = '42501';
+    end if;
+    v_antigos := case when tg_op = 'UPDATE' and old.origem = 'whatsapp' and jsonb_typeof(old.itens) = 'array' then old.itens else '[]'::jsonb end;
+    -- item que sai do JSON enquanto a reserva dele na sacola segue ativa: só tirando a reserva antes (gestor)
+    if tg_op = 'UPDATE' then
+      for e in select value from jsonb_array_elements(v_antigos) loop
+        if not exists (select 1 from jsonb_array_elements(new.itens) x where x->>'sku' = e->>'sku')
+           and exists (select 1 from reservas r where r.status = 'ATIVA' and r.origem_tipo = 'sacola' and r.origem_ref = old.codigo and r.sku = e->>'sku') then
+          raise exception '%: o item % continua reservado nesta sacola; só Bárbara, Valentina e Pedro tiram item.', old.codigo, e->>'sku' using errcode = '42501';
+        end if;
+      end loop;
+    end if;
     for e in select value from jsonb_array_elements(new.itens) loop
       continue when exists (select 1 from jsonb_array_elements(v_antigos) x where x->>'sku' = e->>'sku' and (x->>'preco') is not distinct from (e->>'preco'));
       v_piso := public.orc_piso_item(e->>'sku');
-      if v_piso is not null and coalesce((e->>'preco')::numeric, 0) < v_piso then
+      if v_piso is null then
+        raise exception '%: item inexistente ou sem preço de venda; defina o preço antes de separar.', e->>'sku' using errcode = '42501';
+      end if;
+      if coalesce((e->>'preco')::numeric, 0) < v_piso then
         raise exception '%: preço R$ % abaixo do mínimo permitido (R$ %). Só Bárbara, Valentina e Pedro mudam preço.',
           e->>'sku', coalesce(e->>'preco', '0'), to_char(v_piso, 'FM999G990D00') using errcode = '42501';
       end if;
@@ -91,8 +111,54 @@ drop trigger if exists trg_orcamentos_guarda_dados on public.orcamentos;
 create trigger trg_orcamentos_guarda_dados before insert or update on public.orcamentos
   for each row execute function public.orcamentos_guarda_dados();
 
+-- Venda de item sob o código de uma sacola ABERTA: o SKU precisa estar listado nela (e a sacola paga/liberada).
+create or replace function public.itens_guarda_venda_saldo() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare o orcamentos%rowtype; v_saldo numeric;
+begin
+  if new.status = 'VENDIDO' and old.status is distinct from 'VENDIDO' and nullif(new.pedido_ref, '') is not null
+     and not public.pode_gerir_venda() then
+    select * into o from orcamentos where codigo = new.pedido_ref and origem = 'whatsapp' and status = 'ABERTA';
+    if found then
+      if not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(o.itens) = 'array' then o.itens else '[]'::jsonb end) x where x->>'sku' = new.sku) then
+        raise exception '%: o item não está listado na sacola %.', new.sku, new.pedido_ref using errcode = '42501';
+      end if;
+      v_saldo := public.orc_saldo(o.id);
+      if v_saldo > 0.004 then
+        raise exception '%: a sacola % ainda tem R$ % a receber. Só Bárbara, Valentina e Pedro liberam a venda com saldo em aberto.',
+          new.sku, new.pedido_ref, to_char(v_saldo, 'FM999G990D00') using errcode = '42501';
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+
+-- Campanhas definem o piso de preço: criar/publicar/encerrar/mudar desconto só gestor (as RPCs de campanha são SECURITY
+-- DEFINER mas o papel vem do JWT). O gatilho de preço do item só atualiza preco_cheio, que segue livre.
+create or replace function public.campanhas_so_gestor() returns trigger
+language plpgsql as $$
+begin
+  if public.pode_gerir_venda() then return case when tg_op = 'DELETE' then old else new end; end if;
+  if tg_table_name = 'campanha_itens' and tg_op = 'UPDATE' then
+    if (new.campanha_id, new.sku, new.canal, new.desconto_pct, new.regra_tipo) is not distinct from (old.campanha_id, old.sku, old.canal, old.desconto_pct, old.regra_tipo) then
+      return new;   -- só preco_cheio mudou (cascata do preço do item)
+    end if;
+  end if;
+  raise exception 'Campanhas: só Bárbara, Valentina e Pedro criam, publicam, encerram ou mudam descontos.' using errcode = '42501';
+end $$;
+drop trigger if exists trg_campanhas_so_gestor on public.campanhas;
+create trigger trg_campanhas_so_gestor before insert or update or delete on public.campanhas
+  for each row execute function public.campanhas_so_gestor();
+drop trigger if exists trg_campanha_itens_so_gestor on public.campanha_itens;
+create trigger trg_campanha_itens_so_gestor before insert or update or delete on public.campanha_itens
+  for each row execute function public.campanhas_so_gestor();
+drop trigger if exists trg_campanha_regras_so_gestor on public.campanha_regras;
+create trigger trg_campanha_regras_so_gestor before insert or update or delete on public.campanha_regras
+  for each row execute function public.campanhas_so_gestor();
+
 -- ROLLBACK (manual):
 --   drop trigger if exists trg_orcamentos_guarda_dados on public.orcamentos; drop function if exists public.orcamentos_guarda_dados();
 --   drop function if exists public.orc_piso_item(text);
+--   drop trigger if exists trg_campanhas_so_gestor on public.campanhas; drop trigger if exists trg_campanha_itens_so_gestor on public.campanha_itens; drop trigger if exists trg_campanha_regras_so_gestor on public.campanha_regras; drop function if exists public.campanhas_so_gestor();
 --   grant insert, update, delete on public.reservas to authenticated;
 --   (anon: grant select, insert, update, delete on <tabela> to anon — só se algo público realmente precisar)

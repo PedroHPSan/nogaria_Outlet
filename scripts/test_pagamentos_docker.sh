@@ -17,7 +17,7 @@ $PSQL -c "create table if not exists public.interesses (id uuid primary key defa
 for M in 20261102120000_omnichannel_base 20261102130000_omnichannel_rpcs 20261116100000_gestores_venda 20261116110000_gestores_venda_reforco 20261116120000_gestores_venda_reforco2 20261116130000_gestores_venda_null_safe; do
   $PSQL < supabase/migrations/$M.sql || { echo "FALHA: pré-requisito $M"; exit 1; }
 done
-$PSQL -c "create table if not exists public.campanha_itens (campanha_id uuid, sku text, canal text, preco_cheio numeric, desconto_pct numeric, regra_tipo text);" || exit 1
+$PSQL -c "create table if not exists public.campanhas (id uuid primary key default gen_random_uuid(), status text, inicio_em timestamptz, fim_em timestamptz); create table if not exists public.campanha_itens (campanha_id uuid, sku text, canal text, preco_cheio numeric, desconto_pct numeric, regra_tipo text); create table if not exists public.campanha_regras (id uuid primary key default gen_random_uuid(), campanha_id uuid, desconto_pct numeric); grant select, insert, update, delete on public.campanhas, public.campanha_itens, public.campanha_regras to authenticated;" || exit 1
 MIG=supabase/migrations/20261124120000_pagamentos_sacola.sql
 docker cp $MIG $NAME:/tmp/pagamentos_sacola.sql
 $PSQL < $MIG || { echo "FALHA ao aplicar a migration"; exit 1; }

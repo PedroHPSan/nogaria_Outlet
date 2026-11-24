@@ -3,7 +3,9 @@
 create temp table res (teste text, ok boolean, detalhe text);
 grant all on res to authenticated, anon;
 insert into itens (sku, produto, status, preco_ideal) values ('A1','A','PRONTO',100),('A2','B','PRONTO',100),('A3','C','PRONTO',50);
-insert into campanha_itens (campanha_id, sku, preco_cheio, desconto_pct) values (gen_random_uuid(),'A2',100,20);
+insert into campanhas (id, status, inicio_em, fim_em) values ('00000000-0000-0000-0000-00000000000a','PUBLICADA', now()-interval '1 day', now()+interval '1 day'), ('00000000-0000-0000-0000-00000000000b','RASCUNHO', null, null);
+insert into campanha_itens (campanha_id, sku, preco_cheio, desconto_pct) values ('00000000-0000-0000-0000-00000000000a','A2',100,20), ('00000000-0000-0000-0000-00000000000b','A3',50,60);
+insert into itens (sku, produto, status, preco_ideal) values ('A4','sem preço','PRONTO',null);
 insert into orcamentos (codigo, slug, status, itens, total, validade, origem, cliente_nome) values
   ('OP-1','op1','ABERTA','[{"sku":"A1","preco":100}]',100, now()+interval '1 day','whatsapp','Ana');
 insert into reservas (sku, canal, origem_tipo, origem_ref, status, expira_em) values ('A1','whatsapp','sacola','OP-1','ATIVA', now()+interval '1 day');
@@ -43,6 +45,28 @@ do $$ declare m text; begin
   insert into res values ('ABERTA → RASCUNHO recusado', m like '%não é permitida%', m);
   m := null; begin update orcamentos set status = 'EXPIRADO' where codigo='OP-1'; exception when others then m := sqlerrm; end;
   insert into res values ('operador não expira sacola na mão', m like '%não é permitida%', m);
+
+  m := null; begin update orcamentos set itens = itens || '[{"sku":"A3","preco":21}]'::jsonb where codigo='OP-1' and false; exception when others then m := sqlerrm; end;
+  -- rascunho de campanha (60% off) NÃO baixa o piso do A3 (50 → piso 49)
+  m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-R','opr','ABERTA','[{"sku":"A3","preco":21}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
+  insert into res values ('campanha em rascunho não baixa o piso', m like '%abaixo do mínimo%', m);
+  m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-S','ops','ABERTA','[{"sku":"A4","preco":5}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
+  insert into res values ('item sem preço de tabela: recusado (fecha fechado)', m like '%sem preço de venda%', m);
+  m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-X','opx','ABERTA','[{"sku":"NAO-EXISTE","preco":5}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
+  insert into res values ('SKU inexistente: recusado', m like '%inexistente ou sem preço%', m);
+  m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-J','opj','ABERTA','{}',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
+  insert into res values ('itens que não é lista: recusado', m like '%inválidos%', m);
+  m := null; begin update orcamentos set origem = 'orcamento' where codigo='OP-1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não troca a origem', m like '%mudam a origem%', m);
+  m := null; begin update orcamentos set itens = '[{"sku":"A2","preco":80},{"sku":"A3","preco":50}]' where codigo='OP-1'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não tira do JSON item que segue reservado', m like '%continua reservado%', m);
+  m := null; begin insert into campanhas (status) values ('PUBLICADA'); exception when others then m := sqlerrm; end;
+  insert into res values ('operador não cria campanha', m like '%Campanhas: só%', m);
+  m := null; begin update campanha_itens set desconto_pct = 90 where sku='A2'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não muda desconto de campanha', m like '%Campanhas: só%', m);
+  update campanha_itens set preco_cheio = 120 where sku='A2';
+  insert into res values ('cascata de preço_cheio continua livre', (select preco_cheio from campanha_itens where sku='A2') = 120, null);
+  update campanha_itens set preco_cheio = 100 where sku='A2';
 end $$;
 reset role;
 select set_config('request.jwt.claims', '', false) \gset
@@ -55,6 +79,8 @@ do $$ begin
   insert into res values ('gestor dá desconto e o total acompanha', (select total from orcamentos where codigo='OP-1') = 207, (select total::text from orcamentos where codigo='OP-1'));
   update orcamentos set itens = '[{"sku":"A1","preco":10}]', desconto_pct = 0 where codigo='OP-1';
   insert into res values ('gestor muda preço livremente', (select total from orcamentos where codigo='OP-1') = 10, null);
+  insert into campanhas (status) values ('RASCUNHO');
+  insert into res values ('gestor cria campanha', (select count(*) from campanhas) = 3, null);
 end $$;
 reset role;
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || teste || coalesce(' | ' || detalhe, '') from res;
