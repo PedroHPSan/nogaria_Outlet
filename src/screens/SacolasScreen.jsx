@@ -1,10 +1,10 @@
 // Sacolas de WhatsApp: o que foi separado por cliente, o que falta pagar e entregar.
 // Regras em sacolasCore; operações em sacolas.js (pagar reaproveita confirmarVenda).
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { X, Loader2, Search, AlertTriangle, MessageCircle } from "lucide-react";
-import { listarSacolas, tirarDaSacola, registrarPagamento, registrarEntrega, cancelarSacola, renovarSacola } from "../lib/sacolas";
-import { statusEfetivo, totais } from "../lib/orcamentosCore";
-import { resumoSacolas, resumoDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO, PRAZOS_RENOVACAO, rotuloPrazo, totaisComDecisao } from "../lib/sacolasCore";
+import { X, Loader2, Search, AlertTriangle, MessageCircle, Undo2 } from "lucide-react";
+import { listarSacolasComFinanceiro, tirarDaSacola, registrarPagamento, registrarEntrega, cancelarSacola, renovarSacola, concluirBaixa, liberarComSaldo, estornarPagamento, definirPlano } from "../lib/sacolas";
+import { statusEfetivo } from "../lib/orcamentosCore";
+import { resumoSacolas, resumoDoDia, recebimentosDoDia, porCliente, linkCobranca, FORMAS_PAGAMENTO, FORMAS_COM_TAXA, PRAZOS_RENOVACAO, rotuloPrazo, totaisComDecisao, financeiroDaSacola, situacaoParcelas, gerarPlano, taxaLiquida } from "../lib/sacolasCore";
 import { promoVencida, pendentesDoErro } from "../lib/campanhasCore";
 import { fmtBRL } from "../lib/model";
 import { reservasDoBot } from "../lib/canais";
@@ -16,7 +16,12 @@ const COR = {
   CANCELADO: "bg-red-100 text-red-700", EXPIRADO: "bg-gray-200 text-gray-500",
 };
 const ROTULO = { ABERTA: "A pagar", VENDIDO: "Pago · a entregar", ENTREGUE: "Entregue", CANCELADO: "Cancelada", EXPIRADO: "Vencida" };
-const FILTROS = [["ABERTA", "A pagar"], ["EXPIRADO", "Vencidas"], ["VENDIDO", "A entregar"], ["ENTREGUE", "Entregues"], ["", "Todas"], ["CLIENTES", "Por cliente"], ["BOT", "Do bot"]];
+const FILTROS = [["ABERTA", "A pagar"], ["SALDO", "Com saldo"], ["EXPIRADO", "Vencidas"], ["VENDIDO", "A entregar"], ["ENTREGUE", "Entregues"], ["", "Todas"], ["CLIENTES", "Por cliente"], ["BOT", "Do bot"]];
+const COR_PARCELA = { PAGA: "text-emerald-700", PARCIAL: "text-amber-700", ABERTA: "text-gray-600", VENCIDA: "text-red-600 font-bold" };
+const diaBR = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "");
+const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const maisDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const numBR = (v) => Number(String(v ?? "").replace(",", "."));
 const fmtData = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function SacolasScreen({ user, onClose, onMudou }) {
@@ -26,15 +31,17 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   const [q, setQ] = useState("");
   const [erro, setErro] = useState(null);
   const [ocupado, setOcupado] = useState(null);
-  const [pagando, setPagando] = useState(null); // { id, forma, valor }
-  const [decisao, setDecisao] = useState(null); // { sacola, pend, forma } — campanha terminou antes do pagamento: manter promo ou cobrar cheio
+  const [pagando, setPagando] = useState(null); // { id, forma, valor, obs, parcelas, taxa, data, chave }
+  const [estornando, setEstornando] = useState(null); // { sacola, pag, motivo }
+  const [plano, setPlano] = useState(null); // { sacola, n, intervalo, venc, linhas:[{valor,vencimento}] }
+  const [decisao, setDecisao] = useState(null); // { sacola, pend, pagando } — campanha terminou antes do pagamento: manter promo ou cobrar cheio
   const [dias, setDias] = useState({}); // id da sacola -> dias para reabrir/estender (padrão 3)
   const [previa, setPrevia] = useState(null); // { sacola, evento } — confirmação do envio pela API
   const [doBot, setDoBot] = useState(null); // reservas ativas do bot do WhatsApp
   const [envios, setEnvios] = useState({}); // codigo -> situação dos envios (WhatsApp API)
 
   const carregar = useCallback(async () => {
-    try { setErro(null); setTodas(await listarSacolas()); }
+    try { setErro(null); setTodas(await listarSacolasComFinanceiro()); }
     catch (e) { setErro(e.message || String(e)); setTodas([]); }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
@@ -49,10 +56,12 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
 
   const resumo = useMemo(() => resumoSacolas(todas || []), [todas]);
   const hoje = useMemo(() => resumoDoDia(todas || []), [todas]);
+  const caixa = useMemo(() => recebimentosDoDia(todas || []), [todas]);
   const clientes = useMemo(() => porCliente(todas || []).filter((c) => !q.trim() || `${c.nome || ""} ${c.whatsapp || ""}`.toLowerCase().includes(q.trim().toLowerCase())), [todas, q]);
   const lista = useMemo(() => (todas || []).filter((s) => {
     if (filtro === "CLIENTES" || filtro === "BOT") return false;
-    if (filtro && statusEfetivo(s) !== filtro) return false;
+    if (filtro === "SALDO") { const f = financeiroDaSacola(s); if (!(f.devendo && (f.pago > 0 || statusEfetivo(s) !== "ABERTA"))) return false; }
+    else if (filtro && statusEfetivo(s) !== filtro) return false;
     const t = q.trim().toLowerCase();
     return !t || `${s.codigo} ${s.cliente_nome || ""} ${s.cliente_whatsapp || ""}`.toLowerCase().includes(t);
   }), [todas, filtro, q]);
@@ -65,21 +74,31 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
   };
 
   // Pagamento: se a campanha de algum item já terminou o servidor recusa (DECISAO_CAMPANHA) e abrimos o diálogo.
+  const dadosPagamento = (p) => ({ forma: p.forma, valor: numBR(p.valor), obs: p.obs, parcelasCartao: p.parcelas, taxaPct: p.taxa, chave: p.chave,
+    recebidoEm: p.data && p.data !== hojeISO() ? `${p.data}T12:00:00-03:00` : null });
   const pagar = async (s) => {
-    try { await registrarPagamento(s, { forma: pagando.forma, valor: String(pagando.valor).replace(",", ".") }, user); }
+    try { await registrarPagamento(s, dadosPagamento(pagando), user); }
     catch (e) {
       const pend = pendentesDoErro(e);
       if (!pend) throw e;
-      setDecisao({ sacola: s, pend, forma: pagando.forma });
+      setDecisao({ sacola: s, pend, pagando: { ...pagando } });
     }
   };
   const decidir = (manter) => {
-    const { sacola, pend, forma } = decisao;
-    const t = totaisComDecisao(sacola.itens, sacola.desconto_pct, pend);
+    const { sacola, pagando: p } = decisao;
     return agir(sacola, async () => {
-      await registrarPagamento(sacola, { forma, valor: String(manter ? t.promo : t.cheio) }, user, { manterPromo: manter });
+      await registrarPagamento(sacola, dadosPagamento(p), user, { manterPromo: manter });
       setDecisao(null);
     });
+  };
+  const abrirPagamento = (s, f) => setPagando({ id: s.id, forma: FORMAS_PAGAMENTO[0], valor: String(f.saldo).replace(".", ","), obs: "", parcelas: 1, taxa: "", data: hojeISO(), chave: crypto.randomUUID() });
+  const abrirPlano = (s, f) => {
+    const venc = maisDias(30);
+    setPlano({ sacola: s, n: 3, intervalo: "30", venc, linhas: gerarPlano({ saldo: f.saldo, n: 3, primeiroVencimento: venc, intervalo: 30, pago: f.pago }) });
+  };
+  const recalcularPlano = (p, mud) => {
+    const n = { ...p, ...mud }; const f = financeiroDaSacola(n.sacola);
+    return { ...n, linhas: gerarPlano({ saldo: f.saldo, n: n.n, primeiroVencimento: n.venc, intervalo: n.intervalo === "mes" ? "mes" : Number(n.intervalo), pago: f.pago }) };
   };
 
   return (
@@ -90,12 +109,12 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
           <button onClick={onClose} aria-label="Fechar"><X className="w-6 h-6 text-gray-300" /></button>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-          <div className="bg-gray-800 rounded-lg py-2"><p className="text-[11px] text-gray-400">A receber</p><p className="font-bold text-amber-300">{fmtBRL(resumo.aReceber)}</p><p className="text-[10px] text-gray-500">{resumo.abertas} sacola(s){resumo.vencendo ? ` · ${resumo.vencendo} vencendo` : ""}</p></div>
+          <div className="bg-gray-800 rounded-lg py-2"><p className="text-[11px] text-gray-400">A receber</p><p className="font-bold text-amber-300">{fmtBRL(resumo.aReceber)}</p><p className="text-[10px] text-gray-500">{resumo.abertas} sacola(s){resumo.vencendo ? ` · ${resumo.vencendo} vencendo` : ""}{resumo.vencido > 0 ? ` · ${fmtBRL(resumo.vencido)} em atraso` : ""}</p></div>
           <div className="bg-gray-800 rounded-lg py-2"><p className="text-[11px] text-gray-400">A entregar</p><p className="font-bold">{resumo.pagasSemEntrega}</p><p className="text-[10px] text-gray-500">já pagas</p></div>
           <div className="bg-gray-800 rounded-lg py-2"><p className="text-[11px] text-gray-400">Recebido</p><p className="font-bold text-emerald-300">{fmtBRL(resumo.recebido)}</p></div>
         </div>
         <p className="mt-2 text-[11px] text-gray-400">
-          Hoje: {hoje.separadas.n} separada(s) ({fmtBRL(hoje.separadas.valor)}) · {hoje.pagas.n} paga(s) ({fmtBRL(hoje.pagas.valor)}) · {hoje.entregues} entregue(s)
+          Hoje: {hoje.separadas.n} separada(s) ({fmtBRL(hoje.separadas.valor)}) · recebido {fmtBRL(caixa.total)}{caixa.n ? ` em ${caixa.n} pagamento(s)` : ""}{Object.keys(caixa.porForma).length ? ` (${Object.entries(caixa.porForma).map(([k, v]) => `${k} ${fmtBRL(v)}`).join(" · ")})` : ""}{caixa.liquido !== caixa.total ? ` · líquido ${fmtBRL(caixa.liquido)}` : ""} · {hoje.entregues} entregue(s)
         </p>
         <div className="mt-2 relative">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
@@ -145,20 +164,23 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
         {todas && filtro !== "CLIENTES" && lista.length === 0 && !erro && <p className="text-sm text-gray-500 text-center mt-10">Nenhuma sacola aqui. Separe um item pela ficha dele (botão Separar).</p>}
         {lista.map((s) => {
           const ef = statusEfetivo(s);
-          const t = totais(s.itens, s.desconto_pct);
+          const f = financeiroDaSacola(s);
+          const parcelas = situacaoParcelas(s.parcelas, f.pago);
+          const rotuloSt = ef === "ABERTA" && f.situacao === "PARCIAL" ? "Parcial" : ef === "ABERTA" && f.situacao === "QUITADO" ? "Pago · falta baixar" : f.devendo && ef !== "ABERTA" ? `${ROTULO[ef]} · fiado` : ROTULO[ef] || ef;
           const restante = new Date(s.validade) - new Date();
-          const vencendo = ef === "ABERTA" && restante < 86400000;
-          const venceEm2h = ef === "ABERTA" && restante > 0 && restante < 7200000;
+          const semPrazo = f.pago > 0; // com pagamento a separação não vence
+          const vencendo = ef === "ABERTA" && !semPrazo && restante < 86400000;
+          const venceEm2h = ef === "ABERTA" && !semPrazo && restante > 0 && restante < 7200000;
           const wa = ef === "ABERTA" ? linkCobranca(s) : null;
           const ocup = ocupado === s.id;
           return (
             <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-gray-900 truncate">{s.cliente_nome || s.cliente_whatsapp || "Sem cliente"}</span>
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${COR[ef]}`}>{ROTULO[ef] || ef}</span>
-                <span className="ml-auto font-bold text-gray-900">{fmtBRL(t.total)}</span>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${f.situacao === "PARCIAL" && ef === "ABERTA" ? "bg-orange-100 text-orange-700" : COR[ef]}`}>{rotuloSt}</span>
+                <span className="ml-auto font-bold text-gray-900">{fmtBRL(f.total)}</span>
               </div>
-              <p className="text-[11px] text-gray-400 font-mono">{s.codigo}{ef === "ABERTA" ? <span className={vencendo ? "text-red-600 font-bold" : ""}> · seguro até {fmtData(s.validade)}{venceEm2h ? ` · vence em ${Math.max(1, Math.round(restante / 60000))} min` : ""}</span> : ef === "EXPIRADO" ? <span className="text-red-600 font-bold"> · venceu em {fmtData(s.validade)} (itens liberados)</span> : null}{s.forma_pagamento ? ` · ${s.forma_pagamento}` : ""}</p>
+              <p className="text-[11px] text-gray-400 font-mono">{s.codigo}{ef === "ABERTA" && semPrazo ? <span className="text-emerald-700"> · reservada (tem pagamento; só vence se cancelar)</span> : ef === "ABERTA" ? <span className={vencendo ? "text-red-600 font-bold" : ""}> · seguro até {fmtData(s.validade)}{venceEm2h ? ` · vence em ${Math.max(1, Math.round(restante / 60000))} min` : ""}</span> : ef === "EXPIRADO" ? <span className="text-red-600 font-bold"> · venceu em {fmtData(s.validade)} (itens liberados)</span> : null}{s.forma_pagamento ? ` · ${s.forma_pagamento}` : ""}</p>
               <ul className="text-xs text-gray-700 space-y-0.5">
                 {s.itens.map((i) => (
                   <li key={i.sku} className="flex items-center gap-2">
@@ -176,27 +198,85 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                 ))}
               </ul>
 
-              {pagando?.id === s.id && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <select value={pagando.forma} onChange={(e) => setPagando({ ...pagando, forma: e.target.value })} className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs">
-                    {FORMAS_PAGAMENTO.map((f) => <option key={f}>{f}</option>)}
-                  </select>
-                  <input value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} inputMode="decimal"
-                    className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-xs" aria-label="Valor recebido" />
-                  <button disabled={ocup} onClick={() => agir(s, () => pagar(s))}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Confirmar pagamento</button>
-                  <button onClick={() => setPagando(null)} className="text-xs text-gray-500">Cancelar</button>
+              {(f.pago > 0 || f.devendo) && (
+                <div className="rounded-lg bg-gray-50 border border-gray-200 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-emerald-700 font-bold">Recebido {fmtBRL(f.pago)}</span>
+                    <span className={f.saldo > 0 ? "text-amber-700 font-bold" : "text-gray-500"}>{f.saldo > 0 ? `Falta ${fmtBRL(f.saldo)}` : "Quitada"}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, f.total > 0 ? (f.pago / f.total) * 100 : 0)}%` }} /></div>
+                  {s.liberada_com_saldo_em && <p className="text-[10px] text-gray-500">Liberada com saldo em aberto por {s.liberada_com_saldo_por} em {fmtData(s.liberada_com_saldo_em)}.</p>}
+                  <ul className="text-[11px] text-gray-700 space-y-0.5">
+                    {(s.pagamentos || []).map((p) => (
+                      <li key={p.id} className={`flex items-center gap-1.5 ${p.estornado_em ? "line-through text-gray-400" : ""}`}>
+                        <span>{diaBR(p.recebido_em)}</span><span className="font-semibold">{p.forma}{p.forma === "Crédito" && p.parcelas_cartao > 1 ? ` ${p.parcelas_cartao}x` : ""}</span>
+                        <span className="ml-auto whitespace-nowrap">{fmtBRL(p.valor)}{p.taxa_pct ? ` (líq. ${fmtBRL(p.valor_liquido)})` : ""}</span>
+                        {p.observacao && <span className="truncate max-w-[6rem] text-gray-400">{p.observacao}</span>}
+                        {p.estornado_em && <span className="no-underline text-[10px] text-red-600" title={p.estorno_motivo}>estornado</span>}
+                        {gestor && !p.estornado_em && <button disabled={ocup} aria-label="Estornar pagamento" title="Estornar (gestor)" onClick={() => setEstornando({ sacola: s, pag: p, motivo: "" })}><Undo2 className="w-3.5 h-3.5 text-gray-400" /></button>}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
+              {parcelas.length > 0 && (
+                <div className="text-[11px] space-y-0.5">
+                  <p className="font-bold text-gray-700">Parcelas combinadas</p>
+                  {parcelas.map((p) => (
+                    <p key={p.id} className={`flex justify-between ${COR_PARCELA[p.estado]}`}><span>{p.numero}/{parcelas.length} · vence {diaBR(p.vencimento)}</span><span>{fmtBRL(p.valor)} · {p.estado === "PAGA" ? "paga" : p.estado === "VENCIDA" ? `vencida (falta ${fmtBRL(p.aberto)})` : p.estado === "PARCIAL" ? `falta ${fmtBRL(p.aberto)}` : "a vencer"}</span></p>
+                  ))}
+                  {Math.abs(parcelas.reduce((a, p) => a + Number(p.valor), 0) - f.total) > 0.01 && <p className="text-amber-700">A soma das parcelas não bate mais com o total da sacola: refaça o plano.</p>}
+                </div>
+              )}
+
+              {pagando?.id === s.id && (() => {
+                const v = numBR(pagando.valor); const valido = v > 0 && v <= f.saldo + 0.004;
+                const parcial = valido && v < f.saldo - 0.004;
+                return (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select value={pagando.forma} onChange={(e) => setPagando({ ...pagando, forma: e.target.value })} className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs" aria-label="Forma de pagamento">
+                        {FORMAS_PAGAMENTO.map((x) => <option key={x}>{x}</option>)}
+                      </select>
+                      <input value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} inputMode="decimal"
+                        className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-xs" aria-label="Valor recebido" />
+                      <button type="button" onClick={() => setPagando({ ...pagando, valor: String(f.saldo).replace(".", ",") })} className="text-[11px] text-emerald-700 font-semibold underline">saldo ({fmtBRL(f.saldo)})</button>
+                      {f.saldo > 1 && <button type="button" onClick={() => setPagando({ ...pagando, valor: String(Math.round(f.saldo * 50) / 100).replace(".", ",") })} className="text-[11px] text-emerald-700 font-semibold underline">metade</button>}
+                      <input type="date" value={pagando.data} max={hojeISO()} onChange={(e) => setPagando({ ...pagando, data: e.target.value || hojeISO() })} className="rounded-lg border border-gray-300 px-2 py-1 text-xs" aria-label="Data do recebimento" />
+                    </div>
+                    {FORMAS_COM_TAXA.includes(pagando.forma) && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {pagando.forma === "Crédito" && <label className="flex items-center gap-1">Parcelas do cartão
+                          <select value={pagando.parcelas} onChange={(e) => setPagando({ ...pagando, parcelas: Number(e.target.value) })} className="rounded border border-gray-300 px-1 py-1">
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}x</option>)}
+                          </select></label>}
+                        <label className="flex items-center gap-1">Taxa %<input value={pagando.taxa} onChange={(e) => setPagando({ ...pagando, taxa: e.target.value })} inputMode="decimal" className="w-14 rounded border border-gray-300 px-1.5 py-1" /></label>
+                        {pagando.taxa !== "" && v > 0 && <span className="text-gray-600">cai na conta {fmtBRL(taxaLiquida(v, numBR(pagando.taxa)))}</span>}
+                      </div>
+                    )}
+                    <input value={pagando.obs} onChange={(e) => setPagando({ ...pagando, obs: e.target.value })} placeholder="Observação (opcional)" className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs" />
+                    {v > f.saldo + 0.004 && <p className="text-[11px] text-red-600 font-semibold">O valor é maior que o saldo ({fmtBRL(f.saldo)}).</p>}
+                    {parcial && <p className="text-[11px] text-amber-800 bg-amber-100 rounded-lg px-2 py-1.5 font-semibold">Pagamento parcial: depois dele ainda faltam {fmtBRL(f.saldo - v)}. A sacola continua reservada e só é baixada ao quitar.</p>}
+                    {valido && !parcial && <p className="text-[11px] text-emerald-800 bg-emerald-100 rounded-lg px-2 py-1.5 font-semibold">Quita a sacola{ef === "ABERTA" ? ": os itens serão baixados como vendidos." : "."}</p>}
+                    <div className="flex items-center gap-2">
+                      <button disabled={ocup || !valido} onClick={() => agir(s, () => pagar(s))} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50">{parcial ? "Registrar pagamento parcial" : "Confirmar pagamento"}</button>
+                      <button onClick={() => setPagando(null)} className="text-xs text-gray-500">Cancelar</button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-wrap gap-2 pt-1">
                 {WA_API_ATIVA && eventoDaSacola(ef) && s.cliente_whatsapp && !(envios[s.codigo] || []).some((e) => e.evento === eventoDaSacola(ef) && !rotuloEnvio(e).falhou) && (
                   <button disabled={ocup} onClick={() => setPrevia({ sacola: s, evento: eventoDaSacola(ef) })} className="px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 text-xs font-semibold">Enviar pela API · {ROTULO_EVENTO[eventoDaSacola(ef)]}</button>
                 )}
                 {wa && <a href={wa} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> Cobrar</a>}
-                {ef === "ABERTA" && pagando?.id !== s.id && <button disabled={ocup} onClick={() => setPagando({ id: s.id, forma: FORMAS_PAGAMENTO[0], valor: String(t.total) })} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Registrar pagamento</button>}
+                {(ef === "ABERTA" || f.devendo) && f.saldo > 0.004 && pagando?.id !== s.id && <button disabled={ocup} onClick={() => abrirPagamento(s, f)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">{f.pago > 0 ? "Registrar outro pagamento" : "Registrar pagamento"}</button>}
+                {ef === "ABERTA" && f.saldo <= 0.004 && f.pago > 0 && <button disabled={ocup} onClick={() => agir(s, () => concluirBaixa(s, user))} className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-bold">Concluir baixa dos itens</button>}
+                {(ef === "ABERTA" || f.devendo) && f.saldo > 0.004 && <button disabled={ocup} onClick={() => abrirPlano(s, f)} className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold">{parcelas.length ? "Refazer parcelas" : "Combinar parcelas"}</button>}
+                {gestor && ef === "ABERTA" && f.saldo > 0.004 && <button disabled={ocup} onClick={() => window.confirm(`Liberar com saldo em aberto?\n\nOs itens serão baixados como vendidos e ${fmtBRL(f.saldo)} ficam a receber de ${s.cliente_nome || "cliente"}.`) && agir(s, () => liberarComSaldo(s, user))} className="px-3 py-1.5 rounded-lg border border-orange-300 text-orange-700 text-xs font-semibold">Liberar com saldo (fiado)</button>}
                 {ef === "VENDIDO" && <button disabled={ocup} onClick={() => agir(s, () => registrarEntrega(s, user))} className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-bold">Marcar entregue</button>}
-                {(ef === "ABERTA" || ef === "EXPIRADO") && (
+                {(ef === "EXPIRADO" || (ef === "ABERTA" && !semPrazo)) && (
                   <span className="flex items-center gap-1">
                     <select value={dias[s.id] || 3} onChange={(e) => setDias({ ...dias, [s.id]: Number(e.target.value) })} aria-label="Prazo"
                       className="rounded-lg border border-gray-300 px-1.5 py-1.5 text-xs">
@@ -206,7 +286,7 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
                       className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">{ef === "EXPIRADO" ? "Reabrir" : "Estender"}</button>
                   </span>
                 )}
-                {gestor && (ef === "ABERTA" || ef === "EXPIRADO") && <button disabled={ocup} onClick={() => window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
+                {gestor && (ef === "ABERTA" || ef === "EXPIRADO") && <button disabled={ocup} onClick={() => (f.pago > 0 ? setErro(`${s.codigo}: já há ${fmtBRL(f.pago)} recebido. Estorne os pagamentos antes de cancelar a sacola.`) : window.confirm("Cancelar a sacola e liberar os itens?") && agir(s, () => cancelarSacola(s)))} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Cancelar</button>}
                 {(envios[s.codigo] || []).map((e) => { const r = rotuloEnvio(e); return (
                   <span key={e.evento} className={`text-[11px] self-center ${r.falhou ? "text-red-600 font-bold" : "text-gray-500"}`}>{ROTULO_EVENTO[e.evento]}: {r.texto}</span>
                 ); })}
@@ -216,6 +296,63 @@ export default function SacolasScreen({ user, onClose, onMudou }) {
           );
         })}
       </div>
+      {estornando && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-label="Estornar pagamento">
+          <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3">
+            <p className="font-bold text-gray-900">Estornar pagamento de {fmtBRL(estornando.pag.valor)}</p>
+            <p className="text-xs text-gray-600">{estornando.sacola.codigo} · {estornando.pag.forma} em {diaBR(estornando.pag.recebido_em)}. O pagamento fica no histórico como estornado; o saldo da sacola volta a subir.</p>
+            <input value={estornando.motivo} onChange={(e) => setEstornando({ ...estornando, motivo: e.target.value })} placeholder="Motivo (obrigatório)" className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm" autoFocus />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setEstornando(null)} className="px-3 py-1.5 text-xs text-gray-500">Voltar</button>
+              <button disabled={estornando.motivo.trim().length < 3 || ocupado === estornando.sacola.id}
+                onClick={() => agir(estornando.sacola, async () => { await estornarPagamento(estornando.pag, estornando.motivo.trim(), user); setEstornando(null); })}
+                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold disabled:opacity-50">Estornar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {plano && (() => {
+        const f = financeiroDaSacola(plano.sacola);
+        const soma = plano.linhas.reduce((a, l) => a + (Number(l.valor) || 0), 0);
+        const fecha = Math.abs(soma - f.total) <= 0.009;
+        const ocup = ocupado === plano.sacola.id;
+        const salvar = (linhas) => agir(plano.sacola, async () => { await definirPlano(plano.sacola, linhas.map((l) => ({ valor: Number(l.valor), vencimento: l.vencimento })), user); setPlano(null); });
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-label="Parcelas combinadas">
+            <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <p className="font-bold text-gray-900">Parcelas combinadas · {plano.sacola.cliente_nome || plano.sacola.codigo}</p>
+              <p className="text-xs text-gray-600">Total {fmtBRL(f.total)}{f.pago > 0 ? ` · já recebido ${fmtBRL(f.pago)} (entra como 1ª parcela)` : ""}. O que o cliente pagar abate da parcela mais antiga.</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <label className="flex items-center gap-1">Dividir em
+                  <select value={plano.n} onChange={(e) => setPlano(recalcularPlano(plano, { n: Number(e.target.value) }))} className="rounded border border-gray-300 px-1 py-1">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}x</option>)}
+                  </select></label>
+                <label className="flex items-center gap-1">a cada
+                  <select value={plano.intervalo} onChange={(e) => setPlano(recalcularPlano(plano, { intervalo: e.target.value }))} className="rounded border border-gray-300 px-1 py-1">
+                    <option value="7">7 dias</option><option value="15">15 dias</option><option value="30">30 dias</option><option value="mes">mês</option>
+                  </select></label>
+                <label className="flex items-center gap-1">1º vencimento
+                  <input type="date" value={plano.venc} onChange={(e) => e.target.value && setPlano(recalcularPlano(plano, { venc: e.target.value }))} className="rounded border border-gray-300 px-1 py-1" /></label>
+              </div>
+              <ul className="space-y-1.5">
+                {plano.linhas.map((l, i) => (
+                  <li key={i} className="flex items-center gap-2 text-xs">
+                    <span className="w-6 text-gray-400">{i + 1}.</span>
+                    <input type="date" value={l.vencimento} onChange={(e) => setPlano({ ...plano, linhas: plano.linhas.map((x, k) => (k === i ? { ...x, vencimento: e.target.value } : x)) })} className="rounded border border-gray-300 px-1.5 py-1" />
+                    <input value={String(l.valor).replace(".", ",")} inputMode="decimal" onChange={(e) => setPlano({ ...plano, linhas: plano.linhas.map((x, k) => (k === i ? { ...x, valor: numBR(e.target.value) || 0 } : x)) })} className="w-24 rounded border border-gray-300 px-1.5 py-1" aria-label={`Valor da parcela ${i + 1}`} />
+                  </li>
+                ))}
+              </ul>
+              <p className={`text-xs font-semibold ${fecha ? "text-emerald-700" : "text-red-600"}`}>Soma {fmtBRL(soma)} {fecha ? "· fecha com o total" : `· precisa ser ${fmtBRL(f.total)}`}</p>
+              <div className="flex flex-wrap gap-2 justify-end items-center">
+                {(plano.sacola.parcelas || []).length > 0 && <button disabled={ocup} onClick={() => salvar([])} className="mr-auto text-xs text-red-600">Apagar plano</button>}
+                <button onClick={() => setPlano(null)} className="px-3 py-1.5 text-xs text-gray-500">Cancelar</button>
+                <button disabled={ocup || !fecha} onClick={() => salvar(plano.linhas)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50">Salvar parcelas</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {decisao && (() => {
         const t = totaisComDecisao(decisao.sacola.itens, decisao.sacola.desconto_pct, decisao.pend);
         const c = decisao.pend[0];
