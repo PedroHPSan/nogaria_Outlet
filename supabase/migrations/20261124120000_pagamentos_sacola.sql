@@ -208,6 +208,7 @@ select o.id, o.valor_pago,
        coalesce(o.pago_em, o.atualizado_em, now()), 'backfill:' || o.id, 'backfill'
   from public.orcamentos o
  where o.origem = 'whatsapp' and coalesce(o.valor_pago, 0) > 0
+   and not exists (select 1 from public.orcamento_pagamentos p where p.orcamento_id = o.id)
 on conflict (chave) do nothing;
 
 -- ROLLBACK (manual):

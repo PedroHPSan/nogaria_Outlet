@@ -20,7 +20,13 @@ done
 MIG=supabase/migrations/20261124120000_pagamentos_sacola.sql
 docker cp $MIG $NAME:/tmp/pagamentos_sacola.sql
 $PSQL < $MIG || { echo "FALHA ao aplicar a migration"; exit 1; }
+MIG2=supabase/migrations/20261124130000_pagamentos_endurecimento.sql
+$PSQL < $MIG2 || { echo "FALHA ao aplicar o reforço"; exit 1; }
+$PSQL < $MIG2 || { echo "FALHA: reforço não é idempotente"; exit 1; }
 OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_pagamentos_sacola.sql 2>&1)
+$PSQL < $MIG2 || { echo "FALHA ao reaplicar o reforço"; exit 1; }   # o teste 1 reaplica a migration original (idempotência); o reforço vem depois
+OUT="$OUT
+$($PSQL -A -t -F' | ' < scripts/sql/test_pagamentos_endurecimento.sql 2>&1)"
 echo "$OUT"
 echo "$OUT" | grep -qE "^FAIL|ERROR" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }
