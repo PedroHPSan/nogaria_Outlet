@@ -6,7 +6,8 @@ alter table orcamentos add constraint orcamentos_status_check
   check (status in ('RASCUNHO','ENVIADO','RESERVADO','ABERTA','VENDIDO','ENTREGUE','CANCELADO','EXPIRADO'));
 create temp table res (teste text, ok boolean, detalhe text);
 grant all on res to authenticated;
-grant select, insert, update, delete on itens, reservas, orcamentos to authenticated;
+grant select, insert, update, delete on itens, orcamentos to authenticated;
+grant select on reservas to authenticated;
 grant select on orcamento_pagamentos, orcamento_parcelas to authenticated;
 
 insert into itens (sku, produto, status, preco_ideal) values ('Z1','A','PRONTO',100),('Z2','B','PRONTO',40),('Z3','C','PRONTO',60),('Z4','D','PRONTO',10);
@@ -114,7 +115,7 @@ end $$;
 
 -- cron de vencimento: sacola com pagamento ativo não expira; sem pagamento expira
 insert into orcamentos (codigo, slug, status, itens, total, validade, origem) values
-  ('PG-4','pg4','ABERTA','[]',10, now()+interval '1 day','whatsapp'),('PG-5','pg5','ABERTA','[]',10, now()+interval '1 day','whatsapp');
+  ('PG-4','pg4','ABERTA','[{"sku":"Z4","preco":10}]',10, now()+interval '1 day','whatsapp'),('PG-5','pg5','ABERTA','[{"sku":"Z4","preco":10}]',10, now()+interval '1 day','whatsapp');
 do $$ declare i4 uuid; begin
   select id into i4 from orcamentos where codigo='PG-4';
   perform pagamento_registrar(i4, 3, 'Pix', null, null, null, 'k12', null, 'b');
