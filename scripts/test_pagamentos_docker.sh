@@ -17,16 +17,22 @@ $PSQL -c "create table if not exists public.interesses (id uuid primary key defa
 for M in 20261102120000_omnichannel_base 20261102130000_omnichannel_rpcs 20261116100000_gestores_venda 20261116110000_gestores_venda_reforco 20261116120000_gestores_venda_reforco2 20261116130000_gestores_venda_null_safe; do
   $PSQL < supabase/migrations/$M.sql || { echo "FALHA: pré-requisito $M"; exit 1; }
 done
+$PSQL -c "create table if not exists public.campanha_itens (campanha_id uuid, sku text, canal text, preco_cheio numeric, desconto_pct numeric, regra_tipo text);" || exit 1
 MIG=supabase/migrations/20261124120000_pagamentos_sacola.sql
 docker cp $MIG $NAME:/tmp/pagamentos_sacola.sql
 $PSQL < $MIG || { echo "FALHA ao aplicar a migration"; exit 1; }
 MIG2=supabase/migrations/20261124130000_pagamentos_endurecimento.sql
 $PSQL < $MIG2 || { echo "FALHA ao aplicar o reforço"; exit 1; }
 $PSQL < $MIG2 || { echo "FALHA: reforço não é idempotente"; exit 1; }
+MIG3=supabase/migrations/20261124150000_acesso_operador.sql
+$PSQL < $MIG3 || { echo "FALHA ao aplicar o acesso de operador"; exit 1; }
+$PSQL < $MIG3 || { echo "FALHA: acesso de operador não é idempotente"; exit 1; }
 OUT=$($PSQL -A -t -F' | ' < scripts/sql/test_pagamentos_sacola.sql 2>&1)
 $PSQL < $MIG2 || { echo "FALHA ao reaplicar o reforço"; exit 1; }   # o teste 1 reaplica a migration original (idempotência); o reforço vem depois
+$PSQL < $MIG3 || { echo "FALHA ao reaplicar o acesso de operador"; exit 1; }
 OUT="$OUT
-$($PSQL -A -t -F' | ' < scripts/sql/test_pagamentos_endurecimento.sql 2>&1)"
+$($PSQL -A -t -F' | ' < scripts/sql/test_pagamentos_endurecimento.sql 2>&1)
+$($PSQL -A -t -F' | ' < scripts/sql/test_acesso_operador.sql 2>&1)"
 echo "$OUT"
 echo "$OUT" | grep -qE "^FAIL|ERROR" && { echo "HÁ FALHAS"; exit 1; }
 echo "$OUT" | grep -q "^PASS" || { echo "nenhum PASS (teste não executou)"; exit 1; }

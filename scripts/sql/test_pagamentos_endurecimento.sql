@@ -2,7 +2,8 @@
 \set QUIET on
 create temp table res (teste text, ok boolean, detalhe text);
 grant all on res to authenticated;
-grant select, insert, update, delete on itens, reservas, orcamentos to authenticated;
+grant select, insert, update, delete on itens, orcamentos to authenticated;
+grant select on reservas to authenticated;
 insert into itens (sku, produto, status, preco_ideal) values ('H1','H','PRONTO',100),('H2','I','PRONTO',50);
 insert into orcamentos (codigo, slug, status, itens, total, validade, origem, cliente_nome) values
   ('HX-1','hx1','ABERTA','[{"sku":"H1","preco":100}]',100, now()+interval '1 day','whatsapp','Ze'),
