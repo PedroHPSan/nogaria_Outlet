@@ -101,10 +101,10 @@ begin
       end loop;
     end if;
     for e in select value from jsonb_array_elements(new.itens) loop
-      continue when exists (select 1 from jsonb_array_elements(v_antigos) x where x->>'sku' = e->>'sku' and (x->>'preco') is not distinct from (e->>'preco'));
       if jsonb_typeof(e->'preco') is distinct from 'number' then
         raise exception '%: preço inválido.', e->>'sku' using errcode = '42501';
       end if;
+      continue when exists (select 1 from jsonb_array_elements(v_antigos) x where x->>'sku' = e->>'sku' and (x->'preco') is not distinct from (e->'preco'));
       v_piso := public.orc_piso_item(e->>'sku');
       if v_piso is null then
         raise exception '%: item inexistente ou sem preço de venda; defina o preço antes de separar.', e->>'sku' using errcode = '42501';
@@ -169,15 +169,19 @@ drop trigger if exists trg_campanha_regras_so_gestor on public.campanha_regras;
 create trigger trg_campanha_regras_so_gestor before insert or update or delete on public.campanha_regras
   for each row execute function public.campanhas_so_gestor();
 
--- Excluir sacola/orçamento: operador só apaga o que não tem reserva, venda nem pagamento (o undo do "separar" cai aqui).
+-- Excluir sacola/orçamento: operador só desfaz a própria sacola ABERTA criada há < 5 min, sem reserva, venda nem pagamento
+-- (é o undo do "separar" quando a reserva falha); qualquer outra exclusão é de gestor.
 create or replace function public.orcamentos_guarda_exclusao() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if public.pode_gerir_venda() then return old; end if;
-  if exists (select 1 from reservas r where r.status in ('ATIVA', 'CONFIRMADA') and r.origem_ref = old.codigo)
-     or exists (select 1 from itens i where i.pedido_ref = old.codigo and i.status::text in ('VENDIDO', 'ENTREGUE'))
-     or exists (select 1 from orcamento_pagamentos p where p.orcamento_id = old.id) then
-    raise exception '%: só Bárbara, Valentina e Pedro excluem uma sacola com reserva, venda ou pagamento.', old.codigo using errcode = '42501';
+  if not (old.status = 'ABERTA'
+          and old.criado_por is not distinct from nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email', '')
+          and old.criado_em > now() - interval '5 minutes'
+          and not exists (select 1 from reservas r where r.origem_ref = old.codigo)
+          and not exists (select 1 from itens i where i.pedido_ref = old.codigo)
+          and not exists (select 1 from orcamento_pagamentos p where p.orcamento_id = old.id)) then
+    raise exception '%: operador só desfaz a própria sacola recém-criada e vazia; para excluir outra, peça a Bárbara, Valentina ou Pedro.', old.codigo using errcode = '42501';
   end if;
   return old;
 end $$;
@@ -191,8 +195,8 @@ language plpgsql security definer set search_path = public as $$
 begin
   if new.pedido_ref is distinct from old.pedido_ref and old.status::text in ('VENDIDO', 'ENTREGUE')
      and not public.pode_gerir_venda()
-     and exists (select 1 from orcamentos o where o.codigo = old.pedido_ref) then
-    raise exception '%: o pedido % é uma sacola; só Bárbara, Valentina e Pedro trocam a referência de um item vendido.', old.sku, old.pedido_ref using errcode = '42501';
+     and exists (select 1 from orcamentos o where o.codigo in (nullif(trim(old.pedido_ref), ''), nullif(trim(new.pedido_ref), ''))) then
+    raise exception '%: a referência % / % envolve uma sacola; só Bárbara, Valentina e Pedro trocam a referência de um item vendido.', old.sku, coalesce(old.pedido_ref, '(vazio)'), coalesce(new.pedido_ref, '(vazio)') using errcode = '42501';
   end if;
   return new;
 end $$;

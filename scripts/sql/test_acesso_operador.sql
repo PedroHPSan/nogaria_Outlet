@@ -109,7 +109,7 @@ end $$;
 reset role;
 
 -- rodada 4: código imutável, cancelar/excluir só gestor, preço NaN, pedido_ref de item vendido
-insert into itens (sku, produto, status, preco_ideal, pedido_ref) values ('A7','x','VENDIDO',100,'OP-4');
+insert into itens (sku, produto, status, preco_ideal, pedido_ref) values ('A7','x','VENDIDO',100,'OP-4'),('A8','y','VENDIDO',100,null);
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"debora@x.com"}', false) \gset
 do $$ declare m text; begin
@@ -118,12 +118,19 @@ do $$ declare m text; begin
   m := null; begin update orcamentos set status = 'CANCELADO' where codigo='OP-3'; exception when others then m := sqlerrm; end;
   insert into res values ('operador não cancela sacola', m is not null, m);
   m := null; begin delete from orcamentos where codigo='OP-2'; exception when others then m := sqlerrm; end;
-  insert into res values ('operador não exclui sacola com reserva confirmada', m like '%excluem uma sacola%', m);
+  insert into res values ('operador não exclui sacola com reserva confirmada', m like '%só desfaz a própria sacola%', m);
   m := null; begin update itens set pedido_ref = 'OUTRO' where sku='A7'; exception when others then m := sqlerrm; end;
-  insert into res values ('operador não troca o pedido_ref de item vendido sob sacola', m like '%é uma sacola%', m);
+  insert into res values ('operador não troca o pedido_ref de item vendido sob sacola', m like '%envolve uma sacola%', m);
   m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-N','opn','ABERTA','[{"sku":"A3","preco":"NaN"}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
   insert into res values ('preço NaN recusado', m like '%preço inválido%', m);
-  insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-U','opu','ABERTA','[{"sku":"A3","preco":50}]',now()+interval '1 day','whatsapp');
+
+  m := null; begin update itens set pedido_ref = 'OP-4' where sku='A8'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não anexa item vendido (sem ref) a uma sacola', m like '%envolve uma sacola%', m);
+  m := null; begin update orcamentos set itens = replace(itens::text, '"preco": 50', '"preco": "50"')::jsonb where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('preço de número para texto igual é recusado', m like '%preço inválido%', m);
+  m := null; begin delete from orcamentos where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não exclui sacola de outro/antiga', m like '%só desfaz a própria sacola%', m);
+  insert into orcamentos (codigo,slug,status,itens,validade,origem,criado_por) values ('OP-U','opu','ABERTA','[{"sku":"A3","preco":50}]',now()+interval '1 day','whatsapp','debora@x.com');
   delete from orcamentos where codigo='OP-U';
   insert into res values ('operador desfaz a própria sacola nova (undo do separar)', not exists (select 1 from orcamentos where codigo='OP-U'), null);
 end $$;
