@@ -63,6 +63,8 @@ begin
   if public.pode_gerir_venda() then return new; end if;
 
   if tg_op = 'INSERT' then
+    new.criado_por := nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email', '');
+    new.criado_em := now();
     if new.origem = 'whatsapp' and new.status <> 'ABERTA' then
       raise exception 'Sacola nova só pode nascer ABERTA.' using errcode = '42501';
     end if;
@@ -70,6 +72,9 @@ begin
       raise exception 'Só Bárbara, Valentina e Pedro dão desconto.' using errcode = '42501';
     end if;
   else
+    if new.criado_por is distinct from old.criado_por or new.criado_em is distinct from old.criado_em then
+      raise exception '%: autor e data de criação não mudam.', old.codigo using errcode = '42501';
+    end if;
     if new.codigo is distinct from old.codigo then
       raise exception '%: só Bárbara, Valentina e Pedro mudam o código.', old.codigo using errcode = '42501';
     end if;
@@ -124,7 +129,7 @@ create trigger trg_orcamentos_guarda_dados before insert or update on public.orc
 -- Venda de item sob o código de uma sacola ABERTA: o SKU precisa estar listado nela (e a sacola paga/liberada).
 create or replace function public.itens_guarda_venda_saldo() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare o orcamentos%rowtype; v_saldo numeric;
+declare o orcamentos%rowtype; v_saldo numeric; v_minimo numeric;
 begin
   if new.status = 'VENDIDO' and old.status is distinct from 'VENDIDO' and nullif(new.pedido_ref, '') is not null
      and not public.pode_gerir_venda() then
@@ -140,6 +145,12 @@ begin
       if v_saldo > 0.004 then
         raise exception '%: a sacola % ainda tem R$ % a receber. Só Bárbara, Valentina e Pedro liberam a venda com saldo em aberto.',
           new.sku, new.pedido_ref, to_char(v_saldo, 'FM999G990D00') using errcode = '42501';
+      end if;
+      -- o valor da venda do item acompanha o preço dele na sacola (com o desconto dela; R$ 0,10 de folga de centavos)
+      select (x->>'preco')::numeric * (1 - least(90, greatest(0, coalesce(o.desconto_pct, 0))) / 100) - 0.10 into v_minimo
+        from jsonb_array_elements(case when jsonb_typeof(o.itens) = 'array' then o.itens else '[]'::jsonb end) x where x->>'sku' = new.sku limit 1;
+      if coalesce(new.valor_vendido, 0) < coalesce(v_minimo, 0) then
+        raise exception '%: o valor da venda (R$ %) é menor que o preço do item na sacola %.', new.sku, coalesce(new.valor_vendido, 0), new.pedido_ref using errcode = '42501';
       end if;
     end if;
   end if;
@@ -175,12 +186,12 @@ create or replace function public.orcamentos_guarda_exclusao() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if public.pode_gerir_venda() then return old; end if;
-  if not (old.status = 'ABERTA'
-          and old.criado_por is not distinct from nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email', '')
-          and old.criado_em > now() - interval '5 minutes'
-          and not exists (select 1 from reservas r where r.origem_ref = old.codigo)
-          and not exists (select 1 from itens i where i.pedido_ref = old.codigo)
-          and not exists (select 1 from orcamento_pagamentos p where p.orcamento_id = old.id)) then
+  if (old.status = 'ABERTA'
+      and old.criado_por = nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email', '')
+      and old.criado_em > now() - interval '5 minutes'
+      and not exists (select 1 from reservas r where r.origem_ref = old.codigo)
+      and not exists (select 1 from itens i where i.pedido_ref = old.codigo)
+      and not exists (select 1 from orcamento_pagamentos p where p.orcamento_id = old.id)) is not true then
     raise exception '%: operador só desfaz a própria sacola recém-criada e vazia; para excluir outra, peça a Bárbara, Valentina ou Pedro.', old.codigo using errcode = '42501';
   end if;
   return old;

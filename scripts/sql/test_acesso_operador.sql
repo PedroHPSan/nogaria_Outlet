@@ -130,9 +130,38 @@ do $$ declare m text; begin
   insert into res values ('preço de número para texto igual é recusado', m like '%preço inválido%', m);
   m := null; begin delete from orcamentos where codigo='OP-3'; exception when others then m := sqlerrm; end;
   insert into res values ('operador não exclui sacola de outro/antiga', m like '%só desfaz a própria sacola%', m);
+
+  m := null; begin update orcamentos set criado_por = 'debora@x.com', criado_em = now() where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não reescreve autor/data de criação', m like '%autor e data%', m);
+  m := null; begin delete from orcamentos where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('...e por isso não consegue "desfazer" sacola alheia', m like '%só desfaz a própria sacola%', m);
   insert into orcamentos (codigo,slug,status,itens,validade,origem,criado_por) values ('OP-U','opu','ABERTA','[{"sku":"A3","preco":50}]',now()+interval '1 day','whatsapp','debora@x.com');
   delete from orcamentos where codigo='OP-U';
   insert into res values ('operador desfaz a própria sacola nova (undo do separar)', not exists (select 1 from orcamentos where codigo='OP-U'), null);
+end $$;
+reset role;
+
+-- rodada 6: criado_por forçado no INSERT; venda abaixo do preço da sacola e SKU fora dela
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"aline@nogaria.com.br"}', false) \gset
+do $$ declare m text; begin
+  insert into orcamentos (codigo,slug,status,itens,validade,origem,criado_por,criado_em) values ('OP-F','opf','ABERTA','[{"sku":"A3","preco":50}]',now()+interval '1 day','whatsapp','outro@x.com', now() - interval '1 year');
+  insert into res values ('INSERT força criado_por/criado_em do JWT', (select criado_por from orcamentos where codigo='OP-F') = 'aline@nogaria.com.br' and (select criado_em from orcamentos where codigo='OP-F') > now() - interval '1 minute', (select criado_por from orcamentos where codigo='OP-F'));
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', false) \gset
+insert into itens (sku, produto, status, preco_ideal) values ('A9','paga','PRONTO',100),('A10','fora','PRONTO',100);
+insert into orcamentos (codigo, slug, status, itens, total, validade, origem) values ('OP-9','op9','ABERTA','[{"sku":"A9","preco":100}]',100, now()+interval '1 day','whatsapp');
+select pagamento_registrar((select id from orcamentos where codigo='OP-9'), 100, 'Pix', null, null, null, 'kop9', null, 'x') is not null;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"aline@nogaria.com.br"}', false) \gset
+do $$ declare m text; begin
+  begin perform baixar_venda('A10', 100, 'WhatsApp', 'OP-9', 'x', null, null, 'aline'); exception when others then m := sqlerrm; end;
+  insert into res values ('SKU fora da sacola paga: recusado', m like '%não está listado%', m);
+  m := null; begin perform baixar_venda('A9', 10, 'WhatsApp', 'OP-9', 'x', null, null, 'aline'); exception when others then m := sqlerrm; end;
+  insert into res values ('venda do item abaixo do preço da sacola: recusada', m like '%menor que o preço do item%', m);
+  perform baixar_venda('A9', 100, 'WhatsApp', 'OP-9', 'x', null, null, 'aline');
+  insert into res values ('venda ao preço da sacola paga: aceita', (select status from itens where sku='A9') = 'VENDIDO', null);
 end $$;
 reset role;
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || teste || coalesce(' | ' || detalhe, '') from res;
