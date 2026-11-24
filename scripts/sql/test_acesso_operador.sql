@@ -107,4 +107,25 @@ do $$ declare m text; begin
   insert into res values ('venda sob sacola VENDIDA recusada', m like '%não aceita venda de item%', m);
 end $$;
 reset role;
+
+-- rodada 4: código imutável, cancelar/excluir só gestor, preço NaN, pedido_ref de item vendido
+insert into itens (sku, produto, status, preco_ideal, pedido_ref) values ('A7','x','VENDIDO',100,'OP-4');
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"debora@x.com"}', false) \gset
+do $$ declare m text; begin
+  begin update orcamentos set codigo = 'OP-ZZ' where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não renomeia o código', m like '%mudam o código%', m);
+  m := null; begin update orcamentos set status = 'CANCELADO' where codigo='OP-3'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não cancela sacola', m is not null, m);
+  m := null; begin delete from orcamentos where codigo='OP-2'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não exclui sacola com reserva confirmada', m like '%excluem uma sacola%', m);
+  m := null; begin update itens set pedido_ref = 'OUTRO' where sku='A7'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não troca o pedido_ref de item vendido sob sacola', m like '%é uma sacola%', m);
+  m := null; begin insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-N','opn','ABERTA','[{"sku":"A3","preco":"NaN"}]',now()+interval '1 day','whatsapp'); exception when others then m := sqlerrm; end;
+  insert into res values ('preço NaN recusado', m like '%preço inválido%', m);
+  insert into orcamentos (codigo,slug,status,itens,validade,origem) values ('OP-U','opu','ABERTA','[{"sku":"A3","preco":50}]',now()+interval '1 day','whatsapp');
+  delete from orcamentos where codigo='OP-U';
+  insert into res values ('operador desfaz a própria sacola nova (undo do separar)', not exists (select 1 from orcamentos where codigo='OP-U'), null);
+end $$;
+reset role;
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || teste || coalesce(' | ' || detalhe, '') from res;
