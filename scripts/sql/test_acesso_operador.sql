@@ -160,6 +160,8 @@ do $$ declare m text; begin
   insert into res values ('SKU fora da sacola paga: recusado', m like '%não está listado%', m);
   m := null; begin perform baixar_venda('A9', 10, 'WhatsApp', 'OP-9', 'x', null, null, 'aline'); exception when others then m := sqlerrm; end;
   insert into res values ('venda do item abaixo do preço da sacola: recusada', m like '%menor que o preço do item%', m);
+  m := null; begin perform baixar_venda('A9', 'NaN'::numeric, 'WhatsApp', 'OP-9', 'x', null, null, 'aline'); exception when others then m := sqlerrm; end;
+  insert into res values ('valor de venda NaN recusado', m is not null, m);
   perform baixar_venda('A9', 100, 'WhatsApp', 'OP-9', 'x', null, null, 'aline');
   insert into res values ('venda ao preço da sacola paga: aceita', (select status from itens where sku='A9') = 'VENDIDO', null);
 end $$;

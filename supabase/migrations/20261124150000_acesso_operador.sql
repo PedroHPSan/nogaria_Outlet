@@ -149,13 +149,18 @@ begin
       -- o valor da venda do item acompanha o preço dele na sacola (com o desconto dela; R$ 0,10 de folga de centavos)
       select (x->>'preco')::numeric * (1 - least(90, greatest(0, coalesce(o.desconto_pct, 0))) / 100) - 0.10 into v_minimo
         from jsonb_array_elements(case when jsonb_typeof(o.itens) = 'array' then o.itens else '[]'::jsonb end) x where x->>'sku' = new.sku limit 1;
-      if coalesce(new.valor_vendido, 0) < coalesce(v_minimo, 0) then
+      if new.valor_vendido is null or v_minimo is null or new.valor_vendido = 'NaN'::numeric or new.valor_vendido < v_minimo then   -- fecha fechado (sem piso, nulo ou NaN = recusa)
         raise exception '%: o valor da venda (R$ %) é menor que o preço do item na sacola %.', new.sku, coalesce(new.valor_vendido, 0), new.pedido_ref using errcode = '42501';
       end if;
     end if;
   end if;
   return new;
 end $$;
+
+-- Valor de venda finito (sem NaN/Infinity). NOT VALID: vale para gravações novas sem varrer a tabela inteira.
+alter table public.itens drop constraint if exists itens_valor_vendido_finito;
+alter table public.itens add constraint itens_valor_vendido_finito
+  check (valor_vendido is null or (valor_vendido <> 'NaN'::numeric and valor_vendido < 'Infinity'::numeric)) not valid;
 
 -- Campanhas definem o piso de preço: criar/publicar/encerrar/mudar desconto só gestor (as RPCs de campanha são SECURITY
 -- DEFINER mas o papel vem do JWT). O gatilho de preço do item só atualiza preco_cheio, que segue livre.
@@ -217,6 +222,7 @@ create trigger trg_itens_guarda_pedido_ref before update of pedido_ref on public
 
 -- ROLLBACK (manual):
 --   drop trigger if exists trg_orcamentos_guarda_dados on public.orcamentos; drop function if exists public.orcamentos_guarda_dados();
+--   alter table public.itens drop constraint if exists itens_valor_vendido_finito;
 --   drop function if exists public.orc_piso_item(text);
 --   drop trigger if exists trg_orcamentos_guarda_exclusao on public.orcamentos; drop function if exists public.orcamentos_guarda_exclusao();
 --   drop trigger if exists trg_itens_guarda_pedido_ref on public.itens; drop function if exists public.itens_guarda_pedido_ref();
