@@ -157,10 +157,32 @@ begin
   return new;
 end $$;
 
--- Valor de venda finito (sem NaN/Infinity). NOT VALID: vale para gravações novas sem varrer a tabela inteira.
+-- Valores de venda finitos (sem NaN, +Infinity nem -Infinity). Não exige >= 0: há vendas antigas com valor negativo.
+-- NOT VALID: vale para gravações novas sem varrer a tabela inteira.
 alter table public.itens drop constraint if exists itens_valor_vendido_finito;
 alter table public.itens add constraint itens_valor_vendido_finito
-  check (valor_vendido is null or (valor_vendido <> 'NaN'::numeric and valor_vendido < 'Infinity'::numeric)) not valid;
+  check (valor_vendido is null or (valor_vendido > '-Infinity'::numeric and valor_vendido < 'Infinity'::numeric)) not valid;
+alter table public.itens drop constraint if exists itens_taxa_frete_finitos;
+alter table public.itens add constraint itens_taxa_frete_finitos
+  check ((taxa_venda is null or (taxa_venda > '-Infinity'::numeric and taxa_venda < 'Infinity'::numeric))
+     and (frete_pago is null or (frete_pago > '-Infinity'::numeric and frete_pago < 'Infinity'::numeric))) not valid;
+
+-- Valor de venda de item vendido sob uma sacola: operador não edita na mão (a venda gravou o valor pelo baixar_venda).
+-- Sair do estado vendido (reabrir_estoque) e vendas sem sacola seguem como antes.
+create or replace function public.itens_guarda_valor_vendido() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.valor_vendido is distinct from old.valor_vendido
+     and old.status::text in ('VENDIDO', 'ENTREGUE') and new.status::text in ('VENDIDO', 'ENTREGUE')
+     and not public.pode_gerir_venda()
+     and exists (select 1 from orcamentos o where o.codigo in (nullif(trim(old.pedido_ref), ''), nullif(trim(new.pedido_ref), ''))) then
+    raise exception '%: o valor desta venda veio de uma sacola; só Bárbara, Valentina e Pedro corrigem.', old.sku using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_itens_guarda_valor_vendido on public.itens;
+create trigger trg_itens_guarda_valor_vendido before update of valor_vendido on public.itens
+  for each row execute function public.itens_guarda_valor_vendido();
 
 -- Campanhas definem o piso de preço: criar/publicar/encerrar/mudar desconto só gestor (as RPCs de campanha são SECURITY
 -- DEFINER mas o papel vem do JWT). O gatilho de preço do item só atualiza preco_cheio, que segue livre.
@@ -222,7 +244,8 @@ create trigger trg_itens_guarda_pedido_ref before update of pedido_ref on public
 
 -- ROLLBACK (manual):
 --   drop trigger if exists trg_orcamentos_guarda_dados on public.orcamentos; drop function if exists public.orcamentos_guarda_dados();
---   alter table public.itens drop constraint if exists itens_valor_vendido_finito;
+--   alter table public.itens drop constraint if exists itens_valor_vendido_finito, drop constraint if exists itens_taxa_frete_finitos;
+--   drop trigger if exists trg_itens_guarda_valor_vendido on public.itens; drop function if exists public.itens_guarda_valor_vendido();
 --   drop function if exists public.orc_piso_item(text);
 --   drop trigger if exists trg_orcamentos_guarda_exclusao on public.orcamentos; drop function if exists public.orcamentos_guarda_exclusao();
 --   drop trigger if exists trg_itens_guarda_pedido_ref on public.itens; drop function if exists public.itens_guarda_pedido_ref();

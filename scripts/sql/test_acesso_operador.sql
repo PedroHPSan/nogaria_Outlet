@@ -164,6 +164,13 @@ do $$ declare m text; begin
   insert into res values ('valor de venda NaN recusado', m is not null, m);
   perform baixar_venda('A9', 100, 'WhatsApp', 'OP-9', 'x', null, null, 'aline');
   insert into res values ('venda ao preço da sacola paga: aceita', (select status from itens where sku='A9') = 'VENDIDO', null);
+
+  m := null; begin update itens set valor_vendido = 1 where sku='A9'; exception when others then m := sqlerrm; end;
+  insert into res values ('operador não edita valor de venda vindo de sacola', m like '%veio de uma sacola%', m);
+  m := null; begin update itens set valor_vendido = '-Infinity'::numeric where sku='A9'; exception when others then m := sqlerrm; end;
+  insert into res values ('valor de venda -Infinity recusado', m is not null, m);
+  update itens set valor_vendido = 77 where sku='A8';
+  insert into res values ('venda sem sacola: correção de valor segue livre', (select valor_vendido from itens where sku='A8') = 77, null);
 end $$;
 reset role;
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || teste || coalesce(' | ' || detalhe, '') from res;
